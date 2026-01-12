@@ -1,0 +1,207 @@
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* LifeLink Healthcare Design System */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+
+    /* Emergency Red - Primary */
+    --primary: 0 75% 42%;
+    --primary-foreground: 0 0% 100%;
+    --primary-light: 0 60% 95%;
+
+    /* Soft Blush Pink - Secondary */
+    --secondary: 0 40% 95%;
+    --secondary-foreground: 0 50% 30%;
+
+    /* Muted tones */
+    --muted: 0 10% 96%;
+    --muted-foreground: 0 0% 45%;
+
+    /* Accent */
+    --accent: 0 50% 92%;
+    --accent-foreground: 0 75% 35%;
+
+    /* Success - Muted Green */
+    --success: 142 45% 45%;
+    --success-foreground: 0 0% 100%;
+    --success-light: 142 40% 92%;
+
+    /* Warning - Amber */
+    --warning: 38 90% 50%;
+    --warning-foreground: 0 0% 10%;
+    --warning-light: 38 80% 92%;
+
+    /* Destructive */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Critical - Emergency */
+    --critical: 0 85% 40%;
+    --critical-foreground: 0 0% 100%;
+    --critical-light: 0 70% 94%;
+
+    --border: 0 10% 90%;
+    --input: 0 10% 90%;
+    --ring: 0 75% 42%;
+
+    --radius: 0.75rem;
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 0 0% 20%;
+    --sidebar-primary: 0 75% 42%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 50% 95%;
+    --sidebar-accent-foreground: 0 75% 35%;
+    --sidebar-border: 0 10% 92%;
+    --sidebar-ring: 0 75% 42%;
+
+    /* Custom gradients */
+    --gradient-emergency: linear-gradient(135deg, hsl(0, 75%, 42%) 0%, hsl(0, 65%, 55%) 100%);
+    --gradient-hero: linear-gradient(180deg, hsl(0, 50%, 97%) 0%, hsl(0, 0%, 100%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(0, 0%, 100%) 0%, hsl(0, 30%, 98%) 100%);
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.1), 0 2px 4px -2px hsl(0 0% 0% / 0.1);
+    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.1), 0 4px 6px -4px hsl(0 0% 0% / 0.1);
+    --shadow-emergency: 0 0 30px hsl(0 75% 42% / 0.2);
+  }
+
+  .dark {
+    --background: 0 0% 8%;
+    --foreground: 0 0% 95%;
+
+    --card: 0 0% 12%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 0 70% 55%;
+    --primary-foreground: 0 0% 100%;
+    --primary-light: 0 50% 15%;
+
+    --secondary: 0 30% 18%;
+    --secondary-foreground: 0 40% 85%;
+
+    --muted: 0 10% 18%;
+    --muted-foreground: 0 0% 65%;
+
+    --accent: 0 40% 20%;
+    --accent-foreground: 0 60% 75%;
+
+    --success: 142 50% 50%;
+    --success-foreground: 0 0% 100%;
+    --success-light: 142 30% 15%;
+
+    --warning: 38 85% 55%;
+    --warning-foreground: 0 0% 10%;
+    --warning-light: 38 40% 15%;
+
+    --destructive: 0 80% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --critical: 0 80% 50%;
+    --critical-foreground: 0 0% 100%;
+    --critical-light: 0 50% 15%;
+
+    --border: 0 10% 20%;
+    --input: 0 10% 20%;
+    --ring: 0 70% 55%;
+
+    --sidebar-background: 0 0% 10%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-primary: 0 70% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 40% 18%;
+    --sidebar-accent-foreground: 0 60% 75%;
+    --sidebar-border: 0 10% 18%;
+    --sidebar-ring: 0 70% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  .card-healthcare {
+    @apply bg-card rounded-xl border border-border shadow-sm hover:shadow-md transition-shadow duration-200;
+  }
+
+  .btn-emergency {
+    @apply bg-primary text-primary-foreground font-semibold px-6 py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200;
+  }
+
+  .status-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .input-healthcare {
+    @apply w-full px-4 py-2.5 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200;
+  }
+
+  .section-title {
+    @apply text-2xl font-semibold text-foreground mb-6;
+  }
+
+  .emergency-pulse {
+    animation: pulse-emergency 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-emergency {
+    0%, 100% {
+      opacity: 1;
+      box-shadow: 0 0 0 0 hsl(0 75% 42% / 0.4);
+    }
+    50% {
+      opacity: 0.9;
+      box-shadow: 0 0 0 10px hsl(0 75% 42% / 0);
+    }
+  }
+}
+
+@layer utilities {
+  .gradient-emergency {
+    background: var(--gradient-emergency);
+  }
+
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+
+  .gradient-card {
+    background: var(--gradient-card);
+  }
+
+  .shadow-emergency {
+    box-shadow: var(--shadow-emergency);
+  }
+}
