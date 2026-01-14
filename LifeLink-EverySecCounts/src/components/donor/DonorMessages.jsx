@@ -18,7 +18,7 @@ const DonorMessages = () => {
   const [chats, setChats] = useState([
     {
       id: 'chat_1',
-      hospitalName: 'City General Hospital',
+      hospitalName: 'City Care Hospital, Kanpur',
       lastMessage: 'Your documents are verified',
       unread: 1,
       messages: [
@@ -38,7 +38,7 @@ const DonorMessages = () => {
     },
     {
       id: 'chat_2',
-      hospitalName: 'Metro Medical Center',
+      hospitalName: 'Metro Life Hospital, Lucknow',
       lastMessage: 'Medical screening scheduled',
       unread: 0,
       messages: [
@@ -85,7 +85,7 @@ const DonorMessages = () => {
       const hospitalResponses = [
         "Your documents are verified",
         "Medical screening scheduled",
-        "Please report tomorrow",
+        "Please report tomorrow at 9 AM",
         "Donation process is in progress",
         "Thank you for your cooperation",
       ];
@@ -120,7 +120,7 @@ const DonorMessages = () => {
   };
 
   const formatTime = (date) => {
-    return date.toLocaleTimeString('en-US', {
+    return date.toLocaleTimeString('en-IN', {
       hour: '2-digit',
       minute: '2-digit',
     });

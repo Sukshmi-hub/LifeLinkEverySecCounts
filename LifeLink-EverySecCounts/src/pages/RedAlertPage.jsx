@@ -21,16 +21,18 @@ import {
 
 /* ---------- MOCK DATA ---------- */
 
+/* ---------- MOCK DATA (INDIAN CONTEXT) ---------- */
+
 const mockAlerts = [
   {
     id: "ra_001",
     type: "blood",
     bloodType: "O-",
-    hospitalName: "City Emergency Hospital",
-    hospitalLocation: "123 Medical Center Blvd, Downtown",
+    hospitalName: "City Care Hospital",
+    hospitalLocation: "Civil Lines, Kanpur, Uttar Pradesh",
     patientInfo:
-      "Critical accident victim, needs immediate O- blood transfusion",
-    contactNumber: "+1 (555) 911-HELP",
+      "Critical road accident victim, needs immediate O- blood transfusion",
+    contactNumber: "+91 98765 43210",
     createdAt: new Date(Date.now() - 30 * 60000).toISOString(),
     status: "active",
     respondersCount: 3,
@@ -39,11 +41,11 @@ const mockAlerts = [
     id: "ra_002",
     type: "organ",
     organType: "Kidney",
-    hospitalName: "Metropolitan Medical Center",
-    hospitalLocation: "456 Healthcare Ave, Midtown",
+    hospitalName: "Metro Life Hospital",
+    hospitalLocation: "Gomti Nagar, Lucknow, Uttar Pradesh",
     patientInfo:
       "Patient in critical need of kidney transplant, compatibility confirmed",
-    contactNumber: "+1 (555) 922-LIFE",
+    contactNumber: "+91 91234 56789",
     createdAt: new Date(Date.now() - 2 * 60 * 60000).toISOString(),
     status: "active",
     respondersCount: 1,
@@ -52,15 +54,16 @@ const mockAlerts = [
     id: "ra_003",
     type: "blood",
     bloodType: "AB-",
-    hospitalName: "Community Health Center",
-    hospitalLocation: "789 Wellness Street, Uptown",
-    patientInfo: "Scheduled surgery patient, rare blood type needed",
-    contactNumber: "+1 (555) 933-CARE",
+    hospitalName: "Seva Multispeciality Hospital",
+    hospitalLocation: "Kalyanpur, Kanpur, Uttar Pradesh",
+    patientInfo: "Scheduled surgery patient, rare blood group urgently required",
+    contactNumber: "+91 99887 66554",
     createdAt: new Date(Date.now() - 5 * 60 * 60000).toISOString(),
     status: "resolved",
     respondersCount: 5,
   },
 ];
+
 
 /* ---------- COMPONENT ---------- */
 

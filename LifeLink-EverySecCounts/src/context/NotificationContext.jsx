@@ -125,15 +125,75 @@ export const NotificationProvider = ({ children }) => {
           hospitalName: request.hospitalName || 'City General Hospital',
         });
 
+        // Notify patient
         addNotification({
           type: 'success',
           title: 'Donor Matched!',
           message: `A donor has been matched for your ${request.organType} request. Please proceed to payment.`,
           targetRole: 'patient',
         });
+
+        // Notify donor
+        addNotification({
+          type: 'success',
+          title: 'Match Confirmation',
+          message: `You have been matched with patient ${request.patientName} for ${request.organType} donation.`,
+          targetRole: 'donor',
+        });
       }
       
       return updated;
+    });
+  };
+
+  // Notify donor when patient completes payment
+  const notifyDonorPaymentCompleted = (donorName, patientName, organType, hospitalName) => {
+    addNotification({
+      type: 'success',
+      title: 'Payment Confirmed',
+      message: `Patient ${patientName} has completed payment for ${organType} donation. Procedure will be scheduled.`,
+      targetRole: 'donor',
+    });
+
+    addNotification({
+      type: 'info',
+      title: 'Payment Received',
+      message: `Payment confirmed for ${patientName}'s ${organType} transplant. Coordinating with donor hospital.`,
+      targetRole: 'hospital',
+    });
+  };
+
+  // Hospital-to-hospital coordination notification
+  const notifyHospitalCoordination = (patientHospital, donorHospital, organType, patientName) => {
+    addNotification({
+      type: 'info',
+      title: 'Cross-Hospital Coordination',
+      message: `${patientHospital} requests ${organType} coordination for patient ${patientName}. Donor hospital: ${donorHospital}.`,
+      targetRole: 'hospital',
+    });
+  };
+
+  // Notify when donation is complete
+  const notifyDonationComplete = (donorName, patientName, organType, hospitalName) => {
+    addNotification({
+      type: 'success',
+      title: 'Donation Completed!',
+      message: `Congratulations! Your ${organType} donation has been successfully completed. Your certificate is ready.`,
+      targetRole: 'donor',
+    });
+
+    addNotification({
+      type: 'success',
+      title: 'Transplant Successful',
+      message: `${organType} transplant completed successfully. Thank you for using LifeLink.`,
+      targetRole: 'patient',
+    });
+
+    addNotification({
+      type: 'success',
+      title: 'Procedure Completed',
+      message: `${organType} transplant for ${patientName} completed. Donor: ${donorName}.`,
+      targetRole: 'hospital',
     });
   };
 
@@ -155,6 +215,9 @@ export const NotificationProvider = ({ children }) => {
         updateFundRequestStatus,
         setSelectedHospital,
         simulateDonorMatch,
+        notifyDonorPaymentCompleted,
+        notifyHospitalCoordination,
+        notifyDonationComplete,
       }}
     >
       {children}

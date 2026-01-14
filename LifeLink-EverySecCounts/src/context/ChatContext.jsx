@@ -7,23 +7,23 @@ import React, {
 
 const ChatContext = createContext(undefined);
 
-/* ---------------- MOCK DATA ---------------- */
+/* ---------------- MOCK DATA (INDIAN CONTEXT) ---------------- */
 
 const initialChats = [
   {
     id: "chat_001",
     participants: [
-      { id: "usr_001", name: "John Patient", role: "patient" },
-      { id: "usr_003", name: "City General Hospital", role: "hospital" },
+      { id: "usr_001", name: "Amit Sharma", role: "patient" },
+      { id: "usr_003", name: "City Care Hospital", role: "hospital" },
     ],
     messages: [
       {
         id: "msg_001",
         senderId: "usr_001",
-        senderName: "John Patient",
+        senderName: "Amit Sharma",
         senderRole: "patient",
         content:
-          "Hello, I need to inquire about my blood request status.",
+          "Hello, I would like to know the status of my blood request.",
         timestamp: "2024-03-10T10:00:00",
         isEmergency: false,
         read: true,
@@ -31,10 +31,10 @@ const initialChats = [
       {
         id: "msg_002",
         senderId: "usr_003",
-        senderName: "City General Hospital",
+        senderName: "City Care Hospital",
         senderRole: "hospital",
         content:
-          "Hello John! Your blood request #REQ001 is currently being processed. We have found a matching donor.",
+          "Hello Amit, your blood request is currently being processed. We have identified a matching donor.",
         timestamp: "2024-03-10T10:05:00",
         isEmergency: false,
         read: true,
@@ -46,17 +46,17 @@ const initialChats = [
   {
     id: "chat_002",
     participants: [
-      { id: "usr_002", name: "Sarah Donor", role: "donor" },
-      { id: "usr_003", name: "City General Hospital", role: "hospital" },
+      { id: "usr_002", name: "Sunita Singh", role: "donor" },
+      { id: "usr_003", name: "City Care Hospital", role: "hospital" },
     ],
     messages: [
       {
         id: "msg_003",
         senderId: "usr_003",
-        senderName: "City General Hospital",
+        senderName: "City Care Hospital",
         senderRole: "hospital",
         content:
-          "Thank you for registering as a donor! We have a patient who matches your blood type.",
+          "Thank you for registering as a donor. We have a patient who matches your blood group.",
         timestamp: "2024-03-10T09:30:00",
         isEmergency: false,
         read: true,
@@ -64,10 +64,10 @@ const initialChats = [
       {
         id: "msg_004",
         senderId: "usr_002",
-        senderName: "Sarah Donor",
+        senderName: "Sunita Singh",
         senderRole: "donor",
         content:
-          "I am available to donate. When should I come in?",
+          "I am available to donate. Please let me know the next steps.",
         timestamp: "2024-03-10T09:45:00",
         isEmergency: false,
         read: false,
@@ -80,28 +80,28 @@ const initialChats = [
 
 const autoReplies = {
   hospital: [
-    "Thank you for your message. Our team is reviewing your request.",
-    "We will get back to you shortly with more information.",
-    "Your request has been prioritized. A coordinator will contact you soon.",
-    "We have noted your concern and are taking immediate action.",
+    "Thank you for your message. Our medical team is reviewing your request.",
+    "We will update you shortly with further information.",
+    "Your request has been marked as priority. Our coordinator will contact you soon.",
+    "We have noted your concern and are taking necessary action.",
   ],
   donor: [
-    "Thank you for your willingness to help!",
-    "Your donation could save lives. We appreciate your commitment.",
-    "We will coordinate the donation process shortly.",
+    "Thank you for your willingness to help. Your support can save lives.",
+    "We appreciate your commitment to donate. We will guide you through the process.",
+    "Our team will coordinate with you shortly regarding the donation procedure.",
   ],
   patient: [
-    "We understand your concern and are here to help.",
-    "Your health is our priority. Please stay calm.",
-    "We are working on finding the best solution for you.",
+    "We understand your concern and are here to support you.",
+    "Your health is our priority. Please stay calm and assured.",
+    "We are actively working to arrange the required support for you.",
   ],
   ngo: [
-    "Thank you for reaching out. Our support team is ready to assist.",
-    "We are committed to helping those in need.",
+    "Thank you for reaching out. Our NGO team is ready to assist you.",
+    "We are committed to helping patients in need.",
   ],
   admin: [
-    "Your query has been escalated to the admin team.",
-    "We are reviewing the situation and will respond promptly.",
+    "Your request has been forwarded to the administration team.",
+    "We are reviewing the matter and will respond shortly.",
   ],
 };
 
@@ -180,7 +180,7 @@ export function ChatProvider({ children }) {
           senderName: otherParticipant.name,
           senderRole: otherParticipant.role,
           content: isEmergency
-            ? "🚨 EMERGENCY ACKNOWLEDGED: Our team is responding immediately. Stay on the line."
+            ? "🚨 EMERGENCY ACKNOWLEDGED: Our medical team is responding immediately. Please stay available."
             : randomReply,
           timestamp: new Date().toISOString(),
           isEmergency: false,

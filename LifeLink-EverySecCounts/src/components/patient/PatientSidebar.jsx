@@ -10,7 +10,8 @@ import {
   LogOut,
   MessageCircle,
   Menu,
-  X
+  X,
+  Settings
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -23,6 +24,7 @@ const menuItems = [
   { icon: CreditCard, label: 'Payments', path: '/patient/payment' },
   { icon: HandHeart, label: 'Request Funds', path: '/patient/request-funds' },
   { icon: User, label: 'Profile', path: '/patient/profile' },
+  { icon: Settings, label: 'Settings', path: '/patient/settings' },
 ];
 
 const PatientSidebar = ({ isOpen, onToggle }) => {

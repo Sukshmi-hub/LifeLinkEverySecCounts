@@ -7,6 +7,7 @@ import RedAlerts from '@/components/hospital/RedAlerts';
 import HospitalMessages from '@/components/hospital/HospitalMessages';
 import HospitalNotifications from '@/components/hospital/HospitalNotifications';
 import HospitalProfile from '@/components/hospital/HospitalProfile';
+import HospitalSettings from '@/components/hospital/HospitalSettings';
 
 const HospitalDashboard = () => {
   const { user } = useAuth();
@@ -43,19 +44,19 @@ const HospitalDashboard = () => {
   const pendingVerifications = 2; // Simulated
 
   const handleResolveAlert = (alertId) => {
-    setRedAlerts((prev) =>
-      prev.map((a) => (a.id === alertId ? { ...a, status: 'resolved' } : a))
-    );
+    setRedAlerts(prev => prev.map(a => 
+      a.id === alertId ? { ...a, status: 'resolved' } : a
+    ));
   };
 
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
         return (
-          <HospitalDashboardOverview
-            userName={user?.name || 'City General Hospital'}
+          <HospitalDashboardOverview 
+            userName={user?.name || 'City General Hospital'} 
             pendingVerifications={pendingVerifications}
-            redAlertsCount={redAlerts.filter((a) => a.status === 'active').length}
+            redAlertsCount={redAlerts.filter(a => a.status === 'active').length}
           />
         );
       case 'requests':
@@ -68,6 +69,8 @@ const HospitalDashboard = () => {
         return <HospitalNotifications />;
       case 'profile':
         return <HospitalProfile />;
+      case 'settings':
+        return <HospitalSettings />;
       default:
         return null;
     }
@@ -75,12 +78,14 @@ const HospitalDashboard = () => {
 
   return (
     <div className="min-h-screen bg-background flex">
-      <HospitalSidebar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
+      <HospitalSidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
         hasRedAlerts={hasRedAlerts}
       />
-      <main className="flex-1 p-8 overflow-auto">{renderContent()}</main>
+      <main className="flex-1 p-8 overflow-auto">
+        {renderContent()}
+      </main>
     </div>
   );
 };

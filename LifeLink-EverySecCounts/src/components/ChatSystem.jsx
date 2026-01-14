@@ -19,12 +19,12 @@ import {
   Search,
 } from "lucide-react";
 
-/* ---------------- MOCK DATA ---------------- */
+/* ---------------- MOCK DATA (INDIAN CONTEXT) ---------------- */
 
 const mockContacts = [
   {
     id: "contact_001",
-    name: "City General Hospital",
+    name: "City Care Hospital",
     role: "hospital",
     lastMessage: "Your blood donation appointment is confirmed.",
     lastMessageTime: "10:30 AM",
@@ -33,7 +33,7 @@ const mockContacts = [
   },
   {
     id: "contact_002",
-    name: "Dr. Sarah Johnson",
+    name: "Dr. Anjali Mehta",
     role: "hospital",
     lastMessage: "Thank you for your willingness to help.",
     lastMessageTime: "Yesterday",
@@ -42,18 +42,18 @@ const mockContacts = [
   },
   {
     id: "contact_003",
-    name: "Hope Foundation NGO",
+    name: "Seva Foundation",
     role: "ngo",
-    lastMessage: "We appreciate your contribution!",
+    lastMessage: "We appreciate your support and contribution.",
     lastMessageTime: "Yesterday",
     unread: 1,
     online: true,
   },
   {
     id: "contact_004",
-    name: "Admin Support",
+    name: "LifeLink Admin",
     role: "admin",
-    lastMessage: "Your profile has been verified.",
+    lastMessage: "Your profile has been verified successfully.",
     lastMessageTime: "2 days ago",
     unread: 0,
     online: true,
@@ -65,7 +65,7 @@ const mockMessages = {
     {
       id: "msg_001",
       senderId: "contact_001",
-      senderName: "City General Hospital",
+      senderName: "City Care Hospital",
       senderRole: "hospital",
       content: "Hello! Thank you for registering as a donor.",
       timestamp: "10:00 AM",
@@ -81,10 +81,10 @@ const mockMessages = {
     {
       id: "msg_003",
       senderId: "contact_001",
-      senderName: "City General Hospital",
+      senderName: "City Care Hospital",
       senderRole: "hospital",
       content:
-        "We have a blood drive this Saturday from 9 AM to 5 PM. Would you be available?",
+        "We are organizing a blood donation camp this Saturday from 9 AM to 5 PM. Will you be available?",
       timestamp: "10:20 AM",
     },
     {
@@ -98,7 +98,7 @@ const mockMessages = {
     {
       id: "msg_005",
       senderId: "contact_001",
-      senderName: "City General Hospital",
+      senderName: "City Care Hospital",
       senderRole: "hospital",
       content: "Your blood donation appointment is confirmed.",
       timestamp: "10:30 AM",
@@ -161,8 +161,8 @@ function ChatSystem({ className = "" }) {
         senderName: selectedContact.name,
         senderRole: selectedContact.role,
         content: isEmergency
-          ? "🚨 EMERGENCY FLAGGED: Our team has been notified and will respond immediately."
-          : "Thank you for your message. We will get back to you shortly.",
+          ? "🚨 EMERGENCY FLAGGED: Our medical team has been notified and will respond immediately."
+          : "Thank you for your message. Our team will get back to you shortly.",
         timestamp: new Date().toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",

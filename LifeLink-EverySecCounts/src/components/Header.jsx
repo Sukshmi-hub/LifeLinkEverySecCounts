@@ -10,62 +10,29 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Switch } from '@/components/ui/switch';
 import {
   Menu,
   X,
   User,
   LogOut,
-  Bell,
   Settings,
   Home,
   Info,
   Award,
   LogIn,
-  Check,
   Lock,
-  BellRing,
 } from 'lucide-react';
-import { useChat } from '@/context/ChatContext';
 import LifeLinkLogo from '@/components/LifeLinkLogo';
 
 const Header = () => {
   const { user, isAuthenticated, logout } = useAuth();
-  const { getUnreadCount } = useChat();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  
-  // Notification state
-  const [notifications, setNotifications] = useState([
-    { id: '1', message: 'New donor registered', time: '2 mins ago', read: false },
-    { id: '2', message: 'New patient request received', time: '10 mins ago', read: false },
-    { id: '3', message: 'Hospital verification pending', time: '1 hour ago', read: false },
-  ]);
-
-  // Settings state
-  const [notificationPrefs, setNotificationPrefs] = useState({
-    email: true,
-    push: true,
-    sms: false,
-  });
 
   const handleLogout = () => {
     logout();
     navigate('/');
-  };
-
-  const unreadCount = user ? getUnreadCount(user.id) : 0;
-  const unreadNotifications = notifications.filter(n => !n.read).length;
-
-  const markAllAsRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, read: true })));
-  };
-
-  const markAsRead = (id) => {
-    setNotifications(notifications.map(n => 
-      n.id === id ? { ...n, read: true } : n
-    ));
   };
 
   const publicLinks = [
@@ -79,6 +46,7 @@ const Header = () => {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between">
+        
         {/* Logo */}
         <Link to="/" className="transition-opacity hover:opacity-80">
           <LifeLinkLogo size="sm" showSubtext={true} />
@@ -104,62 +72,6 @@ const Header = () => {
         <div className="flex items-center gap-2">
           {isAuthenticated && user ? (
             <>
-              {/* Notifications Dropdown */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="relative">
-                    <Bell className="h-5 w-5" />
-                    {(unreadCount + unreadNotifications) > 0 && (
-                      <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                        {(unreadCount + unreadNotifications) > 9 ? '9+' : (unreadCount + unreadNotifications)}
-                      </span>
-                    )}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-80 bg-background border border-border shadow-lg">
-                  <DropdownMenuLabel className="flex items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <BellRing className="h-4 w-4" />
-                      Notifications
-                    </span>
-                    {unreadNotifications > 0 && (
-                      <Button variant="ghost" size="sm" className="h-auto py-1 px-2 text-xs" onClick={markAllAsRead}>
-                        Mark all read
-                      </Button>
-                    )}
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {notifications.length === 0 ? (
-                    <div className="p-4 text-center text-muted-foreground text-sm">
-                      No notifications
-                    </div>
-                  ) : (
-                    <div className="max-h-64 overflow-y-auto">
-                      {notifications.map((notification) => (
-                        <DropdownMenuItem 
-                          key={notification.id} 
-                          className={`flex items-start gap-3 p-3 cursor-pointer ${!notification.read ? 'bg-primary/5' : ''}`}
-                          onClick={() => markAsRead(notification.id)}
-                        >
-                          <div className={`mt-1 h-2 w-2 rounded-full flex-shrink-0 ${!notification.read ? 'bg-primary' : 'bg-transparent'}`} />
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm ${!notification.read ? 'font-medium' : ''}`}>
-                              {notification.message}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {notification.time}
-                            </p>
-                          </div>
-                          {!notification.read && (
-                            <Check className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                          )}
-                        </DropdownMenuItem>
-                      ))}
-                    </div>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-
               {/* Settings Dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -167,7 +79,7 @@ const Header = () => {
                     <Settings className="h-5 w-5" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64 bg-background border border-border shadow-lg">
+                <DropdownMenuContent align="end" className="w-56 bg-background border border-border shadow-lg">
                   <DropdownMenuLabel>Settings</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate(getRoleBasedRedirect(user.role))}>
@@ -178,33 +90,6 @@ const Header = () => {
                     <Lock className="mr-2 h-4 w-4" />
                     Change Password
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
-                    Notification Preferences
-                  </DropdownMenuLabel>
-                  <div className="px-2 py-2 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Email Notifications</span>
-                      <Switch 
-                        checked={notificationPrefs.email}
-                        onCheckedChange={(checked) => setNotificationPrefs({ ...notificationPrefs, email: checked })}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Push Notifications</span>
-                      <Switch 
-                        checked={notificationPrefs.push}
-                        onCheckedChange={(checked) => setNotificationPrefs({ ...notificationPrefs, push: checked })}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">SMS Notifications</span>
-                      <Switch 
-                        checked={notificationPrefs.sms}
-                        onCheckedChange={(checked) => setNotificationPrefs({ ...notificationPrefs, sms: checked })}
-                      />
-                    </div>
-                  </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                     <LogOut className="mr-2 h-4 w-4" />

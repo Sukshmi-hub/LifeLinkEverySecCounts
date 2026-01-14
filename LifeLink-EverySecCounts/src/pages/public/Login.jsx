@@ -561,7 +561,7 @@ const Login = () => {
                       <Input
                         id="reg-name"
                         type="text"
-                        placeholder="John Doe"
+                        placeholder="Sunita Singh"
                         className={`pl-10 ${errors.name ? 'border-destructive' : ''}`}
                         value={commonData.name}
                         onChange={(e) => setCommonData({ ...commonData, name: e.target.value })}
@@ -807,7 +807,7 @@ const Login = () => {
                         <Label>Emergency Contact Name *</Label>
                         <Input
                           type="text"
-                          placeholder="Jane Doe"
+                          placeholder="Amit Kumar"
                           className={errors.patientEmergencyName ? 'border-destructive' : ''}
                           value={patientData.emergencyContactName}
                           onChange={(e) => setPatientData({ ...patientData, emergencyContactName: e.target.value })}
@@ -969,7 +969,7 @@ const Login = () => {
                         <Label>Hospital Name *</Label>
                         <Input
                           type="text"
-                          placeholder="City General Hospital"
+                          placeholder="City Hospital"
                           className={errors.hospitalName ? 'border-destructive' : ''}
                           value={hospitalData.hospitalName}
                           onChange={(e) => setHospitalData({ ...hospitalData, hospitalName: e.target.value })}
@@ -1164,7 +1164,7 @@ const Login = () => {
                         <Label>Contact Person Name *</Label>
                         <Input
                           type="text"
-                          placeholder="John Smith"
+                          placeholder="Amit Kumar"
                           className={errors.ngoContactName ? 'border-destructive' : ''}
                           value={ngoData.contactPersonName}
                           onChange={(e) => setNgoData({ ...ngoData, contactPersonName: e.target.value })}

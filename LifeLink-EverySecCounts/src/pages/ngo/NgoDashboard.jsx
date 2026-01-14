@@ -1,92 +1,303 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationContext';
-import Header from '@/components/Header';
-import DashboardCard from '@/components/DashboardCard';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { HandHeart, Users, DollarSign, MessageCircle, Heart, Bell, Check, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import NgoSidebar from '@/components/ngo/NgoSidebar';
+import NgoStatCard from '@/components/ngo/NgoStatCard';
+import NgoMessages from '@/components/ngo/NgoMessages';
+import NgoProfile from '@/components/ngo/NgoProfile';
+import NgoSettings from '@/components/ngo/NgoSettings';
+import FundRequestDetails from '@/components/ngo/FundRequestDetails';
+import NgoHospitalChat from '@/components/ngo/NgoHospitalChat';
+import { 
+  FileText, 
+  Clock, 
+  CheckCircle, 
+  Wallet,
+  Eye,
+  HandHeart,
+  MessageCircle
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const NgoDashboard = () => {
   const { user } = useAuth();
-  const { fundRequests, notifications, getUnreadCount, markAsRead, updateFundRequestStatus } = useNotifications();
-  const [showNotifications, setShowNotifications] = useState(false);
+  const { fundRequests, updateFundRequestStatus } = useNotifications();
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [showDetails, setShowDetails] = useState(false);
+  const [showHospitalChat, setShowHospitalChat] = useState(false);
 
-  const ngoNotifications = notifications.filter(n => n.targetRole === 'ngo');
-  const unreadCount = getUnreadCount('ngo');
+  // Calculate stats
+  const totalRequests = fundRequests.length;
+  const pendingRequests = fundRequests.filter(r => r.status === 'Pending').length;
+  const approvedRequests = fundRequests.filter(r => r.status === 'Approved').length;
+  const disbursedAmount = fundRequests.filter(r => r.status === 'Approved').reduce((sum, r) => sum + r.amount, 0);
 
-  return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      <main className="container py-8">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">{user?.name}</h1>
-            <p className="text-muted-foreground">NGO Support Dashboard</p>
-          </div>
-          <div className="relative">
-            <Button variant="ghost" size="icon" onClick={() => setShowNotifications(!showNotifications)}>
-              <Bell className="w-5 h-5" />
-              {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">{unreadCount}</span>}
-            </Button>
-            {showNotifications && (
-              <div className="absolute right-0 top-12 w-80 bg-card border border-border rounded-lg shadow-lg z-50">
-                <div className="p-4 border-b border-border"><h3 className="font-semibold">Notifications</h3></div>
-                <div className="max-h-64 overflow-y-auto">
-                  {ngoNotifications.length === 0 ? <p className="p-4 text-center text-muted-foreground">No notifications</p> : ngoNotifications.slice(0, 5).map(n => (
-                    <div key={n.id} className={cn("p-4 border-b border-border cursor-pointer hover:bg-muted/50", !n.read && "bg-primary/5")} onClick={() => markAsRead(n.id)}>
-                      <p className="font-medium text-sm">{n.title}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{n.message}</p>
+  const handleViewDetails = (request) => {
+    setSelectedRequest(request);
+    setShowDetails(true);
+  };
+
+  const handleMessageHospital = (request) => {
+    setSelectedRequest(request);
+    setShowDetails(false);
+    setShowHospitalChat(true);
+  };
+
+  const renderDashboard = () => (
+    <div className="space-y-8">
+      {/* Stats Cards */}
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <NgoStatCard
+          title="Total Fund Requests"
+          subtitle="All patient funding requests received"
+          value={totalRequests}
+          icon={FileText}
+          variant="primary"
+        />
+        <NgoStatCard
+          title="Pending Approvals"
+          subtitle="Requests awaiting NGO decision"
+          value={pendingRequests}
+          icon={Clock}
+          variant="warning"
+        />
+        <NgoStatCard
+          title="Approved Supports"
+          subtitle="Funds approved by NGO"
+          value={approvedRequests}
+          icon={CheckCircle}
+          variant="success"
+        />
+        <NgoStatCard
+          title="Disbursed Amount"
+          subtitle="Total funds released"
+          value={`₹${disbursedAmount.toLocaleString()}`}
+          icon={Wallet}
+          variant="info"
+        />
+      </div>
+
+      {/* Fund Requests Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="w-5 h-5 text-primary" />
+            Patient Fund Requests
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {fundRequests.length === 0 ? (
+            <div className="text-center py-12">
+              <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
+              <p className="text-muted-foreground">No fund requests received yet</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {fundRequests.map((request) => (
+                <div
+                  key={request.id}
+                  className="flex items-center justify-between p-4 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <h4 className="font-semibold">{request.patientName}</h4>
+                      <Badge
+                        className={cn(
+                          "text-xs",
+                          request.status === 'Approved' ? 'bg-success/20 text-success' :
+                          request.status === 'Rejected' ? 'bg-destructive/20 text-destructive' :
+                          'bg-warning/20 text-warning-foreground'
+                        )}
+                      >
+                        {request.status}
+                      </Badge>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-          <DashboardCard icon={Users} title="Fund Requests" value={String(fundRequests.length)} variant="primary" />
-          <DashboardCard icon={DollarSign} title="Pending" value={String(fundRequests.filter(r => r.status === 'Pending').length)} variant="warning" />
-          <DashboardCard icon={HandHeart} title="Approved" value={String(fundRequests.filter(r => r.status === 'Approved').length)} variant="success" />
-          <DashboardCard icon={Heart} title="Total Amount" value={`₹${fundRequests.filter(r => r.status === 'Approved').reduce((s, r) => s + r.amount, 0).toLocaleString()}`} variant="success" />
-        </div>
-
-        <Card className="mb-8">
-          <CardHeader><CardTitle>Patient Fund Requests</CardTitle></CardHeader>
-          <CardContent>
-            {fundRequests.length === 0 ? <p className="text-center py-8 text-muted-foreground">No fund requests yet</p> : (
-              <div className="space-y-4">
-                {fundRequests.map(req => (
-                  <div key={req.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
-                    <div>
-                      <h4 className="font-medium">{req.patientName}</h4>
-                      <p className="text-sm text-muted-foreground">₹{req.amount.toLocaleString()} • {req.reason}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={cn("px-3 py-1 rounded-full text-xs font-medium", req.status === 'Approved' ? 'bg-success/20 text-success' : req.status === 'Rejected' ? 'bg-destructive/20 text-destructive' : 'bg-warning/20 text-warning')}>{req.status}</span>
-                      {req.status === 'Pending' && (
-                        <>
-                          <Button size="sm" variant="outline" onClick={() => updateFundRequestStatus(req.id, 'Approved')}><Check className="w-4 h-4" /></Button>
-                          <Button size="sm" variant="outline" onClick={() => updateFundRequestStatus(req.id, 'Rejected')}><X className="w-4 h-4" /></Button>
-                        </>
-                      )}
-                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      ₹{request.amount.toLocaleString()} • {request.reason}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Submitted: {new Date(request.createdAt).toLocaleDateString()}
+                    </p>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => handleViewDetails(request)}
+                  >
+                    <Eye className="w-4 h-4" />
+                    View Details
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
+      {/* Quick Actions */}
+      <div>
         <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Link to="/ngo/support"><Button variant="default" className="w-full h-24 flex-col gap-2"><HandHeart className="h-6 w-6" />Financial Support</Button></Link>
-          <Link to="/ngo/chat"><Button variant="outline" className="w-full h-24 flex-col gap-2"><MessageCircle className="h-6 w-6" />Messages</Button></Link>
+          <Card
+            className="cursor-pointer hover:shadow-md transition-shadow border-l-4 border-l-primary"
+            onClick={() => setActiveTab('requests')}
+          >
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <HandHeart className="w-6 h-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold">Financial Support</h3>
+                  <p className="text-sm text-muted-foreground">Manage patient funding requests</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card
+            className="cursor-pointer hover:shadow-md transition-shadow border-l-4 border-l-success"
+            onClick={() => setActiveTab('messages')}
+          >
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-success/10 flex items-center justify-center">
+                  <MessageCircle className="w-6 h-6 text-success" />
+                </div>
+                <div>
+                  <h3 className="font-semibold">Messages</h3>
+                  <p className="text-sm text-muted-foreground">Chat with hospitals and patients</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-      </main>
+      </div>
+    </div>
+  );
+
+  const renderRequests = () => (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold">Fund Requests Management</h2>
+        <p className="text-muted-foreground">Review and process patient funding requests</p>
+      </div>
+
+      {fundRequests.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
+            <p className="text-muted-foreground">No fund requests to process</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {fundRequests.map((request) => (
+            <Card key={request.id} className="hover:shadow-md transition-shadow">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="font-semibold text-lg">{request.patientName}</h3>
+                      <Badge
+                        className={cn(
+                          request.status === 'Approved' ? 'bg-success/20 text-success' :
+                          request.status === 'Rejected' ? 'bg-destructive/20 text-destructive' :
+                          'bg-warning/20 text-warning-foreground'
+                        )}
+                      >
+                        {request.status}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Amount Requested</p>
+                        <p className="font-semibold text-primary">₹{request.amount.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Reason</p>
+                        <p className="font-medium">{request.reason}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Submitted On</p>
+                        <p className="font-medium">{new Date(request.createdAt).toLocaleDateString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Case ID</p>
+                        <p className="font-medium">{request.id}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="gap-2 ml-4"
+                    onClick={() => handleViewDetails(request)}
+                  >
+                    <Eye className="w-4 h-4" />
+                    View Details
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'dashboard':
+        return renderDashboard();
+      case 'requests':
+        return renderRequests();
+      case 'messages':
+        return <NgoMessages />;
+      case 'profile':
+        return <NgoProfile />;
+      case 'settings':
+        return <NgoSettings />;
+      default:
+        return renderDashboard();
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background flex">
+      <NgoSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      
+      <div className="flex-1 flex flex-col">
+        <header className="h-16 border-b border-border bg-card flex items-center px-6">
+          <div>
+            <h1 className="text-xl font-bold">{user?.name || 'NGO Dashboard'}</h1>
+            <p className="text-sm text-muted-foreground">NGO Support Dashboard</p>
+          </div>
+        </header>
+
+        <main className="flex-1 p-6 overflow-y-auto">
+          {renderContent()}
+        </main>
+      </div>
+
+      <FundRequestDetails
+        isOpen={showDetails}
+        onClose={() => setShowDetails(false)}
+        request={selectedRequest}
+        onApprove={(id) => updateFundRequestStatus(id, 'Approved')}
+        onReject={(id) => updateFundRequestStatus(id, 'Rejected')}
+        onMessageHospital={handleMessageHospital}
+      />
+
+      <NgoHospitalChat
+        isOpen={showHospitalChat}
+        onClose={() => setShowHospitalChat(false)}
+        request={selectedRequest}
+      />
     </div>
   );
 };

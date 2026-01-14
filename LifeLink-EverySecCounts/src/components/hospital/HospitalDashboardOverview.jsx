@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import DashboardCard from '@/components/DashboardCard';
-import { FileText, AlertTriangle, Activity, UserCheck, Clock, TrendingUp, Heart } from 'lucide-react';
+import { FileText, AlertTriangle, Users, Activity, UserCheck, Clock, TrendingUp, Heart } from 'lucide-react';
 import { useNotifications } from '@/context/NotificationContext';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
@@ -11,14 +11,12 @@ const HospitalDashboardOverview = ({
   pendingVerifications,
   redAlertsCount,
 }) => {
-  const { organRequests } = useNotifications();
+  const { organRequests, notifications } = useNotifications();
 
-  // Calculate stats based on the context data
   const pendingRequests = organRequests.filter(r => r.status === 'Pending – Hospital Review').length;
   const emergencies = organRequests.filter(r => r.urgency === 'High').length;
   const matchedCount = organRequests.filter(r => r.status === 'Donor Matched').length;
   
-  // Static mock data for recent timeline
   const recentActivities = [
     { id: 1, action: 'Patient verification pending', time: new Date(Date.now() - 1800000), type: 'warning' },
     { id: 2, action: 'New organ request received', time: new Date(Date.now() - 3600000), type: 'info' },
@@ -33,7 +31,7 @@ const HospitalDashboardOverview = ({
         <p className="text-muted-foreground">Hospital Management Dashboard</p>
       </div>
 
-      {/* Stats Cards Row */}
+      {/* Stats Cards */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <DashboardCard 
           icon={FileText} 
@@ -62,7 +60,7 @@ const HospitalDashboardOverview = ({
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Recent Organ Requests Section */}
+        {/* Recent Organ Requests */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -98,7 +96,7 @@ const HospitalDashboardOverview = ({
           </CardContent>
         </Card>
 
-        {/* Recent Activity Timeline Section */}
+        {/* Recent Activity */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -131,7 +129,7 @@ const HospitalDashboardOverview = ({
         </Card>
       </div>
 
-      {/* Numerical Summary Section */}
+      {/* Quick Stats Summary */}
       <Card>
         <CardHeader>
           <CardTitle>Today's Summary</CardTitle>
