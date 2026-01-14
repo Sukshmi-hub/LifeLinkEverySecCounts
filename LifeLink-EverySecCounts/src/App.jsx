@@ -53,15 +53,20 @@ const App = () => (
                 <Sonner />
                 <BrowserRouter>
                   <Routes>
-                    {/* Public Routes */}
+                    {/* ========================================== */}
+                    {/* PUBLIC ROUTES                              */}
+                    {/* ========================================== */}
                     <Route path="/" element={<Home />} />
                     <Route path="/login" element={<Login />} />
+                    <Route path="/register" element={<Login />} />
                     <Route path="/about" element={<About />} />
                     <Route path="/tribute" element={<TributeWall />} />
                     <Route path="/red-alert" element={<RedAlertPage />} />
 
-                    {/* Patient Routes */}
-                    <Route path="/patient/dashboard" element={<ProtectedRoute allowedRoles={['patient']}><PatientDashboard /></ProtectedRoute>} />
+                    {/* ========================================== */}
+                    {/* PATIENT ROUTES (LOCKED)                    */}
+                    {/* ========================================== */}
+                    <Route path="/patient-dashboard" element={<ProtectedRoute allowedRoles={['patient']}><PatientDashboard /></ProtectedRoute>} />
                     <Route path="/patient/request" element={<ProtectedRoute allowedRoles={['patient']}><PatientRequestPage /></ProtectedRoute>} />
                     <Route path="/patient/find-hospital" element={<ProtectedRoute allowedRoles={['patient']}><FindHospitalPage /></ProtectedRoute>} />
                     <Route path="/patient/request-funds" element={<ProtectedRoute allowedRoles={['patient']}><RequestFundsPage /></ProtectedRoute>} />
@@ -69,11 +74,11 @@ const App = () => (
                     <Route path="/patient/profile" element={<ProtectedRoute allowedRoles={['patient']}><PatientProfilePage /></ProtectedRoute>} />
                     <Route path="/patient/messages" element={<ProtectedRoute allowedRoles={['patient']}><PatientMessagesPage /></ProtectedRoute>} />
                     <Route path="/patient/settings" element={<ProtectedRoute allowedRoles={['patient']}><PatientSettingsPage /></ProtectedRoute>} />
-                    <Route path="/patient/search" element={<ProtectedRoute allowedRoles={['patient']}><FindHospitalPage /></ProtectedRoute>} />
-                    <Route path="/patient/chat" element={<ProtectedRoute allowedRoles={['patient']}><PatientMessagesPage /></ProtectedRoute>} />
 
-                    {/* Donor Routes */}
-                    <Route path="/donor/dashboard" element={<ProtectedRoute allowedRoles={['donor']}><DonorDashboard /></ProtectedRoute>} />
+                    {/* ========================================== */}
+                    {/* DONOR ROUTES (LOCKED)                      */}
+                    {/* ========================================== */}
+                    <Route path="/donor-dashboard" element={<ProtectedRoute allowedRoles={['donor']}><DonorDashboard /></ProtectedRoute>} />
                     <Route path="/donor/register" element={<ProtectedRoute allowedRoles={['donor']}><DonorRegister /></ProtectedRoute>} />
                     <Route path="/donor/alerts" element={<ProtectedRoute allowedRoles={['donor']}><DonorAlerts /></ProtectedRoute>} />
                     <Route path="/donor/chat" element={<ProtectedRoute allowedRoles={['donor']}><DonorChat /></ProtectedRoute>} />
@@ -81,25 +86,28 @@ const App = () => (
                     <Route path="/donor/profile" element={<ProtectedRoute allowedRoles={['donor']}><DonorProfilePage /></ProtectedRoute>} />
                     <Route path="/donor/settings" element={<ProtectedRoute allowedRoles={['donor']}><DonorSettingsPage /></ProtectedRoute>} />
 
-                    {/* Hospital Routes */}
-                    <Route path="/hospital/dashboard" element={<ProtectedRoute allowedRoles={['hospital']}><HospitalDashboard /></ProtectedRoute>} />
+                    {/* ========================================== */}
+                    {/* HOSPITAL ROUTES (LOCKED)                   */}
+                    {/* ========================================== */}
+                    <Route path="/hospital-dashboard" element={<ProtectedRoute allowedRoles={['hospital']}><HospitalDashboard /></ProtectedRoute>} />
                     <Route path="/hospital/request" element={<ProtectedRoute allowedRoles={['hospital']}><HospitalDashboard /></ProtectedRoute>} />
-                    <Route path="/hospital/emergency" element={<ProtectedRoute allowedRoles={['hospital']}><HospitalDashboard /></ProtectedRoute>} />
-                    <Route path="/hospital/chat" element={<ProtectedRoute allowedRoles={['hospital']}><HospitalDashboard /></ProtectedRoute>} />
 
-                    {/* NGO Routes */}
-                    <Route path="/ngo/dashboard" element={<ProtectedRoute allowedRoles={['ngo']}><NgoDashboard /></ProtectedRoute>} />
-                    <Route path="/ngo/support" element={<ProtectedRoute allowedRoles={['ngo']}><NgoDashboard /></ProtectedRoute>} />
-                    <Route path="/ngo/chat" element={<ProtectedRoute allowedRoles={['ngo']}><NgoDashboard /></ProtectedRoute>} />
+                    {/* ========================================== */}
+                    {/* NGO ROUTES (LOCKED)                        */}
+                    {/* ========================================== */}
+                    <Route path="/ngo-dashboard" element={<ProtectedRoute allowedRoles={['ngo']}><NgoDashboard /></ProtectedRoute>} />
 
-                    {/* Admin Routes */}
-                    <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
+                    {/* ========================================== */}
+                    {/* ADMIN ROUTES (LOCKED)                      */}
+                    {/* ========================================== */}
+                    <Route path="/admin-dashboard" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
                     <Route path="/admin/users" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
                     <Route path="/admin/requests" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
                     <Route path="/admin/alerts" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
                     <Route path="/admin/tributes" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
                     <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
 
+                    {/* 404 - Not Found */}
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </BrowserRouter>
