@@ -1,7 +1,7 @@
 // src/controllers/authController.js
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import { supabase, supabaseAuth } from '../config/supabase.js'
+import { supabase, supabaseAuth } from './config/supabase.js'
 
 const generateToken = (userId) => {
   return jwt.sign(

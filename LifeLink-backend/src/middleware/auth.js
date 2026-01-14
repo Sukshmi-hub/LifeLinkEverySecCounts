@@ -1,6 +1,6 @@
 // src/middleware/auth.js - Authentication Middleware
 import jwt from 'jsonwebtoken'
-import { supabase } from '../config/supabase.js'
+import { supabase } from '../controllers/config/supabase.js'
 
 /**
  * Verify JWT token and authenticate user
