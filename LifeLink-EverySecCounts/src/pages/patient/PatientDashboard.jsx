@@ -92,7 +92,7 @@ function PatientDashboard() {
             </Button>
           </Link>
 
-          <Link to="/patient/search">
+          <Link to="/patient/find-hospital">
             <Button
               variant="outline"
               className="w-full h-24 flex-col gap-2"
