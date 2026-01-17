@@ -13,7 +13,10 @@ function ProtectedRoute({ children, allowedRoles }) {
   
   // 1. Check if the "VIP Pass" exists in browser memory
   const token = localStorage.getItem('token');
-  const storedUser = JSON.parse(localStorage.getItem('user'));
+  // The app stores the session under `lifelink_auth` (AuthContext).
+  // Fall back to older `user` key for compatibility.
+  const storedAuth = JSON.parse(localStorage.getItem('lifelink_auth') || 'null');
+  const storedUser = storedAuth?.user || JSON.parse(localStorage.getItem('user') || 'null');
 
   // 2. While the app is checking the database, show a loading spinner
   if (isLoading) {

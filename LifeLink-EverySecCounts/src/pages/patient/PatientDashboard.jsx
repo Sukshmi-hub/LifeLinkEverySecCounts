@@ -102,7 +102,7 @@ function PatientDashboard() {
             </Button>
           </Link>
 
-          <Link to="/patient/chat">
+          <Link to="/patient/messages">
             <Button
               variant="outline"
               className="w-full h-24 flex-col gap-2"
