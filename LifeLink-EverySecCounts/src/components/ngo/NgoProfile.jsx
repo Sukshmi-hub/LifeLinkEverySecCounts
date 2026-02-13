@@ -10,10 +10,9 @@ import {
   Building2, 
   Mail, 
   Phone, 
-  MapPin, 
-  Globe,
   FileText,
-  Save
+  Save,
+  MapPin
 } from 'lucide-react';
 
 const NgoProfile = () => {
@@ -25,9 +24,7 @@ const NgoProfile = () => {
     phone: '+91 98765 43210',
     registrationNumber: 'NGO-2024-MH-12345',
     address: '789, NGO Complex, Social Welfare District, Mumbai - 400001',
-    website: 'www.lifelinkngo.org',
     mission: 'To provide financial assistance to patients in need of organ transplants and critical medical care, ensuring that no life is lost due to lack of funds.',
-    focusAreas: 'Organ Transplant Funding, Medical Emergency Support, Healthcare Access',
   });
 
   const [isEditing, setIsEditing] = useState(false);
@@ -90,13 +87,17 @@ const NgoProfile = () => {
                 disabled={!isEditing}
               />
             </div>
+            {/* Added NGO Address */}
             <div className="space-y-2">
-              <Label htmlFor="focusAreas">Focus Areas</Label>
-              <Input
-                id="focusAreas"
-                value={profile.focusAreas}
-                onChange={(e) => setProfile({ ...profile, focusAreas: e.target.value })}
+              <Label htmlFor="address" className="flex items-center gap-2">
+                <MapPin className="w-3 h-3" /> NGO Address
+              </Label>
+              <Textarea
+                id="address"
+                value={profile.address}
+                onChange={(e) => setProfile({ ...profile, address: e.target.value })}
                 disabled={!isEditing}
+                rows={3}
               />
             </div>
           </CardContent>
@@ -136,45 +137,11 @@ const NgoProfile = () => {
                 disabled={!isEditing}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="website" className="flex items-center gap-2">
-                <Globe className="w-3 h-3" />
-                Website
-              </Label>
-              <Input
-                id="website"
-                value={profile.website}
-                onChange={(e) => setProfile({ ...profile, website: e.target.value })}
-                disabled={!isEditing}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Address */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-primary" />
-              Address
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Label htmlFor="address">Office Address</Label>
-              <Textarea
-                id="address"
-                value={profile.address}
-                onChange={(e) => setProfile({ ...profile, address: e.target.value })}
-                disabled={!isEditing}
-                rows={3}
-              />
-            </div>
           </CardContent>
         </Card>
 
         {/* Mission Statement */}
-        <Card>
+        <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <FileText className="w-4 h-4 text-primary" />

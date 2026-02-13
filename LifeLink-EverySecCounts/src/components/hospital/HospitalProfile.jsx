@@ -4,8 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { Building2, Phone, MapPin, Mail, Globe, Clock, Save, Edit2 } from 'lucide-react';
+import { Building2, MapPin, Mail, Clock, Save, Edit2, Phone } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const HospitalProfile = () => {
@@ -16,14 +15,8 @@ const HospitalProfile = () => {
     registrationNumber: 'HOS-2024-12345',
     type: 'Government',
     email: 'contact@cityhospital.com',
-    phone: '+91 98765 43210',
-    emergencyPhone: '+91 98765 43211',
+    emergencyPhone: '+91 98765 43211', // Emergency contact remains
     address: '123 Healthcare Avenue, Medical District, Mumbai - 400001',
-    website: 'www.cityhospital.com',
-    beds: 500,
-    icuBeds: 50,
-    bloodBankAvailable: true,
-    organTransplantLicense: true,
     workingHours: '24/7',
   });
 
@@ -101,7 +94,7 @@ const HospitalProfile = () => {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Phone className="w-5 h-5" />
+              <Mail className="w-5 h-5" />
               Contact Information
             </CardTitle>
           </CardHeader>
@@ -117,16 +110,7 @@ const HospitalProfile = () => {
                 disabled={!isEditing}
               />
             </div>
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <Phone className="w-4 h-4" /> Phone
-              </Label>
-              <Input
-                value={profile.phone}
-                onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-                disabled={!isEditing}
-              />
-            </div>
+            {/* Emergency Contact Added Back */}
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
                 <Phone className="w-4 h-4" /> Emergency Phone
@@ -137,25 +121,15 @@ const HospitalProfile = () => {
                 disabled={!isEditing}
               />
             </div>
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <Globe className="w-4 h-4" /> Website
-              </Label>
-              <Input
-                value={profile.website}
-                onChange={(e) => setProfile({ ...profile, website: e.target.value })}
-                disabled={!isEditing}
-              />
-            </div>
           </CardContent>
         </Card>
 
-        {/* Address */}
-        <Card>
+        {/* Location and Hours */}
+        <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <MapPin className="w-5 h-5" />
-              Location
+              Location & Hours
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -175,51 +149,6 @@ const HospitalProfile = () => {
               <Input
                 value={profile.workingHours}
                 onChange={(e) => setProfile({ ...profile, workingHours: e.target.value })}
-                disabled={!isEditing}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Facilities */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Facilities & Capacity</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Total Beds</Label>
-                <Input
-                  type="number"
-                  value={profile.beds}
-                  onChange={(e) => setProfile({ ...profile, beds: parseInt(e.target.value) || 0 })}
-                  disabled={!isEditing}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>ICU Beds</Label>
-                <Input
-                  type="number"
-                  value={profile.icuBeds}
-                  onChange={(e) => setProfile({ ...profile, icuBeds: parseInt(e.target.value) || 0 })}
-                  disabled={!isEditing}
-                />
-              </div>
-            </div>
-            <div className="flex items-center justify-between py-2">
-              <Label>Blood Bank Available</Label>
-              <Switch
-                checked={profile.bloodBankAvailable}
-                onCheckedChange={(checked) => setProfile({ ...profile, bloodBankAvailable: checked })}
-                disabled={!isEditing}
-              />
-            </div>
-            <div className="flex items-center justify-between py-2">
-              <Label>Organ Transplant License</Label>
-              <Switch
-                checked={profile.organTransplantLicense}
-                onCheckedChange={(checked) => setProfile({ ...profile, organTransplantLicense: checked })}
                 disabled={!isEditing}
               />
             </div>

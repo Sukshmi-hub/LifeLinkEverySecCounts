@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { 
   FileText, 
@@ -29,7 +29,17 @@ const menuItems = [
 
 const PatientSidebar = ({ isOpen, onToggle }) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { logout } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await logout(); 
+      navigate('/login'); 
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
 
   return (
     <>
@@ -59,7 +69,7 @@ const PatientSidebar = ({ isOpen, onToggle }) => {
           </Button>
         </div>
 
-        {/* Navigation */}
+        {/* Navigation - Only Patient Actions */}
         <nav className="p-4 space-y-2">
           {menuItems.map((item) => {
             const isActive = location.pathname === item.path;
@@ -82,12 +92,12 @@ const PatientSidebar = ({ isOpen, onToggle }) => {
           })}
         </nav>
 
-        {/* Logout */}
+        {/* Bottom Section - Logout Only (No Sign In) */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-border">
           <Button
             variant="ghost"
             className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-            onClick={logout}
+            onClick={handleLogout}
           >
             <LogOut className="w-5 h-5" />
             <span className="font-medium">Logout</span>
