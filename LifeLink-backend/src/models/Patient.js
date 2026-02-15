@@ -42,6 +42,11 @@ const patientSchema = new mongoose.Schema(
       enum: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'],
       required: true,
     },
+    hospital: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Hospital',
+      default: null,
+    },
     // medical_id field removed to allow multiple entries
     health_conditions: {
       type: [String],

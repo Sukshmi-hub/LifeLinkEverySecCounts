@@ -90,6 +90,7 @@ export const register = async (req, res) => {
     const lonNormalized = pick(['longitude', 'lon', 'lng', 'location_lon', 'location_lng', 'latlng_lon']);
     const fullAddressNormalized = pick(['full_address', 'fullAddress', 'address', 'location_full_address', 'display_name']);
     const countryNormalized = pick(['country', 'location_country']);
+    const hospitalNormalized = pick(['hospital', 'hospital_id', 'hospitalId', 'hospitalIdStr', 'hospitalIdString']);
     const locationAutoFlag = pick(['location_auto', 'use_location', 'auto_location', 'useMyLocation']);
 
     // Normalize aadhaar: trim and treat empty string as not provided
@@ -231,6 +232,8 @@ export const register = async (req, res) => {
         full_address: fullAddressNormalized || '',
         country: countryNormalized || ''
       } : {});
+      // Accept hospital selection (id or string) from frontend
+      roleData.hospital = hospitalNormalized || req.body.hospital || null;
     }
     if (role === 'donor') {
       roleData.aadhaar_no = cleanAadhaar;
@@ -305,6 +308,8 @@ export const register = async (req, res) => {
               update.$set[`location.${lk}`] = roleData.location[lk];
             });
           }
+          // Set hospital reference if provided
+          if (roleData.hospital) update.$set.hospital = roleData.hospital;
         // Donor additional fields
         if (role === 'donor') {
           update.$set.address = roleData.address;
