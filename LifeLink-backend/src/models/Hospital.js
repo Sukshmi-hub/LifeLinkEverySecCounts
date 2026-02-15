@@ -28,6 +28,26 @@ const hospitalSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    hospital_type: {
+      type: String,
+      default: ''
+    },
+    contact_phone: {
+      type: String,
+      default: ''
+    },
+    address: {
+      type: String,
+      default: ''
+    },
+    location: {
+      city: { type: String, default: '' },
+      state: { type: String, default: '' },
+      latitude: { type: Number, default: null },
+      longitude: { type: Number, default: null },
+      full_address: { type: String, default: '' },
+      country: { type: String, default: '' },
+    },
   },
   { timestamps: true }
 );

@@ -57,6 +57,8 @@ const patientSchema = new mongoose.Schema(
       state: String,
       latitude: Number,
       longitude: Number,
+      full_address: { type: String, default: '' },
+      country: { type: String, default: '' },
     },
     status: {
       type: String,

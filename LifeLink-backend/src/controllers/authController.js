@@ -45,8 +45,52 @@ const generateToken = (userId) => {
 
 export const register = async (req, res) => {
   try {
-    const { email, password, name, phone, role, aadhaar_no, age, blood_type, location } = req.body;
+    const {
+      email,
+      password,
+      name,
+      phone,
+      role,
+      aadhaar_no,
+      age,
+      blood_type,
+      location,
+      city,
+      state,
+      address,
+      emergency_contact,
+      emergency_contact_name,
+      emergency_contact_phone
+    ,
+      // hospital fields
+      hospital_type,
+      hospital_contact_phone,
+      hospital_address,
+      // ngo fields
+      ngo_contact_phone,
+      ngo_registered_office_address
+    } = req.body;
     console.log('Register payload:', { email, name, role, phone });
+
+    // Helper to pick the first present key from req.body for flexible frontend names
+    const pick = (keys) => {
+      for (const k of keys) {
+        if (req.body[k] !== undefined) return req.body[k];
+      }
+      return undefined;
+    };
+
+    // Normalize possible frontend field names for hospital and NGO
+    const hospitalContactNormalized = pick(['hospital_contact_phone', 'hospital_contact', 'hospitalContactPhone', 'hospital_phone', 'contact_phone', 'contactPhone']);
+    const hospitalAddressNormalized = pick(['hospital_address', 'hospital_full_address', 'hospitalAddress', 'address', 'hospital_addr']);
+    const ngoContactNormalized = pick(['ngo_contact_phone', 'ngo_contact', 'ngoContactPhone', 'ngoContact', 'ngo_phone']);
+    const ngoAddressNormalized = pick(['ngo_registered_office_address', 'registered_office_address', 'ngo_registered_office_address', 'ngo_address', 'address']);
+    // Normalize possible frontend field names for coordinates and full address
+    const latNormalized = pick(['latitude', 'lat', 'location_lat', 'latlng_lat']);
+    const lonNormalized = pick(['longitude', 'lon', 'lng', 'location_lon', 'location_lng', 'latlng_lon']);
+    const fullAddressNormalized = pick(['full_address', 'fullAddress', 'address', 'location_full_address', 'display_name']);
+    const countryNormalized = pick(['country', 'location_country']);
+    const locationAutoFlag = pick(['location_auto', 'use_location', 'auto_location', 'useMyLocation']);
 
     // Normalize aadhaar: trim and treat empty string as not provided
     const cleanAadhaar = aadhaar_no && String(aadhaar_no).trim() ? String(aadhaar_no).trim() : undefined;
@@ -178,14 +222,69 @@ export const register = async (req, res) => {
       roleData.aadhaar_no = cleanAadhaar;
       roleData.age = age || null;
       roleData.blood_type = blood_type || 'O+';
-      roleData.location = location || {};
+      // Accept either a nested `location` object or separate `city`/`state`/coords/full_address fields from the frontend
+      roleData.location = location || (city || state || latNormalized || lonNormalized || fullAddressNormalized || countryNormalized ? {
+        city: city || '',
+        state: state || '',
+        latitude: latNormalized || undefined,
+        longitude: lonNormalized || undefined,
+        full_address: fullAddressNormalized || '',
+        country: countryNormalized || ''
+      } : {});
     }
     if (role === 'donor') {
       roleData.aadhaar_no = cleanAadhaar;
       roleData.age = age || null;
       roleData.blood_type = blood_type || 'O+';
       roleData.donation_type = req.body.donation_type || [];
-      roleData.location = location || {};
+      roleData.location = location || (city || state || latNormalized || lonNormalized || fullAddressNormalized || countryNormalized ? {
+        city: city || '',
+        state: state || '',
+        latitude: latNormalized || undefined,
+        longitude: lonNormalized || undefined,
+        full_address: fullAddressNormalized || '',
+        country: countryNormalized || ''
+      } : {});
+      // Accept either an `emergency_contact` object or separate name/phone fields
+      roleData.address = address || '';
+      roleData.emergency_contact = emergency_contact || (emergency_contact_name || emergency_contact_phone ? { name: emergency_contact_name || '', phone: emergency_contact_phone || '' } : {});
+    }
+    if (role === 'hospital') {
+      // hospital-specific fields
+      roleData.hospital_type = hospital_type || '';
+      roleData.contact_phone = hospitalContactNormalized || hospital_contact_phone || '';
+      roleData.address = hospitalAddressNormalized || hospital_address || '';
+      // Accept location fields for hospital as well
+      roleData.location = location || (city || state || latNormalized || lonNormalized || fullAddressNormalized || countryNormalized ? {
+        city: city || '',
+        state: state || '',
+        latitude: latNormalized || undefined,
+        longitude: lonNormalized || undefined,
+        full_address: fullAddressNormalized || '',
+        country: countryNormalized || ''
+      } : {});
+    }
+    if (role === 'ngo') {
+      // NGO-specific fields
+      roleData.ngo_contact_phone = ngoContactNormalized || ngo_contact_phone || '';
+      roleData.registered_office_address = ngoAddressNormalized || ngo_registered_office_address || '';
+      // Accept location fields for NGO as well
+      roleData.location = location || (city || state || latNormalized || lonNormalized || fullAddressNormalized || countryNormalized ? {
+        city: city || '',
+        state: state || '',
+        latitude: latNormalized || undefined,
+        longitude: lonNormalized || undefined,
+        full_address: fullAddressNormalized || '',
+        country: countryNormalized || ''
+      } : {});
+    }
+
+    // If frontend explicitly indicated auto-location should be used, validate coords are present
+    if (locationAutoFlag && (locationAutoFlag === true || locationAutoFlag === 'true')) {
+      const loc = roleData.location || {};
+      if (!loc.latitude || !loc.longitude) {
+        return res.status(400).json({ success: false, message: 'Location auto-detection requested but coordinates are missing.' });
+      }
     }
 
     try {
@@ -195,11 +294,33 @@ export const register = async (req, res) => {
       update.$set.phone = roleData.phone;
       update.$set.password = roleData.password;
       update.$setOnInsert.userId = newUser._id;
-      if (role === 'patient' || role === 'donor') {
+      if (role === 'patient' || role === 'donor' || role === 'hospital' || role === 'ngo') {
         if (cleanAadhaar) update.$setOnInsert.aadhaar_no = cleanAadhaar;
-        update.$set.age = roleData.age;
-        update.$set.blood_type = roleData.blood_type;
-        update.$set.location = roleData.location;
+          // Optional patient/donor/hospital/ngo fields
+          update.$set.age = roleData.age;
+          update.$set.blood_type = roleData.blood_type;
+          // Set nested location fields individually to avoid overwriting with empty object
+          if (roleData.location && typeof roleData.location === 'object' && Object.keys(roleData.location).length) {
+            Object.keys(roleData.location).forEach((lk) => {
+              update.$set[`location.${lk}`] = roleData.location[lk];
+            });
+          }
+        // Donor additional fields
+        if (role === 'donor') {
+          update.$set.address = roleData.address;
+          update.$set.emergency_contact = roleData.emergency_contact;
+        }
+        // Hospital additional fields
+        if (role === 'hospital') {
+          update.$set.hospital_type = roleData.hospital_type;
+          update.$set.contact_phone = roleData.contact_phone;
+          update.$set.address = roleData.address;
+        }
+        // NGO additional fields
+        if (role === 'ngo') {
+          update.$set.ngo_contact_phone = roleData.ngo_contact_phone;
+          update.$set.registered_office_address = roleData.registered_office_address;
+        }
       }
 
       await Model.findOneAndUpdate(filter, update, {

@@ -64,6 +64,16 @@ const donorSchema = new mongoose.Schema(
       state: String,
       latitude: Number,
       longitude: Number,
+      full_address: { type: String, default: '' },
+      country: { type: String, default: '' },
+    },
+    address: {
+      type: String,
+      default: ''
+    },
+    emergency_contact: {
+      name: { type: String, default: '' },
+      phone: { type: String, default: '' }
     },
     willing_organs: {
       type: [String],

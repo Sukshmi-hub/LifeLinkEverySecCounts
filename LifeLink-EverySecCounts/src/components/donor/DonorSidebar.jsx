@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
-  Heart,
   Bell,
   MessageCircle,
   User,
@@ -35,35 +34,29 @@ const DonorSidebar = ({ isOpen, onToggle }) => {
   };
 
   const navItems = [
-    { 
-      path: '/donor/dashboard', 
-      icon: LayoutDashboard, 
-      label: 'Dashboard',
-      badge: null 
-    },
-    { 
-      path: '/donor/alerts', 
-      icon: Bell, 
+    {
+      path: '/donor/alerts',
+      icon: Bell,
       label: 'Alerts',
-      badge: unreadNotifications > 0 ? unreadNotifications : null 
+      badge: unreadNotifications > 0 ? unreadNotifications : null,
     },
-    { 
-      path: '/donor/messages', 
-      icon: MessageCircle, 
+    {
+      path: '/donor/messages',
+      icon: MessageCircle,
       label: 'Messages',
-      badge: null 
+      badge: null,
     },
-    { 
-      path: '/donor/profile', 
-      icon: User, 
+    {
+      path: '/donor/profile',
+      icon: User,
       label: 'Profile',
-      badge: null 
+      badge: null,
     },
-    { 
-      path: '/donor/settings', 
-      icon: Settings, 
+    {
+      path: '/donor/settings',
+      icon: Settings,
       label: 'Settings',
-      badge: null 
+      badge: null,
     },
   ];
 
@@ -127,6 +120,7 @@ const DonorSidebar = ({ isOpen, onToggle }) => {
                 >
                   <Icon className="h-5 w-5" />
                   <span className="font-medium">{item.label}</span>
+
                   {item.badge && (
                     <span className="absolute right-3 bg-destructive text-destructive-foreground text-xs font-bold px-2 py-0.5 rounded-full">
                       {item.badge}
@@ -137,14 +131,8 @@ const DonorSidebar = ({ isOpen, onToggle }) => {
             })}
           </nav>
 
-          {/* Donate CTA & Logout */}
-          <div className="p-4 border-t border-border space-y-3">
-            <Link to="/donor/dashboard">
-              <Button className="w-full gap-2 bg-destructive hover:bg-destructive/90">
-                <Heart className="h-4 w-4" />
-                Donate Now
-              </Button>
-            </Link>
+          {/* Logout */}
+          <div className="p-4 border-t border-border">
             <Button
               variant="ghost"
               className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive"

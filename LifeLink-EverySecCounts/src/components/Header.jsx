@@ -42,6 +42,10 @@ const Header = () => {
   ];
 
   const isActive = (path) => location.pathname === path;
+  
+  // Check if current page is patient dashboard or donor alerts
+  const isPatientDashboard = location.pathname === '/patient-dashboard';
+  const isDonorAlerts = location.pathname.includes('/donor/alerts');
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -129,12 +133,14 @@ const Header = () => {
               </DropdownMenu>
             </>
           ) : (
-            <Link to="/login">
-              <Button variant="default" className="gap-2">
-                <LogIn className="h-4 w-4" />
-                <span className="hidden sm:inline">Sign In</span>
-              </Button>
-            </Link>
+            !isPatientDashboard && !isDonorAlerts && (
+              <Link to="/login">
+                <Button variant="default" className="gap-2">
+                  <LogIn className="h-4 w-4" />
+                  <span className="hidden sm:inline">Sign In</span>
+                </Button>
+              </Link>
+            )
           )}
 
           {/* Mobile Menu Toggle */}

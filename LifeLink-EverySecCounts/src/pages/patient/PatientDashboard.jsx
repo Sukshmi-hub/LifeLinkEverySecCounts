@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import {
   Droplets,
   Heart,
-  Search,
   MessageCircle,
   CreditCard,
   AlertTriangle,
@@ -17,7 +16,6 @@ import {
 
 function PatientDashboard() {
   const { user } = useAuth();
-
   const [patientData, setPatientData] = useState({
     activeRequests: 0,
     pending: 0,
@@ -42,7 +40,6 @@ function PatientDashboard() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-
       <main className="container py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground">
@@ -83,22 +80,11 @@ function PatientDashboard() {
         <h2 className="text-xl font-semibold mb-4">
           Quick Actions
         </h2>
-
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-3">
           <Link to="/patient/request">
             <Button className="w-full h-24 flex-col gap-2">
               <Droplets className="h-6 w-6" />
               New Request
-            </Button>
-          </Link>
-
-          <Link to="/patient/find-hospital">
-            <Button
-              variant="outline"
-              className="w-full h-24 flex-col gap-2"
-            >
-              <Search className="h-6 w-6" />
-              Find Hospital
             </Button>
           </Link>
 

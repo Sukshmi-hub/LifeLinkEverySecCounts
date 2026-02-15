@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { 
   FileText, 
-  Search, 
   CreditCard, 
   HandHeart, 
   User, 
@@ -19,7 +18,6 @@ import LifeLinkLogo from '@/components/LifeLinkLogo';
 
 const menuItems = [
   { icon: FileText, label: 'Request', path: '/patient/request' },
-  { icon: Search, label: 'Find Hospital', path: '/patient/find-hospital' },
   { icon: MessageCircle, label: 'Messages', path: '/patient/messages' },
   { icon: CreditCard, label: 'Payments', path: '/patient/payment' },
   { icon: HandHeart, label: 'Request Funds', path: '/patient/request-funds' },

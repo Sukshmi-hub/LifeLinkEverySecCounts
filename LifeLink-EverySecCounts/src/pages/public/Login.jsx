@@ -30,6 +30,7 @@ import {
   Home,
   PhoneCall
 } from 'lucide-react';
+import useGeolocation from '@/hooks/use-geolocation';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -59,6 +60,13 @@ const Login = () => {
     bloodGroup: '',
     aadhaarNumber: '',
     location: '',
+    hospital: '',
+    latitude: null,
+    longitude: null,
+    city: '',
+    state: '',
+    country: '',
+    full_address: ''
   });
 
   const [donorData, setDonorData] = useState({
@@ -67,6 +75,12 @@ const Login = () => {
     willingToDonate: [],
     aadhaarNumber: '',
     address: '',
+    latitude: null,
+    longitude: null,
+    city: '',
+    state: '',
+    country: '',
+    full_address: '',
     emergencyName: '',
     emergencyPhone: '',
   });
@@ -75,18 +89,181 @@ const Login = () => {
     address: '',
     hospitalPhone: '',
     type: '',
+    latitude: null,
+    longitude: null,
+    city: '',
+    state: '',
+    country: '',
+    full_address: ''
   });
 
   const [ngoData, setNgoData] = useState({
     address: '',
     ngoPhone: '',
+    latitude: null,
+    longitude: null,
+    city: '',
+    state: '',
+    country: '',
+    full_address: ''
   });
+
+  // ✅ ADDED: donor age error state
+  const [donorAgeError, setDonorAgeError] = useState('');
+  
+  // ✅ ADDED: patient age error state
+  const [patientAgeError, setPatientAgeError] = useState('');
+
+  // ✅ ADDED: hospitals list state
+  const [hospitals, setHospitals] = useState([]);
+
+  // ✅ ADDED: Geolocation hook
+  const { state: geoState, getLocation } = useGeolocation();
+
+  // ✅ ADDED: Handle geolocation
+  const handleUseLocation = async () => {
+    try {
+      const res = await getLocation();
+      const { coords, address } = res;
+      // Fill appropriate fields based on selected role
+      if (commonData.role === 'patient') {
+        setPatientData((p) => ({ 
+          ...p, 
+          location: address.display_name || `${address.city}, ${address.state}`, 
+          latitude: coords.latitude, 
+          longitude: coords.longitude, 
+          city: address.city, 
+          state: address.state, 
+          country: address.country, 
+          full_address: address.display_name 
+        }));
+      } else if (commonData.role === 'donor') {
+        setDonorData((d) => ({ 
+          ...d, 
+          address: address.display_name || `${address.city}, ${address.state}`, 
+          latitude: coords.latitude, 
+          longitude: coords.longitude, 
+          city: address.city, 
+          state: address.state, 
+          country: address.country, 
+          full_address: address.display_name 
+        }));
+      } else if (commonData.role === 'hospital') {
+        setHospitalData((h) => ({ 
+          ...h, 
+          address: address.display_name || `${address.city}, ${address.state}`, 
+          latitude: coords.latitude, 
+          longitude: coords.longitude, 
+          city: address.city, 
+          state: address.state, 
+          country: address.country, 
+          full_address: address.display_name 
+        }));
+      } else if (commonData.role === 'ngo') {
+        setNgoData((n) => ({ 
+          ...n, 
+          address: address.display_name || `${address.city}, ${address.state}`, 
+          latitude: coords.latitude, 
+          longitude: coords.longitude, 
+          city: address.city, 
+          state: address.state, 
+          country: address.country, 
+          full_address: address.display_name 
+        }));
+      }
+      toast({ title: 'Location detected', description: 'Address auto-filled from your location.' });
+    } catch (err) {
+      console.error('Geolocation error', err);
+      const msg = err && err.message ? err.message : 'Unable to detect location';
+      toast({ title: 'Location Error', description: msg, variant: 'destructive' });
+    }
+  };
 
   useEffect(() => {
     if (isAuthenticated && user) {
       navigate(getRoleBasedRedirect(user.role));
     }
   }, [isAuthenticated, user, navigate]);
+
+  // ✅ ADDED: Fetch hospitals from database
+  useEffect(() => {
+    const fetchHospitals = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/hospitals');
+        const result = await response.json();
+        if (result.success) {
+          setHospitals(result.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch hospitals:', err);
+      }
+    };
+    fetchHospitals();
+  }, []);
+
+  // ✅ ADDED: donor age validation (18 - 70)
+  useEffect(() => {
+    if (commonData.role !== 'donor') {
+      setDonorAgeError('');
+      return;
+    }
+
+    if (donorData.age === '') {
+      setDonorAgeError('');
+      return;
+    }
+
+    const ageNum = Number(donorData.age);
+
+    if (Number.isNaN(ageNum)) {
+      setDonorAgeError('Please enter a valid age');
+      return;
+    }
+
+    if (ageNum < 18) {
+      setDonorAgeError('Donor must be at least 18 years old');
+      return;
+    }
+
+    if (ageNum > 70) {
+      setDonorAgeError('Donor age must be 70 or below');
+      return;
+    }
+
+    setDonorAgeError('');
+  }, [donorData.age, commonData.role]);
+
+  // ✅ ADDED: patient age validation (0 - 110)
+  useEffect(() => {
+    if (commonData.role !== 'patient') {
+      setPatientAgeError('');
+      return;
+    }
+
+    if (patientData.age === '') {
+      setPatientAgeError('');
+      return;
+    }
+
+    const ageNum = Number(patientData.age);
+
+    if (Number.isNaN(ageNum)) {
+      setPatientAgeError('Please enter a valid age');
+      return;
+    }
+
+    if (ageNum < 0) {
+      setPatientAgeError('Patient age cannot be negative');
+      return;
+    }
+
+    if (ageNum > 110) {
+      setPatientAgeError('Patient age must be 110 or below');
+      return;
+    }
+
+    setPatientAgeError('');
+  }, [patientData.age, commonData.role]);
 
   const validateRegistration = () => {
     const passwordRegex = /^(?=.*[A-Z])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{1,10}$/;
@@ -139,7 +316,35 @@ const Login = () => {
       }
     }
 
+    // ✅ ADDED: patient age validation
+    if (commonData.role === 'patient') {
+      const ageNum = Number(patientData.age);
+
+      if (!patientData.age) {
+        toast({ title: 'Age Required', description: 'Please enter patient age.', variant: 'destructive' });
+        return false;
+      }
+
+      if (Number.isNaN(ageNum) || ageNum < 0 || ageNum > 110) {
+        toast({ title: 'Invalid Patient Age', description: 'Patient age must be between 0 and 110.', variant: 'destructive' });
+        return false;
+      }
+    }
+
+    // ✅ UPDATED: donor validation (added age constraint)
     if (commonData.role === 'donor') {
+      const ageNum = Number(donorData.age);
+
+      if (!donorData.age) {
+        toast({ title: 'Age Required', description: 'Please enter donor age.', variant: 'destructive' });
+        return false;
+      }
+
+      if (Number.isNaN(ageNum) || ageNum < 18 || ageNum > 70) {
+        toast({ title: 'Invalid Donor Age', description: 'Donor age must be between 18 and 70.', variant: 'destructive' });
+        return false;
+      }
+
       if (!phoneRegex.test(donorData.emergencyPhone)) {
         toast({ title: 'Invalid Emergency Phone', description: 'Emergency contact must be 10 digits.', variant: 'destructive' });
         return false;
@@ -189,11 +394,20 @@ const Login = () => {
       };
 
       if (commonData.role === 'patient') {
+        const locationObj = patientData.latitude ? {
+          latitude: patientData.latitude,
+          longitude: patientData.longitude,
+          full_address: patientData.full_address || patientData.location,
+          city: patientData.city || '',
+          state: patientData.state || '',
+          country: patientData.country || ''
+        } : (patientData.location ? { full_address: patientData.location } : {});
         Object.assign(payload, {
           age: Number(patientData.age),
           blood_type: patientData.bloodGroup,
-          location: patientData.location,
-          aadhaar_no: patientData.aadhaarNumber
+          location: locationObj,
+          aadhaar_no: patientData.aadhaarNumber,
+          hospital: patientData.hospital
         });
       } else if (commonData.role === 'donor') {
         Object.assign(payload, {
@@ -205,17 +419,41 @@ const Login = () => {
           emergency_contact_name: donorData.emergencyName,
           emergency_contact_phone: donorData.emergencyPhone
         });
+        if (donorData.latitude) {
+          payload.latitude = donorData.latitude;
+          payload.longitude = donorData.longitude;
+          payload.full_address = donorData.full_address || donorData.address;
+          payload.city = donorData.city || '';
+          payload.state = donorData.state || '';
+          payload.country = donorData.country || '';
+        }
       } else if (commonData.role === 'hospital') {
         Object.assign(payload, {
           hospital_type: hospitalData.type,
           address: hospitalData.address,
           hospital_phone: hospitalData.hospitalPhone
         });
+        if (hospitalData.latitude) {
+          payload.latitude = hospitalData.latitude;
+          payload.longitude = hospitalData.longitude;
+          payload.full_address = hospitalData.full_address || hospitalData.address;
+          payload.city = hospitalData.city || '';
+          payload.state = hospitalData.state || '';
+          payload.country = hospitalData.country || '';
+        }
       } else if (commonData.role === 'ngo') {
         Object.assign(payload, {
           address: ngoData.address,
           ngo_phone: ngoData.ngoPhone
         });
+        if (ngoData.latitude) {
+          payload.latitude = ngoData.latitude;
+          payload.longitude = ngoData.longitude;
+          payload.full_address = ngoData.full_address || ngoData.address;
+          payload.city = ngoData.city || '';
+          payload.state = ngoData.state || '';
+          payload.country = ngoData.country || '';
+        }
       }
 
       const response = await fetch('http://127.0.0.1:5000/api/auth/register', {
@@ -346,7 +584,19 @@ const Login = () => {
                 <div className="space-y-4 border-t pt-4">
                   <h3 className="text-md font-semibold flex items-center gap-2"><Stethoscope className="h-4 w-4 text-primary" /> Patient Details</h3>
                   <div className="grid grid-cols-2 gap-4">
-                    <Input placeholder="Age" type="number" value={patientData.age} onChange={(e) => setPatientData({ ...patientData, age: e.target.value })} />
+                    <div>
+                      <Input
+                        placeholder="Age (0 - 110)"
+                        type="number"
+                        min="0"
+                        max="110"
+                        value={patientData.age}
+                        onChange={(e) => setPatientData({ ...patientData, age: e.target.value })}
+                      />
+                      {patientAgeError && (
+                        <p className="text-sm text-red-500 mt-1">{patientAgeError}</p>
+                      )}
+                    </div>
                     <Select onValueChange={(v) => setPatientData({ ...patientData, bloodGroup: v })}>
                       <SelectTrigger><SelectValue placeholder="Blood Group" /></SelectTrigger>
                       <SelectContent className="bg-white">
@@ -354,7 +604,20 @@ const Login = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  <Input placeholder="City, State" value={patientData.location} onChange={(e) => setPatientData({ ...patientData, location: e.target.value })} required />
+                  <div className="flex gap-2">
+                    <Input placeholder="City, State" value={patientData.location} onChange={(e) => setPatientData({ ...patientData, location: e.target.value })} required />
+                    <Button type="button" variant="secondary" onClick={handleUseLocation}>Use My Location</Button>
+                  </div>
+                  <Select onValueChange={(v) => setPatientData({ ...patientData, hospital: v })}>
+                    <SelectTrigger><SelectValue placeholder="Hospital (Patient Admitted In)" /></SelectTrigger>
+                    <SelectContent className="bg-white">
+                      {hospitals.map((hospital) => (
+                        <SelectItem key={hospital.id} value={hospital.id.toString()}>
+                          {hospital.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Input placeholder="12 Digit Aadhaar" maxLength={12} value={patientData.aadhaarNumber} onChange={(e) => setPatientData({...patientData, aadhaarNumber: e.target.value.replace(/\D/g, '')})} />
                 </div>
               )}
@@ -364,7 +627,23 @@ const Login = () => {
                 <div className="space-y-4 border-t pt-4">
                   <h3 className="text-md font-semibold flex items-center gap-2"><HeartHandshake className="h-4 w-4 text-primary" /> Donor Details</h3>
                   <div className="grid grid-cols-2 gap-4">
-                    <Input placeholder="Age" type="number" value={donorData.age} onChange={(e) => setDonorData({ ...donorData, age: e.target.value })} />
+
+                    {/* ✅ UPDATED: Donor Age Constraint */}
+                    <div>
+                      <Input
+                        placeholder="Age (18 - 70)"
+                        type="number"
+                        min="18"
+                        max="70"
+                        value={donorData.age}
+                        onChange={(e) => setDonorData({ ...donorData, age: e.target.value })}
+                      />
+
+                      {donorAgeError && (
+                        <p className="text-sm text-red-500 mt-1">{donorAgeError}</p>
+                      )}
+                    </div>
+
                     <Select onValueChange={(v) => setDonorData({...donorData, bloodGroup: v})}>
                       <SelectTrigger><SelectValue placeholder="Blood Group" /></SelectTrigger>
                       <SelectContent className="bg-white">
@@ -372,7 +651,10 @@ const Login = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  <Input placeholder="Address" value={donorData.address} onChange={(e) => setDonorData({...donorData, address: e.target.value})} required />
+                  <div className="flex gap-2">
+                    <Input placeholder="Address" value={donorData.address} onChange={(e) => setDonorData({...donorData, address: e.target.value})} required />
+                    <Button type="button" variant="secondary" onClick={handleUseLocation}>Use My Location</Button>
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <Input placeholder="Emergency Contact Name" value={donorData.emergencyName} onChange={(e) => setDonorData({...donorData, emergencyName: e.target.value})} required />
                     <Input placeholder="Emergency Phone" value={donorData.emergencyPhone} onChange={(e) => setDonorData({...donorData, emergencyPhone: e.target.value.replace(/\D/g, '')})} required maxLength={10} />
@@ -393,13 +675,16 @@ const Login = () => {
                     </SelectContent>
                   </Select>
                   <Input placeholder="Hospital Contact Phone" value={hospitalData.hospitalPhone} onChange={(e) => setHospitalData({...hospitalData, hospitalPhone: e.target.value.replace(/\D/g, '')})} required maxLength={10} />
-                  <textarea 
-                    className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    placeholder="Hospital Full Address" 
-                    value={hospitalData.address} 
-                    onChange={(e) => setHospitalData({...hospitalData, address: e.target.value})} 
-                    required 
-                  />
+                  <div className="flex gap-2">
+                    <textarea 
+                      className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      placeholder="Hospital Full Address" 
+                      value={hospitalData.address} 
+                      onChange={(e) => setHospitalData({...hospitalData, address: e.target.value})} 
+                      required 
+                    />
+                    <Button type="button" variant="secondary" onClick={handleUseLocation}>Use My Location</Button>
+                  </div>
                 </div>
               )}
 
@@ -408,13 +693,16 @@ const Login = () => {
                 <div className="space-y-4 border-t pt-4">
                   <h3 className="text-md font-semibold flex items-center gap-2"><Users className="h-4 w-4 text-primary" /> NGO Registration</h3>
                   <Input placeholder="NGO Contact Phone" value={ngoData.ngoPhone} onChange={(e) => setNgoData({...ngoData, ngoPhone: e.target.value.replace(/\D/g, '')})} required maxLength={10} />
-                  <textarea 
-                    className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    placeholder="NGO Registered Office Address" 
-                    value={ngoData.address} 
-                    onChange={(e) => setNgoData({...ngoData, address: e.target.value})} 
-                    required 
-                  />
+                  <div className="flex gap-2">
+                    <textarea 
+                      className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      placeholder="NGO Registered Office Address" 
+                      value={ngoData.address} 
+                      onChange={(e) => setNgoData({...ngoData, address: e.target.value})} 
+                      required 
+                    />
+                    <Button type="button" variant="secondary" onClick={handleUseLocation}>Use My Location</Button>
+                  </div>
                 </div>
               )}
 
