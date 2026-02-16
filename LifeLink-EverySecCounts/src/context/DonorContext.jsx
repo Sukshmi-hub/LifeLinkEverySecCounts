@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNotifications } from './NotificationContext';
+import { useAuth } from './AuthContext';
 
 const defaultProfile = {
   fullName: 'Sunita Singh',
@@ -25,6 +26,67 @@ export const DonorProvider = ({ children }) => {
   const [donationIntents, setDonationIntents] = useState([]);
   const [donorMatches, setDonorMatches] = useState([]);
   const [donorProfile, setDonorProfile] = useState(defaultProfile);
+
+  const { user } = useAuth();
+
+  // Sync donor profile from authenticated user when available
+  useEffect(() => {
+    if (!user) return;
+    const role = (user.role || '').toString().toLowerCase();
+    if (role !== 'donor') return;
+
+    // First merge any available fields from `user` object
+    setDonorProfile(prev => ({
+      ...prev,
+      fullName: user.fullName || user.name || prev.fullName,
+      email: user.email || prev.email,
+      phone: user.phone || prev.phone,
+      age: user.age !== undefined ? String(user.age) : (user.age ? String(user.age) : prev.age),
+      bloodGroup: user.bloodGroup || user.blood_type || prev.bloodGroup,
+      aadhaarNumber: user.aadhaarNumber || user.aadhaar_no || prev.aadhaarNumber,
+      address: user.address || (user.location && user.location.full_address) || prev.address,
+      city: (user.location && user.location.city) || prev.city,
+      state: (user.location && user.location.state) || prev.state,
+      emergencyContactName: user.emergencyContactName || (user.emergency_contact && user.emergency_contact.name) || prev.emergencyContactName,
+      emergencyContactNumber: user.emergencyPhone || (user.emergency_contact && user.emergency_contact.phone) || prev.emergencyContactNumber,
+      willingToDonate: user.willing_organs || user.willingToDonate || prev.willingToDonate,
+      lastDonationDate: user.last_donation_date || prev.lastDonationDate,
+    }));
+
+    // Then try to fetch authoritative donor profile from backend (`/api/profile`) using token
+    (async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const resp = await fetch('http://localhost:5000/api/profile', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!resp.ok) return;
+        const json = await resp.json();
+        if (!json || !json.success || !json.data || !json.data.user) return;
+        const p = json.data.user;
+
+        setDonorProfile(prev => ({
+          ...prev,
+          fullName: p.fullName || p.name || prev.fullName,
+          email: p.email || prev.email,
+          phone: p.phone || prev.phone,
+          age: p.age !== undefined ? String(p.age) : prev.age,
+          bloodGroup: p.bloodGroup || p.blood_type || prev.bloodGroup,
+          aadhaarNumber: p.aadhaarNumber || p.aadhaar_no || prev.aadhaarNumber,
+          address: p.address || (p.location && p.location.full_address) || prev.address,
+          city: (p.location && p.location.city) || prev.city,
+          state: (p.location && p.location.state) || prev.state,
+          emergencyContactName: p.emergencyContactName || (p.emergency_contact && p.emergency_contact.name) || prev.emergencyContactName,
+          emergencyContactNumber: p.emergencyPhone || (p.emergency_contact && p.emergency_contact.phone) || prev.emergencyContactNumber,
+          willingToDonate: p.willing_organs || p.willingToDonate || prev.willingToDonate,
+          lastDonationDate: p.last_donation_date || prev.lastDonationDate,
+        }));
+      } catch (err) {
+        // ignore
+      }
+    })();
+  }, [user]);
 
   const addDonationIntent = (intent) => {
     const newIntent = {
