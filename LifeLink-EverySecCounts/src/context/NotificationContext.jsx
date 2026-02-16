@@ -53,6 +53,32 @@ export const NotificationProvider = ({ children }) => {
     });
   };
 
+  // Load organ requests from backend for a given patientId
+  const loadOrganRequests = async (patientId) => {
+    if (!patientId) return;
+    try {
+      const res = await fetch(`http://localhost:5000/api/requests?patientId=${encodeURIComponent(patientId)}`)
+      const json = await res.json()
+      if (json && json.success && Array.isArray(json.data)) {
+        // map backend _id to id and normalize fields
+        const mapped = json.data.map(r => ({
+          id: r._id,
+          patientId: r.patientId,
+          patientName: r.patientName,
+          organType: r.organType,
+          urgency: r.urgency,
+          status: r.status,
+          createdAt: r.createdAt,
+          hospitalId: r.hospital,
+          details: r.details,
+        }))
+        setOrganRequests(mapped)
+      }
+    } catch (err) {
+      console.error('Failed to load organ requests:', err)
+    }
+  }
+
   const updateOrganRequestStatus = (id, status) => {
     setOrganRequests(prev => {
       const updated = prev.map(r => (r.id === id ? { ...r, status } : r));
@@ -210,6 +236,7 @@ export const NotificationProvider = ({ children }) => {
         markAllAsRead,
         getUnreadCount,
         addOrganRequest,
+        loadOrganRequests,
         updateOrganRequestStatus,
         addFundRequest,
         updateFundRequestStatus,

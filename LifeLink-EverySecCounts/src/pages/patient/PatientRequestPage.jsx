@@ -32,7 +32,7 @@ const getOrganIcon = (organType) => {
 
 const PatientRequestPage = () => {
   const { user } = useAuth();
-  const { organRequests, setSelectedHospital, addNotification } = useNotifications();
+  const { organRequests, setSelectedHospital, addNotification, loadOrganRequests } = useNotifications();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,6 +71,13 @@ const PatientRequestPage = () => {
     }
     setStep(2);
   };
+
+  // Load requests from backend when entering request management
+  React.useEffect(() => {
+    if (step === 2 && user?.id && loadOrganRequests) {
+      loadOrganRequests(user.id)
+    }
+  }, [step, user?.id, loadOrganRequests]);
 
   const getStatusColor = (status) => {
     switch (status) {

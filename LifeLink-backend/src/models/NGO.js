@@ -55,4 +55,16 @@ const ngoSchema = new mongoose.Schema(
 
 // Ensure one document per user where applicable
 ngoSchema.index({ userId: 1 }, { unique: true, sparse: true });
+// Virtual aliases to match frontend field names
+ngoSchema.virtual('organizationName')
+  .get(function () { return this.name })
+  .set(function (v) { this.name = v })
+
+ngoSchema.virtual('ngoRegisteredOfficeAddress')
+  .get(function () { return this.registered_office_address })
+  .set(function (v) { this.registered_office_address = v })
+
+ngoSchema.set('toJSON', { virtuals: true })
+ngoSchema.set('toObject', { virtuals: true })
+
 export default mongoose.model('NGO', ngoSchema);

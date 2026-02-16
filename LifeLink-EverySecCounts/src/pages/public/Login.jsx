@@ -367,8 +367,12 @@ const Login = () => {
       if (result.success) {
         localStorage.setItem('token', result.data.token);
         localStorage.setItem('user', JSON.stringify(result.data.user));
+        // Notify SPA that a server login occurred so AuthProvider can refresh profile
+        try {
+          window.dispatchEvent(new CustomEvent('server-login', { detail: { user: result.data.user, token: result.data.token } }));
+        } catch (e) {}
         toast({ title: 'Welcome back!' });
-        navigate(`/${result.data.user.role.toLowerCase()}-dashboard`);
+        navigate(getRoleBasedRedirect(result.data.user.role));
       } else {
         toast({ title: 'Login Failed', description: result.message, variant: 'destructive' });
       }

@@ -44,7 +44,7 @@ const Header = () => {
   const isActive = (path) => location.pathname === path;
   
   // Check if current page is patient dashboard or donor alerts
-  const isPatientDashboard = location.pathname === '/patient-dashboard';
+  const isPatientDashboard = location.pathname === '/patient/dashboard';
   const isDonorAlerts = location.pathname.includes('/donor/alerts');
 
   return (

@@ -86,5 +86,28 @@ const donorSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+// Virtual aliases to match frontend field names
+donorSchema.virtual('fullName')
+  .get(function () { return this.name })
+  .set(function (v) { this.name = v })
+
+donorSchema.virtual('bloodGroup')
+  .get(function () { return this.blood_type })
+  .set(function (v) { this.blood_type = v })
+
+donorSchema.virtual('aadhaarNumber')
+  .get(function () { return this.aadhaar_no })
+  .set(function (v) { this.aadhaar_no = v })
+
+donorSchema.virtual('emergencyContactName')
+  .get(function () { return this.emergency_contact?.name })
+  .set(function (v) { this.emergency_contact = this.emergency_contact || {}; this.emergency_contact.name = v })
+
+donorSchema.virtual('emergencyPhone')
+  .get(function () { return this.emergency_contact?.phone })
+  .set(function (v) { this.emergency_contact = this.emergency_contact || {}; this.emergency_contact.phone = v })
+
+donorSchema.set('toJSON', { virtuals: true })
+donorSchema.set('toObject', { virtuals: true })
 
 export default mongoose.model('Donor', donorSchema);

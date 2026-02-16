@@ -24,17 +24,41 @@ function PatientDashboard() {
   });
 
   useEffect(() => {
-    // Load patient data from localStorage (reset for new patients)
-    const storedData = localStorage.getItem("lifelink_patient_data");
-    if (storedData) {
-      const parsed = JSON.parse(storedData);
-      setPatientData({
-        activeRequests: parsed.activeRequests || 0,
-        pending: parsed.pending || 0,
-        matched: parsed.matched || 0,
-        emergencies: parsed.emergencies || 0,
-      });
+    // Try to load dashboard counts from backend (fallback to localStorage)
+    const loadCounts = async () => {
+      try {
+        const stored = localStorage.getItem('lifelink_auth')
+        const parsed = stored ? JSON.parse(stored) : null
+        const patientId = parsed?.user?.id
+        if (patientId) {
+          const res = await fetch(`http://localhost:5000/api/requests/dashboard?patientId=${encodeURIComponent(patientId)}`)
+          const json = await res.json()
+          if (json && json.success && json.data) {
+            setPatientData({
+              activeRequests: json.data.activeRequests || 0,
+              pending: json.data.pending || 0,
+              matched: json.data.matched || 0,
+              emergencies: json.data.emergencies || 0,
+            })
+            return
+          }
+        }
+        // fallback to localStorage legacy data
+        const storedData = localStorage.getItem("lifelink_patient_data");
+        if (storedData) {
+          const parsed2 = JSON.parse(storedData);
+          setPatientData({
+            activeRequests: parsed2.activeRequests || 0,
+            pending: parsed2.pending || 0,
+            matched: parsed2.matched || 0,
+            emergencies: parsed2.emergencies || 0,
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load dashboard counts:', err)
+      }
     }
+    loadCounts()
   }, []);
 
   return (

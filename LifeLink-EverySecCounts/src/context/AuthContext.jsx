@@ -19,22 +19,132 @@ export function AuthProvider({ children }) {
 
   /* ---------------- LOAD SESSION ---------------- */
   useEffect(() => {
+    // Prefer our SPA storage key, but also accept auth placed by server login flow
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        setState({
-          user: parsed.user,
-          isAuthenticated: true,
-          isLoading: false,
-        });
+        setState({ user: parsed.user, isAuthenticated: true, isLoading: false });
+        return;
       } catch {
         localStorage.removeItem(STORAGE_KEY);
-        setState((prev) => ({ ...prev, isLoading: false }));
       }
-    } else {
-      setState((prev) => ({ ...prev, isLoading: false }));
     }
+
+    // Support server login which stores 'user' and 'token' in localStorage
+    const serverUser = localStorage.getItem('user');
+    const token = localStorage.getItem('token');
+    if (serverUser && token) {
+      try {
+        const parsed = JSON.parse(serverUser);
+
+        // Do NOT mark as authenticated yet. Validate token with server.
+        setState((prev) => ({ ...prev, isLoading: true }));
+
+        (async () => {
+          try {
+            const resp = await fetch('http://localhost:5000/api/profile', {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+
+            if (!resp.ok) {
+              // Token invalid / expired — clear server keys and remain logged out
+              localStorage.removeItem('user');
+              localStorage.removeItem('token');
+              setState({ user: null, isAuthenticated: false, isLoading: false });
+              return;
+            }
+
+            const json = await resp.json();
+            if (json && json.success && json.data && json.data.user) {
+              const p = json.data.user;
+              const refined = {
+                id: p.id || parsed.id || parsed._id,
+                name: p.fullName || p.name || parsed.name,
+                email: p.email || parsed.email,
+                phone: p.phone || parsed.phone || '',
+                role: parsed.role || p.role,
+                verified: (p.verified || p.is_verified || parsed.verified) || false,
+                location: (p.location && (p.location.full_address || p.location.city || p.location.state)) ? (p.location.full_address || `${p.location.city || ''}${p.location.city && p.location.state ? ', ' : ''}${p.location.state || ''}`) : (parsed.location || ''),
+              };
+              setState({ user: refined, isAuthenticated: true, isLoading: false });
+              localStorage.setItem('user', JSON.stringify(refined));
+              localStorage.setItem(STORAGE_KEY, JSON.stringify({ user: refined }));
+              return;
+            }
+          } catch (e) {
+            localStorage.removeItem('user');
+            localStorage.removeItem('token');
+            setState({ user: null, isAuthenticated: false, isLoading: false });
+            return;
+          }
+        })();
+
+        return;
+      } catch {
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+      }
+    }
+
+    setState((prev) => ({ ...prev, isLoading: false }));
+  }, []);
+
+  // Listen for server-login events dispatched by non-SPA login flow
+  useEffect(() => {
+    const handler = async (e) => {
+      try {
+        const { user: serverUser, token } = e.detail || {};
+        if (!serverUser || !token) return;
+
+        // store raw server values
+        localStorage.setItem('user', JSON.stringify(serverUser));
+        localStorage.setItem('token', token);
+
+        // attempt to fetch rich profile and validate token
+        try {
+          const resp = await fetch('http://localhost:5000/api/profile', {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+
+          if (!resp.ok) {
+            // invalid token — clear and abort
+            localStorage.removeItem('user');
+            localStorage.removeItem('token');
+            setState({ user: null, isAuthenticated: false, isLoading: false });
+            return;
+          }
+
+          const json = await resp.json();
+          if (json && json.success && json.data && json.data.user) {
+            const p = json.data.user;
+            const refined = {
+              id: p.id || serverUser.id || serverUser._id,
+              name: p.fullName || p.name || serverUser.name,
+              email: p.email || serverUser.email,
+              phone: p.phone || serverUser.phone || '',
+              role: serverUser.role || p.role,
+              verified: (p.verified || p.is_verified || serverUser.verified) || false,
+              location: (p.location && (p.location.full_address || p.location.city || p.location.state)) ? (p.location.full_address || `${p.location.city || ''}${p.location.city && p.location.state ? ', ' : ''}${p.location.state || ''}`) : (serverUser.location || ''),
+            };
+            setState({ user: refined, isAuthenticated: true, isLoading: false });
+            localStorage.setItem('user', JSON.stringify(refined));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ user: refined }));
+            return;
+          }
+        } catch (err) {
+          localStorage.removeItem('user');
+          localStorage.removeItem('token');
+          setState({ user: null, isAuthenticated: false, isLoading: false });
+          return;
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    window.addEventListener('server-login', handler)
+    return () => window.removeEventListener('server-login', handler)
   }, []);
 
   /* ---------------- LOGIN ---------------- */
@@ -138,6 +248,8 @@ export function AuthProvider({ children }) {
       isLoading: false,
     });
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem('user');
+    localStorage.removeItem('token');
   };
 
   /* ---------------- UPDATE USER ---------------- */
@@ -147,6 +259,10 @@ export function AuthProvider({ children }) {
     const updatedUser = { ...state.user, ...updates };
     setState((prev) => ({ ...prev, user: updatedUser }));
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ user: updatedUser }));
+    // Keep server login key in sync if present
+    if (localStorage.getItem('user')) {
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+    }
   };
 
   return (

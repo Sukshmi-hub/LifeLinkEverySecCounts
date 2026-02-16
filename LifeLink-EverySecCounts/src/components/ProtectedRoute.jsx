@@ -1,6 +1,6 @@
 import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, getRoleBasedRedirect } from "@/context/AuthContext";
 import { Loader2 } from "lucide-react";
 
 /**
@@ -39,8 +39,8 @@ function ProtectedRoute({ children, allowedRoles }) {
   // We use .toLowerCase() to match the database role with the route logic
   const currentUser = user || storedUser;
   if (allowedRoles && currentUser && !allowedRoles.includes(currentUser.role.toLowerCase())) {
-    // If a Donor tries to enter the Admin dashboard, send them to their own page
-    const dashboardPath = `/${currentUser.role.toLowerCase()}-dashboard`;
+    // If a user tries to access an unauthorized dashboard, send them to their role dashboard
+    const dashboardPath = getRoleBasedRedirect(currentUser.role);
     return <Navigate to={dashboardPath} replace />;
   }
 

@@ -28,7 +28,7 @@ const urgencyLevels = ['Low', 'Medium', 'High'];
 
 const OrganRequestModal = ({ isOpen, onClose }) => {
   const { user } = useAuth();
-  const { addOrganRequest, selectedHospital } = useNotifications();
+  const { addOrganRequest, selectedHospital, loadOrganRequests } = useNotifications();
   
   const [organType, setOrganType] = useState('');
   const [urgency, setUrgency] = useState('Medium');
@@ -84,21 +84,82 @@ const OrganRequestModal = ({ isOpen, onClose }) => {
     if (medicalReports.length === 0) return toast.error('At least one medical report is mandatory');
 
     setIsSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate upload
+    try {
+      // Upload docs simulated, then POST request to backend
+      // Ensure we include patientId - fallback to stored auth if useAuth is not populated
+      let fallbackAuth = null
+      let storedUser = null
+      try {
+        fallbackAuth = JSON.parse(localStorage.getItem('lifelink_auth'))
+      } catch (e) {
+        fallbackAuth = null
+      }
+      try {
+        storedUser = JSON.parse(localStorage.getItem('user') || 'null')
+      } catch (e) {
+        storedUser = null
+      }
+      // Accept multiple id field names returned by different flows
+      const resolveId = (u) => (u ? (u.id || u._id || u.userId || null) : null)
+      const resolveName = (u) => (u ? (u.name || u.fullName || u.username || null) : null)
 
-    addOrganRequest({
-      patientId: user?.id || 'patient_1',
-      patientName: user?.name || 'Anonymous Patient',
-      organType,
-      urgency,
-      notes,
-      hospitalId: selectedHospital?.id,
-      hospitalName: selectedHospital?.name,
-    });
+      const finalPatientId = user?.id || user?._id || resolveId(fallbackAuth?.user) || resolveId(storedUser) || null
+      const finalPatientName = user?.name || user?.fullName || resolveName(fallbackAuth?.user) || resolveName(storedUser) || 'Anonymous'
 
-    setIsSubmitting(false);
-    setIsSuccess(true);
-    setTimeout(() => { resetForm(); onClose(); }, 2000);
+      const payload = {
+        organType,
+        urgency,
+        details: notes,
+        hospital: selectedHospital?.id || null,
+        patientId: finalPatientId,
+        patientName: finalPatientName,
+      }
+
+      // If no patientId available, abort early with clearer message
+      if (!finalPatientId) {
+        toast.error('You are not logged in. Please login to submit a request.')
+        setIsSubmitting(false)
+        return
+      }
+
+      // Include auth token if available to allow server-side auth to set req.user
+      const token = localStorage.getItem('token') || null
+      console.log('Submitting request payload:', payload, 'tokenPresent:', !!token)
+
+      const headers = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+
+      const res = await fetch('http://localhost:5000/api/requests', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      })
+      let json
+      try {
+        json = await res.json()
+      } catch (e) {
+        // If response was non-JSON, include raw text in error
+        let text = ''
+        try { text = await res.text() } catch (r) { text = '' }
+        console.error('Request submission non-JSON response:', res.status, text)
+        throw new Error(text || 'Invalid JSON response from server')
+      }
+      if (!res.ok || !json.success) {
+        console.error('Request creation failed:', res.status, json)
+        throw new Error(json.message || json.error || `Failed to create request (status ${res.status})`)
+      }
+
+      // Refresh local context list from backend
+      if (loadOrganRequests && finalPatientId) await loadOrganRequests(finalPatientId)
+
+      setIsSuccess(true);
+      setTimeout(() => { resetForm(); onClose(); }, 1200);
+    } catch (err) {
+      console.error('Submit request failed:', err)
+      toast.error(err.message || 'Failed to submit request')
+    } finally {
+      setIsSubmitting(false)
+    }
   };
 
   const resetForm = () => {

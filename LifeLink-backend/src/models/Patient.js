@@ -73,5 +73,33 @@ const patientSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+// Virtual aliases to match frontend field names
+patientSchema.virtual('fullName')
+  .get(function () { return this.name })
+  .set(function (v) { this.name = v })
+
+patientSchema.virtual('bloodGroup')
+  .get(function () { return this.blood_type })
+  .set(function (v) { this.blood_type = v })
+
+patientSchema.virtual('aadhaarNumber')
+  .get(function () { return this.aadhaar_no })
+  .set(function (v) { this.aadhaar_no = v })
+
+patientSchema.virtual('hospitalAdmittedIn')
+  .get(function () { return this.hospital })
+  .set(function (v) { this.hospital = v })
+
+patientSchema.virtual('emergencyContactName')
+  .get(function () { return this.emergency_contact?.name })
+  .set(function (v) { this.emergency_contact = this.emergency_contact || {}; this.emergency_contact.name = v })
+
+patientSchema.virtual('emergencyPhone')
+  .get(function () { return this.emergency_contact?.phone })
+  .set(function (v) { this.emergency_contact = this.emergency_contact || {}; this.emergency_contact.phone = v })
+
+// Ensure virtuals are included when converting to JSON/Object
+patientSchema.set('toJSON', { virtuals: true })
+patientSchema.set('toObject', { virtuals: true })
 
 export default mongoose.model('Patient', patientSchema);

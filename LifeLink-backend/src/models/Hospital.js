@@ -51,5 +51,20 @@ const hospitalSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+// Virtual aliases to match frontend field names
+hospitalSchema.virtual('organizationName')
+  .get(function () { return this.name })
+  .set(function (v) { this.name = v })
+
+hospitalSchema.virtual('hospitalContactPhone')
+  .get(function () { return this.contact_phone })
+  .set(function (v) { this.contact_phone = v })
+
+hospitalSchema.virtual('hospitalFullAddress')
+  .get(function () { return this.address })
+  .set(function (v) { this.address = v })
+
+hospitalSchema.set('toJSON', { virtuals: true })
+hospitalSchema.set('toObject', { virtuals: true })
 
 export default mongoose.model('Hospital', hospitalSchema);

@@ -10,6 +10,12 @@ import donorRoutes from './routes/donorRoutes.js'
 import hospitalRoutes from './routes/hospitalRoutes.js'
 import requestRoutes from './routes/requestRoutes.js'
 import debugRoutes from './routes/debugRoutes.js'
+import userRoutes from './routes/userRoutes.js'
+import profileRoutes from './routes/profile.js'
+import patientRoutes from './routes/patient.js'
+import donorRoutesCustom from './routes/donor.js'
+import hospitalRoutesCustom from './routes/hospital.js'
+import ngoRoutesCustom from './routes/ngo.js'
 import { dbCheck } from './middleware/dbCheck.js'
 import mongoose from './config/mongodb.js'
 
@@ -83,9 +89,15 @@ app.get('/health', (req, res) => {
 // Ensure DB is available for API routes
 app.use('/api', dbCheck)
 app.use('/api/auth', authRoutes)
+app.use('/api/profile', profileRoutes)
+app.use('/api/patient', patientRoutes)
+app.use('/api/donor', donorRoutesCustom)
+app.use('/api/hospital', hospitalRoutesCustom)
+app.use('/api/ngo', ngoRoutesCustom)
 app.use('/api/donors', donorRoutes)
 app.use('/api/hospitals', hospitalRoutes)
 app.use('/api/requests', requestRoutes)
+app.use('/api/user', userRoutes)
 
 // Debug routes (development only)
 if (process.env.NODE_ENV !== 'production') {
@@ -101,6 +113,7 @@ app.get('/', (req, res) => {
       health: '/health',
       auth: '/api/auth',
       donors: '/api/donors',
+      
       hospitals: '/api/hospitals',
       requests: '/api/requests'
     }
