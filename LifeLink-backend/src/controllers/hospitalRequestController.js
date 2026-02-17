@@ -27,7 +27,8 @@ export const getUserVerificationRequests = async (req, res) => {
       hospitalId: { $in: [hospital._id, req.user._id] }
     })
       .populate('requestedBy', 'name email role phone')
-      .populate('patientId', 'name email aadhaar_no age blood_type')
+      // include location and phone so frontend can show address/phone in details
+      .populate('patientId', 'name email aadhaar_no age blood_type location phone')
       .populate('donorId', 'name email aadhaar_no age blood_type')
       .sort({ createdAt: -1 });
 

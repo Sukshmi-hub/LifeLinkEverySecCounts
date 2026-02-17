@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Check, X, Play, User, Heart, Clock } from 'lucide-react';
+import { Check, X, Play, User, Heart, Clock, Eye } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { useNotifications } from '@/context/NotificationContext';
 import { formatDistanceToNow } from 'date-fns';
@@ -11,6 +12,8 @@ const ManageRequests = () => {
   const { organRequests, updateOrganRequestStatus, simulateDonorMatch, addNotification } = useNotifications();
 
   const [pendingUsers, setPendingUsers] = useState([]);
+  const [showDetailsOpen, setShowDetailsOpen] = useState(false);
+  const [detailsUser, setDetailsUser] = useState(null);
   const [loadingPending, setLoadingPending] = useState(false);
   const [pendingError, setPendingError] = useState(null);
 
@@ -83,14 +86,17 @@ const ManageRequests = () => {
         const mapped = (json.data || []).map(r => {
           const isPatient = !!r.patientId;
           const person = isPatient ? r.patientId : r.donorId || r.requestedBy;
+          // Merge requester and person objects so we have fallback fields available
+          const mergedDetails = { ...(r.requestedBy || {}), ...(person || {}) };
           return {
             id: r._id,
             requestId: r._id,
-            name: person?.name || (r.requestedBy && r.requestedBy.name) || 'Unknown',
+            name: mergedDetails?.name || 'Unknown',
             type: isPatient ? 'patient' : 'donor',
-            organType: r.organType || (isPatient && person?.organ_needed) || '',
+            organType: r.organType || (isPatient && mergedDetails?.organ_needed) || '',
             status: r.status || 'pending',
             requestedAt: r.createdAt,
+            details: Object.keys(mergedDetails).length ? mergedDetails : null,
           };
         });
         setPendingUsers(mapped);
@@ -158,13 +164,7 @@ const ManageRequests = () => {
                   ) : pendingError ? (
                     <p className="text-center py-8 text-destructive">Failed to load verifications: {pendingError}</p>
                   ) : pendingUsers.filter(u => u.status === 'pending').length === 0 ? (
-                    <div>
-                      <p className="text-center py-8 text-muted-foreground">No pending verifications</p>
-                      <div className="mt-4 p-3 bg-muted/10 rounded">
-                        <p className="text-xs text-muted-foreground">Debug: fetched {pendingUsers.length} requests</p>
-                        <pre className="text-xs max-h-40 overflow-auto">{JSON.stringify(pendingUsers, null, 2)}</pre>
-                      </div>
-                    </div>
+                    <p className="text-center py-8 text-muted-foreground">No pending verifications</p>
                   ) : (
                 <div className="space-y-4">
                   {pendingUsers.filter(u => u.status === 'pending').map(user => (
@@ -191,6 +191,14 @@ const ManageRequests = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-primary border-border"
+                          onClick={() => { setDetailsUser(user); setShowDetailsOpen(true); }}
+                        >
+                          <Eye className="w-4 h-4 mr-1" /> Details
+                        </Button>
                         <Button 
                           size="sm" 
                           variant="outline" 
@@ -324,6 +332,41 @@ const ManageRequests = () => {
           </Card>
         </TabsContent>
       </Tabs>
+      {/* Details Dialog */}
+      <Dialog open={showDetailsOpen} onOpenChange={setShowDetailsOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Applicant Details</DialogTitle>
+            <DialogDescription>View information submitted by the applicant.</DialogDescription>
+          </DialogHeader>
+          <div className="mt-2 space-y-2">
+            {detailsUser && detailsUser.details ? (
+              (() => {
+                const d = detailsUser.details;
+                const phone = d.phone || d.mobile || d.contact || d.phoneNumber || d.contact_number || '—';
+                const address = d.location?.full_address || d.full_address || d.address || d.location?.address || d.location?.city || '—';
+                const aadhaar = d.aadhaar_no || d.aadhaarNumber || d.aadhaar || '—';
+                const blood = d.blood_type || d.bloodGroup || '—';
+                const email = d.email || d.contact?.email || '—';
+                const age = d.age ?? '—';
+                return (
+                  <div className="text-sm">
+                    <p><strong>Name:</strong> {d.name || detailsUser.name}</p>
+                    <p><strong>Email:</strong> {email}</p>
+                    <p><strong>Phone:</strong> {phone}</p>
+                    <p><strong>Aadhaar:</strong> {aadhaar}</p>
+                    <p><strong>Age:</strong> {age}</p>
+                    <p><strong>Blood Type:</strong> {blood}</p>
+                    <p><strong>Address:</strong> {address}</p>
+                  </div>
+                );
+              })()
+            ) : (
+              <p className="text-sm text-muted-foreground">No additional details available for this user.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
