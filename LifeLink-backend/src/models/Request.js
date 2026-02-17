@@ -17,6 +17,9 @@ const RequestSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'Patient',
   },
+  patientName: {
+    type: String,
+  },
   donorId: {
     type: Schema.Types.ObjectId,
     ref: 'Donor',

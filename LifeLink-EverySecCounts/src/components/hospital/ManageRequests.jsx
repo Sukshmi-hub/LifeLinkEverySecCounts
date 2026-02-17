@@ -26,17 +26,48 @@ const ManageRequests = () => {
   ]);
 
   // Helper to robustly extract a person's name from possible backend shapes
+  const getNameFromObject = (obj) => {
+    if (!obj) return null;
+    if (typeof obj === 'string') return null;
+    if (Array.isArray(obj)) obj = obj[0];
+    const keys = Object.keys(obj || {});
+    for (const k of keys) {
+      if (/name|fullname|firstName|lastName/i.test(k) && typeof obj[k] === 'string' && obj[k].trim()) return obj[k];
+    }
+    // common nested path
+    if (obj.user && typeof obj.user === 'object') {
+      const fromUser = getNameFromObject(obj.user);
+      if (fromUser) return fromUser;
+    }
+    return null;
+  };
+
   const extractName = (r) => {
-    return (
-      r?.patientId?.name ||
-      r?.patientId?.fullName ||
-      r?.patientId?.user?.name ||
-      r?.requestedBy?.name ||
-      r?.requestedBy?.user?.name ||
-      r?.patientName ||
-      r?.name ||
-      'Unknown'
-    );
+    if (!r) return 'Unknown';
+    // try direct fields
+    const candidates = [
+      r.patientName,
+      r.name,
+      r.requestedBy?.name,
+      r.requestedBy?.user?.name,
+    ];
+    for (const c of candidates) if (c && typeof c === 'string' && c.trim()) return c;
+
+    // try patientId which may be object/array/string
+    const pid = r.patientId;
+    const fromPid = getNameFromObject(pid);
+    if (fromPid) return fromPid;
+
+    // try requestedBy object
+    const fromReq = getNameFromObject(r.requestedBy);
+    if (fromReq) return fromReq;
+
+    // last resort: scan raw object shallowly
+    const raw = r.raw || r;
+    const fromRaw = getNameFromObject(raw);
+    if (fromRaw) return fromRaw;
+
+    return 'Unknown';
   };
 
   const handleUserVerification = (userId, action) => {
@@ -171,7 +202,19 @@ const ManageRequests = () => {
       // Update local hospital list
       setHospitalOrganRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'Accepted' } : r));
 
-      // Notify patient via notification context
+      // Notify patient explicitly so notification is delivered regardless of context organRequests id mapping
+      const reqObj = hospitalOrganRequests.find(r => r.id === requestId) || null;
+      const patientName = reqObj?.patientName || extractName(reqObj) || 'patient';
+      const organType = reqObj?.organType || 'organ';
+
+      addNotification({
+        type: 'success',
+        title: 'Request Accepted',
+        message: `Your ${organType} request has been accepted by the hospital.`,
+        targetRole: 'patient',
+      });
+
+      // Also update shared organRequests state if present
       updateOrganRequestStatus(requestId, 'Accepted');
     } catch (err) {
       console.error('Accept organ request failed', err);
@@ -190,6 +233,18 @@ const ManageRequests = () => {
       if (!resp.ok) throw new Error(json.message || 'Failed to reject request');
 
       setHospitalOrganRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'Rejected' } : r));
+
+      const reqObj = hospitalOrganRequests.find(r => r.id === requestId) || null;
+      const patientName = reqObj?.patientName || extractName(reqObj) || 'patient';
+      const organType = reqObj?.organType || 'organ';
+
+      addNotification({
+        type: 'error',
+        title: 'Request Rejected',
+        message: `Your ${organType} request has been rejected by the hospital.`,
+        targetRole: 'patient',
+      });
+
       updateOrganRequestStatus(requestId, 'Rejected');
     } catch (err) {
       console.error('Reject organ request failed', err);

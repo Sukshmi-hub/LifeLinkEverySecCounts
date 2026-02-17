@@ -4,6 +4,7 @@ import fs from 'fs'
 import multer from 'multer'
 import { authenticate, optionalAuth, requireRole } from '../middleware/auth.js'
 import Request from '../models/Request.js'
+import Patient from '../models/Patient.js'
 const router = express.Router()
 
 // Ensure uploads folder exists
@@ -38,11 +39,16 @@ router.post('/', authenticate, upload.fields([
     if (!user) return res.status(401).json({ success: false, message: 'Authentication required' })
     if (!hospital) return res.status(400).json({ success: false, message: 'hospital id required' })
 
+    // Resolve Patient document for this user to store the correct patientId reference
+    let patientDoc = await Patient.findOne({ userId: user._id });
+    const patientRefId = patientDoc ? patientDoc._id : null;
+    const patientNameToStore = patientDoc?.name || user.name || user.fullName || (body.patientName || '')
+
     const reqDoc = new Request({
       requestType: 'organ_request',
       status: 'pending',
-      patientId: user._id,
-      patientName: user.name || user.fullName || '',
+      patientId: patientRefId,
+      patientName: patientNameToStore,
       organType: organType || '',
       urgency: (urgency || 'Medium').toLowerCase(),
       hospitalId: hospital,
@@ -85,13 +91,21 @@ router.get('/', optionalAuth, async (req, res) => {
 
     // If hospitalId provided, return requests for that hospital
     if (queryHospitalId) {
-      const list = await Request.find({ hospital: queryHospitalId }).sort({ createdAt: -1 }).lean()
+      const list = await Request.find({ hospitalId: queryHospitalId }).sort({ createdAt: -1 }).lean()
       return res.json({ success: true, data: list })
     }
 
-    const patientId = user ? user._id : queryPatientId
-    if (!patientId) return res.status(400).json({ success: false, message: 'patientId required' })
-    const list = await Request.find({ patientId }).sort({ createdAt: -1 }).lean()
+    // When authenticated, find the patient's document id and query by that _id
+    let patientIdToQuery = null
+    if (user) {
+      const p = await Patient.findOne({ userId: user._id })
+      if (p) patientIdToQuery = p._id
+    } else if (queryPatientId) {
+      patientIdToQuery = queryPatientId
+    }
+
+    if (!patientIdToQuery) return res.status(400).json({ success: false, message: 'patientId required' })
+    const list = await Request.find({ patientId: patientIdToQuery }).sort({ createdAt: -1 }).lean()
     return res.json({ success: true, data: list })
   } catch (err) {
     console.error('Fetch requests failed:', err)
@@ -104,13 +118,22 @@ router.get('/dashboard', optionalAuth, async (req, res) => {
   try {
     const user = req.user
     const queryPatientId = req.query.patientId || req.body.patientId
-    const userId = user ? user._id : queryPatientId
-    if (!userId) return res.status(400).json({ success: false, message: 'patientId required' })
 
-    const total = await Request.countDocuments({ patientId: userId })
-    const pending = await Request.countDocuments({ patientId: userId, status: 'Pending' })
-    const matched = await Request.countDocuments({ patientId: userId, status: { $in: ['Accepted', 'Donor Matched'] } })
-    const emergencies = await Request.countDocuments({ patientId: userId, urgency: 'High' })
+    // Resolve patient id from authenticated user if present
+    let patientIdToQuery = null
+    if (user) {
+      const p = await Patient.findOne({ userId: user._id })
+      if (p) patientIdToQuery = p._id
+    } else if (queryPatientId) {
+      patientIdToQuery = queryPatientId
+    }
+
+    if (!patientIdToQuery) return res.status(400).json({ success: false, message: 'patientId required' })
+
+    const total = await Request.countDocuments({ patientId: patientIdToQuery })
+    const pending = await Request.countDocuments({ patientId: patientIdToQuery, status: 'pending' })
+    const matched = await Request.countDocuments({ patientId: patientIdToQuery, status: { $in: ['Accepted', 'Donor Matched'] } })
+    const emergencies = await Request.countDocuments({ patientId: patientIdToQuery, urgency: 'high' })
 
     return res.json({ success: true, data: { activeRequests: total, pending, matched, emergencies } })
   } catch (err) {
