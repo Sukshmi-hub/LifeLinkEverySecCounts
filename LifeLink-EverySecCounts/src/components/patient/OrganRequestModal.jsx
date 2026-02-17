@@ -106,33 +106,35 @@ const OrganRequestModal = ({ isOpen, onClose }) => {
       const finalPatientId = user?.id || user?._id || resolveId(fallbackAuth?.user) || resolveId(storedUser) || null
       const finalPatientName = user?.name || user?.fullName || resolveName(fallbackAuth?.user) || resolveName(storedUser) || 'Anonymous'
 
-      const payload = {
-        organType,
-        urgency,
-        details: notes,
-        hospital: selectedHospital?.id || null,
-        patientId: finalPatientId,
-        patientName: finalPatientName,
-      }
+      const payload = new FormData()
+      payload.append('organType', organType)
+      payload.append('urgency', urgency)
+      payload.append('details', notes)
+      payload.append('hospital', selectedHospital?.id || '')
+      payload.append('patientId', finalPatientId)
+      payload.append('patientName', finalPatientName)
 
-      // If no patientId available, abort early with clearer message
+      // Attach files to FormData
+      medicalReports.forEach((m) => { if (m?.file) payload.append('medicalReports', m.file) })
+      if (prescription?.file) payload.append('prescription', prescription.file)
+      if (identityProof?.file) payload.append('idProof', identityProof.file)
+      additionalDocs.forEach((d) => { if (d?.file) payload.append('additionalDocs', d.file) })
+
       if (!finalPatientId) {
         toast.error('You are not logged in. Please login to submit a request.')
         setIsSubmitting(false)
         return
       }
 
-      // Include auth token if available to allow server-side auth to set req.user
       const token = localStorage.getItem('token') || null
-      console.log('Submitting request payload:', payload, 'tokenPresent:', !!token)
 
-      const headers = { 'Content-Type': 'application/json' }
+      const headers = {}
       if (token) headers['Authorization'] = `Bearer ${token}`
 
       const res = await fetch('http://localhost:5000/api/requests', {
         method: 'POST',
         headers,
-        body: JSON.stringify(payload),
+        body: payload,
       })
       let json
       try {

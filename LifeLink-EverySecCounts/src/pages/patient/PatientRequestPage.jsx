@@ -6,7 +6,7 @@ import { useNotifications } from '@/context/NotificationContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { hospitals } from '@/data/hospitals';
+import { useEffect } from 'react';
 import { FileText, Clock, Heart, AlertTriangle, Plus, Search, Building2, MapPin, Bed, CheckCircle, Star, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
@@ -37,17 +37,34 @@ const PatientRequestPage = () => {
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedHospitalId, setSelectedHospitalId] = useState(null);
+  const [hospitals, setHospitals] = useState([]);
+  const [hospitalsLoading, setHospitalsLoading] = useState(false);
   const [step, setStep] = useState(1); // Step 1: Select Hospital, Step 2: View Requests
 
   const patientRequests = organRequests.filter(r => r.patientId === user?.id || r.patientName === user?.name);
 
   const filteredHospitals = hospitals.filter(h =>
-    h.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    h.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    h.state.toLowerCase().includes(searchQuery.toLowerCase())
+    (h.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (h.address || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const selectedHospital = hospitals.find(h => h.id === selectedHospitalId);
+  const selectedHospital = hospitals.find(h => String(h.id) === String(selectedHospitalId));
+
+  useEffect(() => {
+    const load = async () => {
+      setHospitalsLoading(true);
+      try {
+        const resp = await fetch('http://localhost:5000/api/hospitals');
+        const json = await resp.json();
+        if (resp.ok && json.data) setHospitals(json.data);
+      } catch (err) {
+        console.error('Failed to load hospitals', err);
+      } finally {
+        setHospitalsLoading(false);
+      }
+    };
+    load();
+  }, []);
 
   const handleSelectHospital = (hospital) => {
     setSelectedHospital({ id: hospital.id, name: hospital.name });
@@ -177,61 +194,29 @@ const PatientRequestPage = () => {
                   <Card 
                     key={hospital.id} 
                     className={`transition-all duration-200 hover:shadow-md ${
-                      selectedHospitalId === hospital.id ? 'ring-2 ring-primary' : ''
+                      String(selectedHospitalId) === String(hospital.id) ? 'ring-2 ring-primary' : ''
                     }`}
                   >
                     <CardContent className="p-6">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
-                            <Building2 className="w-6 h-6 text-primary" />
-                          </div>
-                          <div>
-                            <h3 className="font-semibold text-foreground">{hospital.name}</h3>
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(hospital.status)}`}>
-                              {hospital.status.replace('_', ' ')}
-                            </span>
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <h3 className="font-semibold text-foreground">{hospital.name}</h3>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+                            <MapPin className="w-4 h-4" />
+                            <span>{hospital.address || 'Address not available'}</span>
                           </div>
                         </div>
-                        {selectedHospitalId === hospital.id && (
+                        {String(selectedHospitalId) === String(hospital.id) && (
                           <CheckCircle className="w-6 h-6 text-success" />
-                        )}
-                      </div>
-
-                      <div className="space-y-2 mb-4">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <MapPin className="w-4 h-4" />
-                          <span>{hospital.city}, {hospital.state}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Bed className="w-4 h-4" />
-                          <span>{hospital.emergencyCapacity - hospital.currentLoad} beds available</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Star className="w-4 h-4 text-warning" />
-                          <span>{hospital.rating} rating • {hospital.totalTransplants} transplants</span>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap gap-1 mb-4">
-                        {hospital.availableOrgans.slice(0, 3).map(organ => (
-                          <span key={organ} className="text-xs bg-muted px-2 py-1 rounded">
-                            {organ}
-                          </span>
-                        ))}
-                        {hospital.availableOrgans.length > 3 && (
-                          <span className="text-xs bg-muted px-2 py-1 rounded">
-                            +{hospital.availableOrgans.length - 3} more
-                          </span>
                         )}
                       </div>
 
                       <Button
                         onClick={() => handleSelectHospital(hospital)}
-                        variant={selectedHospitalId === hospital.id ? 'secondary' : 'default'}
-                        className="w-full"
+                        variant={String(selectedHospitalId) === String(hospital.id) ? 'secondary' : 'default'}
+                        className="w-full mt-4"
                       >
-                        {selectedHospitalId === hospital.id ? 'Selected' : 'Select Hospital'}
+                        {String(selectedHospitalId) === String(hospital.id) ? 'Selected' : 'Select Hospital'}
                       </Button>
                     </CardContent>
                   </Card>

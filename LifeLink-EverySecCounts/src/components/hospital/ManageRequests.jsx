@@ -10,6 +10,9 @@ import { formatDistanceToNow } from 'date-fns';
 
 const ManageRequests = () => {
   const { organRequests, updateOrganRequestStatus, simulateDonorMatch, addNotification } = useNotifications();
+  const [hospitalOrganRequests, setHospitalOrganRequests] = useState([]);
+  const [showOrganDetails, setShowOrganDetails] = useState(false);
+  const [organDetails, setOrganDetails] = useState(null);
 
   const [pendingUsers, setPendingUsers] = useState([]);
   const [showDetailsOpen, setShowDetailsOpen] = useState(false);
@@ -71,6 +74,32 @@ const ManageRequests = () => {
   };
 
   useEffect(() => {
+    // Load hospital organ requests for hospital users
+    const loadHospitalOrganRequests = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const resp = await fetch('http://localhost:5000/api/hospital-requests/organ-requests', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = await resp.json();
+        if (resp.ok && Array.isArray(json.data)) {
+          setHospitalOrganRequests(json.data.map(r => ({
+            id: r._id,
+            patientName: r.patientId?.name || r.patientName || 'Unknown',
+            organType: r.organType,
+            urgency: r.urgency,
+            status: r.status,
+            createdAt: r.createdAt,
+            details: r.message || r.details || '',
+            raw: r,
+          })));
+        }
+      } catch (err) {
+        console.error('Failed to load hospital organ requests', err);
+      }
+    };
+    loadHospitalOrganRequests();
     const fetchPending = async () => {
       setLoadingPending(true);
       setPendingError(null);
@@ -233,27 +262,27 @@ const ManageRequests = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {organRequests.length === 0 ? (
+              {hospitalOrganRequests.length === 0 ? (
                 <p className="text-center py-8 text-muted-foreground">No organ requests yet</p>
               ) : (
                 <div className="space-y-4">
-                  {organRequests.map(req => (
+                  {hospitalOrganRequests.map(req => (
                     <div key={req.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border border-border">
                       <div>
                         <h4 className="font-medium">{req.patientName}</h4>
                         <p className="text-sm text-muted-foreground">
-                          {req.organType} • Urgency: <span className={req.urgency === 'High' ? 'text-destructive font-medium' : ''}>{req.urgency}</span>
+                          {req.organType} • Urgency: <span className={req.urgency === 'high' || req.urgency === 'High' ? 'text-destructive font-medium' : ''}>{req.urgency}</span>
                         </p>
-                        {req.notes && <p className="text-xs text-muted-foreground mt-1">Notes: {req.notes}</p>}
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {formatDistanceToNow(req.createdAt, { addSuffix: true })}
-                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">{formatDistanceToNow(req.createdAt, { addSuffix: true })}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className={cn("px-3 py-1 rounded-full text-xs font-medium", getStatusColor(req.status))}>
                           {req.status}
                         </span>
-                        {req.status === 'Pending – Hospital Review' && (
+                        <Button size="sm" variant="outline" onClick={() => { setOrganDetails(req); setShowOrganDetails(true); }}>
+                          <Eye className="w-4 h-4 mr-1" /> Details
+                        </Button>
+                        {req.status === 'pending' && (
                           <>
                             <Button size="sm" variant="outline" className="text-success" onClick={() => updateOrganRequestStatus(req.id, 'Accepted')}>
                               <Check className="w-4 h-4" />
@@ -363,6 +392,63 @@ const ManageRequests = () => {
               })()
             ) : (
               <p className="text-sm text-muted-foreground">No additional details available for this user.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* Organ Request Details Dialog */}
+      <Dialog open={showOrganDetails} onOpenChange={setShowOrganDetails}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Organ Request Details</DialogTitle>
+            <DialogDescription>Details submitted by the patient for this organ request.</DialogDescription>
+          </DialogHeader>
+          <div className="mt-2 space-y-2">
+            {organDetails ? (
+              <div className="text-sm space-y-2">
+                <p><strong>Patient:</strong> {organDetails.patientName}</p>
+                <p><strong>Organ:</strong> {organDetails.organType}</p>
+                <p><strong>Urgency:</strong> {organDetails.urgency}</p>
+                <p><strong>Submitted:</strong> {formatDistanceToNow(organDetails.createdAt, { addSuffix: true })}</p>
+                <p><strong>Notes:</strong> {organDetails.details || '—'}</p>
+                {/* Show uploaded files if available */}
+                {organDetails.raw && organDetails.raw.files && (
+                  <div className="pt-2">
+                    <p className="font-medium">Uploaded Documents:</p>
+                    <div className="mt-2 space-y-2">
+                      {organDetails.raw.files.medicalReports && organDetails.raw.files.medicalReports.length > 0 && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">Medical Reports:</p>
+                          <div className="flex gap-2 mt-1 flex-wrap">
+                            {organDetails.raw.files.medicalReports.map((f, i) => {
+                              const src = f.startsWith('/') ? `http://localhost:5000${f}` : f
+                              return (
+                                <a key={i} href={src} target="_blank" rel="noreferrer" className="block w-24 h-24 bg-muted rounded overflow-hidden border">
+                                  <img src={src} alt={`medical-${i}`} className="w-full h-full object-cover" />
+                                </a>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {organDetails.raw.files.prescription && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">Prescription:</p>
+                          <a href={organDetails.raw.files.prescription.startsWith('/') ? `http://localhost:5000${organDetails.raw.files.prescription}` : organDetails.raw.files.prescription} target="_blank" rel="noreferrer" className="text-sm text-primary">Open Prescription</a>
+                        </div>
+                      )}
+                      {organDetails.raw.files.idProof && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">ID Proof:</p>
+                          <a href={organDetails.raw.files.idProof.startsWith('/') ? `http://localhost:5000${organDetails.raw.files.idProof}` : organDetails.raw.files.idProof} target="_blank" rel="noreferrer" className="text-sm text-primary">Open ID Proof</a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No details available.</p>
             )}
           </div>
         </DialogContent>

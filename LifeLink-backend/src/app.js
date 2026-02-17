@@ -3,6 +3,7 @@ import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
 import { connectDB } from './config/mongodb.js'
+import path from 'path'
 
 // Import routes
 import authRoutes from './routes/authRoutes.js'
@@ -54,6 +55,9 @@ app.options('*', cors(corsOptions));
 // Body parser - Parse JSON requests
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
+
+// Serve uploaded files (make sure public/uploads exists)
+app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')))
 
 // Handle JSON body parse errors gracefully
 app.use((err, req, res, next) => {

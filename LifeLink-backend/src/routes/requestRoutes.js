@@ -1,27 +1,72 @@
 import express from 'express'
+import path from 'path'
+import fs from 'fs'
+import multer from 'multer'
 import { authenticate, optionalAuth, requireRole } from '../middleware/auth.js'
 import Request from '../models/Request.js'
 const router = express.Router()
 
-// Create a new request (authenticated if possible, otherwise allow patientId in body for dev)
-router.post('/', optionalAuth, async (req, res) => {
+// Ensure uploads folder exists
+const uploadsBase = path.join(process.cwd(), 'public', 'uploads', 'requests')
+fs.mkdirSync(uploadsBase, { recursive: true })
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsBase),
+  filename: (req, file, cb) => {
+    const safe = `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`
+    cb(null, safe)
+  }
+})
+const upload = multer({ storage })
+
+// Create a new organ request (must be authenticated as patient)
+router.post('/', authenticate, upload.fields([
+  { name: 'medicalReports', maxCount: 10 },
+  { name: 'prescription', maxCount: 1 },
+  { name: 'idProof', maxCount: 1 },
+  { name: 'additionalDocs', maxCount: 10 },
+]), async (req, res) => {
   try {
     const user = req.user
-    const { organType, urgency, hospital, details, patientId, patientName } = req.body
+    // Support both multipart and json bodies
+    const body = req.body || {}
+    const organType = body.organType || body.organ || ''
+    const urgency = body.urgency || 'Medium'
+    const hospital = body.hospital || body.hospitalId || body.hospital_id
+    const details = body.details || body.message || ''
 
-    const finalPatientId = user ? user._id : patientId
-    const finalPatientName = user ? user.name : patientName || 'Anonymous'
-
-    if (!finalPatientId) return res.status(400).json({ success: false, message: 'patientId required' })
+    if (!user) return res.status(401).json({ success: false, message: 'Authentication required' })
+    if (!hospital) return res.status(400).json({ success: false, message: 'hospital id required' })
 
     const reqDoc = new Request({
-      patientId: finalPatientId,
-      patientName: finalPatientName,
+      requestType: 'organ_request',
+      status: 'pending',
+      patientId: user._id,
+      patientName: user.name || user.fullName || '',
       organType: organType || '',
-      urgency: urgency || 'Low',
-      hospital: hospital || null,
-      details: details || '',
+      urgency: (urgency || 'Medium').toLowerCase(),
+      hospitalId: hospital,
+      requestedBy: user._id,
+      message: details || '',
     })
+
+    // If files were uploaded via multer, attach URLs to the request document
+    if (req.files) {
+      const baseUrl = '/uploads/requests'
+      reqDoc.files = {}
+      if (req.files.medicalReports) {
+        reqDoc.files.medicalReports = req.files.medicalReports.map(f => `${baseUrl}/${f.filename}`)
+      }
+      if (req.files.prescription && req.files.prescription[0]) {
+        reqDoc.files.prescription = `${baseUrl}/${req.files.prescription[0].filename}`
+      }
+      if (req.files.idProof && req.files.idProof[0]) {
+        reqDoc.files.idProof = `${baseUrl}/${req.files.idProof[0].filename}`
+      }
+      if (req.files.additionalDocs) {
+        reqDoc.files.additional = req.files.additionalDocs.map(f => `${baseUrl}/${f.filename}`)
+      }
+    }
 
     await reqDoc.save()
     return res.status(201).json({ success: true, data: reqDoc })

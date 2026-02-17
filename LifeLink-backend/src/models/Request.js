@@ -42,6 +42,12 @@ const RequestSchema = new Schema({
   bloodType: {
     type: String,
   },
+  files: {
+    medicalReports: [{ type: String }],
+    prescription: { type: String },
+    idProof: { type: String },
+    additional: [{ type: String }],
+  },
   message: {
     type: String,
   },
