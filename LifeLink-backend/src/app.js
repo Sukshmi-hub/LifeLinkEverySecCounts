@@ -12,6 +12,7 @@ import requestRoutes from './routes/requestRoutes.js'
 import debugRoutes from './routes/debugRoutes.js'
 import userRoutes from './routes/userRoutes.js'
 import profileRoutes from './routes/profile.js'
+import hospitalRequestRoutes from './routes/hospitalRequestRoutes.js';
 import patientRoutes from './routes/patient.js'
 import donorRoutesCustom from './routes/donor.js'
 import hospitalRoutesCustom from './routes/hospital.js'
@@ -90,6 +91,7 @@ app.get('/health', (req, res) => {
 app.use('/api', dbCheck)
 app.use('/api/auth', authRoutes)
 app.use('/api/profile', profileRoutes)
+app.use('/api/hospital-requests', hospitalRequestRoutes);
 app.use('/api/patient', patientRoutes)
 app.use('/api/donor', donorRoutesCustom)
 app.use('/api/hospital', hospitalRoutesCustom)

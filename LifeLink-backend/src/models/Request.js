@@ -1,27 +1,61 @@
-// src/models/Request.js - Patient organ/fund request schema
-import mongoose from 'mongoose'
+import mongoose from 'mongoose';
 
-const requestSchema = new mongoose.Schema(
-  {
-    patientId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true,
-    },
-    patientName: { type: String, required: true },
-    organType: { type: String, default: '' },
-    hospital: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Hospital',
-      default: null,
-    },
-    details: { type: String, default: '' },
-    urgency: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Low' },
-    status: { type: String, enum: ['Pending', 'Processing', 'Accepted', 'Donor Matched', 'Cancelled'], default: 'Pending' },
-    matchedDonorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
-    meta: { type: mongoose.Schema.Types.Mixed, default: {} },
+const { Schema } = mongoose;
+
+const RequestSchema = new Schema({
+  requestType: {
+    type: String,
+    required: true,
+    enum: ['user_verification', 'organ_request', 'donor_registration'],
   },
-  { timestamps: true }
-)
+  status: {
+    type: String,
+    default: 'pending',
+    enum: ['pending', 'approved', 'rejected'],
+  },
+  patientId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Patient',
+  },
+  donorId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Donor',
+  },
+  hospitalId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Hospital',
+    required: true,
+  },
+  requestedBy: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+  },
+  urgency: {
+    type: String,
+    enum: ['low', 'medium', 'high', 'critical'],
+    default: 'medium',
+  },
+  organType: {
+    type: String,
+  },
+  bloodType: {
+    type: String,
+  },
+  message: {
+    type: String,
+  },
+  rejectionReason: {
+    type: String,
+  },
+  reviewedBy: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  reviewedAt: {
+    type: Date,
+  },
+}, { timestamps: true });
 
-export default mongoose.model('Request', requestSchema)
+export default mongoose.models.Request || mongoose.model('Request', RequestSchema);
+

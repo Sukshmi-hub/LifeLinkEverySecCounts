@@ -334,6 +334,39 @@ export const register = async (req, res) => {
         setDefaultsOnInsert: true,
         runValidators: true,
       });
+    
+      // If registering a patient or donor and a hospital was selected, create a verification request
+      if (role === 'patient' || role === 'donor') {
+        try {
+          const selectedHospitalId = req.body.hospital || req.body.hospital_id || req.body.hospitalId;
+          if (selectedHospitalId) {
+            const Request = (await import('../models/Request.js')).default;
+
+            // Attempt to find the role document (Patient/Donor) created/updated above so we can reference its _id
+            let roleDoc = null;
+            try {
+              roleDoc = await Model.findOne({ userId: newUser._id }).exec();
+            } catch (e) {
+              // ignore
+            }
+
+            const verificationRequest = new Request({
+              requestType: 'user_verification',
+              status: 'pending',
+              hospitalId: selectedHospitalId,
+              requestedBy: newUser._id,
+              // Prefer role document id (Patient/Donor) when available, otherwise fall back to user id
+              patientId: role === 'patient' ? (roleDoc?._id || newUser._id) : undefined,
+              donorId: role === 'donor' ? (roleDoc?._id || newUser._id) : undefined,
+              message: `New ${role} registration - pending verification`
+            });
+            await verificationRequest.save();
+            console.log('Verification request created for hospital', verificationRequest._id);
+          }
+        } catch (reqError) {
+          console.error('Failed to create verification request:', reqError.message);
+        }
+      }
     } catch (err) {
       console.error('Role upsert failed:', err);
       await User.findByIdAndDelete(newUser._id).catch(() => {});
@@ -437,6 +470,19 @@ export const login = async (req, res) => {
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password'
+      });
+    }
+
+    // Block login for unverified patients/donors until hospital verification
+    if (
+      (user.role === 'patient' || user.role === 'donor')
+      && !user.is_verified
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your account is pending hospital verification. Please wait for hospital approval before logging in.',
+        verification_status: 'pending',
+        role: user.role
       });
     }
 

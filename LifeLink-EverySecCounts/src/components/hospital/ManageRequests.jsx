@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -10,10 +10,9 @@ import { formatDistanceToNow } from 'date-fns';
 const ManageRequests = () => {
   const { organRequests, updateOrganRequestStatus, simulateDonorMatch, addNotification } = useNotifications();
 
-  const [pendingUsers, setPendingUsers] = useState([
-    { id: 'pu1', name: 'Rajesh Kumar', type: 'patient', organType: 'Kidney', status: 'pending', requestedAt: new Date(Date.now() - 3600000) },
-    { id: 'pu2', name: 'Sunita Devi', type: 'patient', organType: 'Liver', status: 'pending', requestedAt: new Date(Date.now() - 7200000) },
-  ]);
+  const [pendingUsers, setPendingUsers] = useState([]);
+  const [loadingPending, setLoadingPending] = useState(false);
+  const [pendingError, setPendingError] = useState(null);
 
   const [donorRequests, setDonorRequests] = useState([
     { id: 'dr1', name: 'Rahul Sharma', organOffered: 'Kidney', bloodGroup: 'O+', availability: 'Available', status: 'pending', createdAt: new Date(Date.now() - 1800000) },
@@ -21,9 +20,8 @@ const ManageRequests = () => {
   ]);
 
   const handleUserVerification = (userId, action) => {
-    setPendingUsers(prev => prev.map(u => 
-      u.id === userId ? { ...u, status: action } : u
-    ));
+    // Local optimistic update
+    setPendingUsers(prev => prev.map(u => u.id === userId ? { ...u, status: action } : u));
     const user = pendingUsers.find(u => u.id === userId);
     if (user) {
       addNotification({
@@ -34,6 +32,77 @@ const ManageRequests = () => {
       });
     }
   };
+
+  // Approve/reject via backend
+  const handleApproveRequest = async (requestId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const resp = await fetch(`http://localhost:5000/api/hospital-requests/${requestId}/approve`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      });
+      const json = await resp.json();
+      if (!resp.ok) throw new Error(json.message || 'Failed to approve');
+      setPendingUsers(prev => prev.filter(p => p.requestId !== requestId));
+      addNotification({ type: 'success', title: 'Request Approved', message: 'Verification request approved.' });
+    } catch (err) {
+      addNotification({ type: 'error', title: 'Approve Failed', message: err.message || 'Could not approve' });
+    }
+  };
+
+  const handleRejectRequest = async (requestId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const resp = await fetch(`http://localhost:5000/api/hospital-requests/${requestId}/reject`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ rejectionReason: 'Rejected by hospital' }),
+      });
+      const json = await resp.json();
+      if (!resp.ok) throw new Error(json.message || 'Failed to reject');
+      setPendingUsers(prev => prev.filter(p => p.requestId !== requestId));
+      addNotification({ type: 'error', title: 'Request Rejected', message: 'Verification request rejected.' });
+    } catch (err) {
+      addNotification({ type: 'error', title: 'Reject Failed', message: err.message || 'Could not reject' });
+    }
+  };
+
+  useEffect(() => {
+    const fetchPending = async () => {
+      setLoadingPending(true);
+      setPendingError(null);
+      try {
+        const token = localStorage.getItem('token');
+        const resp = await fetch('http://localhost:5000/api/hospital-requests/verify', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = await resp.json();
+        if (!resp.ok) throw new Error(json.message || 'Failed to load pending verifications');
+
+        // Map backend requests to UI shape
+        const mapped = (json.data || []).map(r => {
+          const isPatient = !!r.patientId;
+          const person = isPatient ? r.patientId : r.donorId || r.requestedBy;
+          return {
+            id: r._id,
+            requestId: r._id,
+            name: person?.name || (r.requestedBy && r.requestedBy.name) || 'Unknown',
+            type: isPatient ? 'patient' : 'donor',
+            organType: r.organType || (isPatient && person?.organ_needed) || '',
+            status: r.status || 'pending',
+            requestedAt: r.createdAt,
+          };
+        });
+        setPendingUsers(mapped);
+      } catch (err) {
+        setPendingError(err.message || 'Failed to load');
+      } finally {
+        setLoadingPending(false);
+      }
+    };
+
+    fetchPending();
+  }, []);
 
   const handleDonorRequestAction = (donorId, action) => {
     setDonorRequests(prev => prev.map(d => 
@@ -82,9 +151,21 @@ const ManageRequests = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {pendingUsers.filter(u => u.status === 'pending').length === 0 ? (
-                <p className="text-center py-8 text-muted-foreground">No pending verifications</p>
-              ) : (
+                  {!localStorage.getItem('token') ? (
+                    <p className="text-center py-8 text-muted-foreground">No server token found. Please login with server credentials so hospital requests can be loaded.</p>
+                  ) : loadingPending ? (
+                    <p className="text-center py-8 text-muted-foreground">Loading pending verifications...</p>
+                  ) : pendingError ? (
+                    <p className="text-center py-8 text-destructive">Failed to load verifications: {pendingError}</p>
+                  ) : pendingUsers.filter(u => u.status === 'pending').length === 0 ? (
+                    <div>
+                      <p className="text-center py-8 text-muted-foreground">No pending verifications</p>
+                      <div className="mt-4 p-3 bg-muted/10 rounded">
+                        <p className="text-xs text-muted-foreground">Debug: fetched {pendingUsers.length} requests</p>
+                        <pre className="text-xs max-h-40 overflow-auto">{JSON.stringify(pendingUsers, null, 2)}</pre>
+                      </div>
+                    </div>
+                  ) : (
                 <div className="space-y-4">
                   {pendingUsers.filter(u => u.status === 'pending').map(user => (
                     <div key={user.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border border-border">
@@ -114,7 +195,7 @@ const ManageRequests = () => {
                           size="sm" 
                           variant="outline" 
                           className="text-success border-success hover:bg-success/10"
-                          onClick={() => handleUserVerification(user.id, 'approved')}
+                          onClick={() => handleApproveRequest(user.requestId)}
                         >
                           <Check className="w-4 h-4 mr-1" /> Approve
                         </Button>
@@ -122,7 +203,7 @@ const ManageRequests = () => {
                           size="sm" 
                           variant="outline" 
                           className="text-destructive border-destructive hover:bg-destructive/10"
-                          onClick={() => handleUserVerification(user.id, 'rejected')}
+                          onClick={() => handleRejectRequest(user.requestId)}
                         >
                           <X className="w-4 h-4 mr-1" /> Reject
                         </Button>
