@@ -473,11 +473,8 @@ export const login = async (req, res) => {
       });
     }
 
-    // Block login for unverified patients/donors until hospital verification
-    if (
-      (user.role === 'patient' || user.role === 'donor')
-      && !user.is_verified
-    ) {
+    // Block login for unverified patients until hospital verification
+    if (user.role === 'patient' && !user.is_verified) {
       return res.status(403).json({
         success: false,
         message: 'Your account is pending hospital verification. Please wait for hospital approval before logging in.',

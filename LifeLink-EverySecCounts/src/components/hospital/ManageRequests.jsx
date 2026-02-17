@@ -25,6 +25,20 @@ const ManageRequests = () => {
     { id: 'dr2', name: 'Priya Patel', organOffered: 'Liver', bloodGroup: 'A+', availability: 'Available', status: 'pending', createdAt: new Date(Date.now() - 5400000) },
   ]);
 
+  // Helper to robustly extract a person's name from possible backend shapes
+  const extractName = (r) => {
+    return (
+      r?.patientId?.name ||
+      r?.patientId?.fullName ||
+      r?.patientId?.user?.name ||
+      r?.requestedBy?.name ||
+      r?.requestedBy?.user?.name ||
+      r?.patientName ||
+      r?.name ||
+      'Unknown'
+    );
+  };
+
   const handleUserVerification = (userId, action) => {
     // Local optimistic update
     setPendingUsers(prev => prev.map(u => u.id === userId ? { ...u, status: action } : u));
@@ -83,10 +97,12 @@ const ManageRequests = () => {
           headers: { Authorization: `Bearer ${token}` },
         });
         const json = await resp.json();
+        // DEBUG: inspect response shape when patient name is missing
+        console.debug('hospital organ-requests response:', json);
         if (resp.ok && Array.isArray(json.data)) {
           setHospitalOrganRequests(json.data.map(r => ({
             id: r._id,
-            patientName: r.patientId?.name || r.patientName || 'Unknown',
+            patientName: extractName(r),
             organType: r.organType,
             urgency: r.urgency,
             status: r.status,
@@ -109,6 +125,8 @@ const ManageRequests = () => {
           headers: { Authorization: `Bearer ${token}` },
         });
         const json = await resp.json();
+        // DEBUG: inspect pending verification response
+        console.debug('hospital verify response:', json);
         if (!resp.ok) throw new Error(json.message || 'Failed to load pending verifications');
 
         // Map backend requests to UI shape
@@ -120,7 +138,7 @@ const ManageRequests = () => {
           return {
             id: r._id,
             requestId: r._id,
-            name: mergedDetails?.name || 'Unknown',
+            name: mergedDetails?.name || mergedDetails?.fullName || mergedDetails?.user?.name || 'Unknown',
             type: isPatient ? 'patient' : 'donor',
             organType: r.organType || (isPatient && mergedDetails?.organ_needed) || '',
             status: r.status || 'pending',
@@ -138,6 +156,45 @@ const ManageRequests = () => {
 
     fetchPending();
   }, []);
+
+  // Approve/Reject organ request (calls backend then updates local state + notifies patient)
+  const handleAcceptOrganRequest = async (requestId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const resp = await fetch(`http://localhost:5000/api/hospital-requests/${requestId}/approve`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      });
+      const json = await resp.json();
+      if (!resp.ok) throw new Error(json.message || 'Failed to accept request');
+
+      // Update local hospital list
+      setHospitalOrganRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'Accepted' } : r));
+
+      // Notify patient via notification context
+      updateOrganRequestStatus(requestId, 'Accepted');
+    } catch (err) {
+      console.error('Accept organ request failed', err);
+    }
+  };
+
+  const handleRejectOrganRequest = async (requestId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const resp = await fetch(`http://localhost:5000/api/hospital-requests/${requestId}/reject`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ rejectionReason: 'Rejected by hospital' }),
+      });
+      const json = await resp.json();
+      if (!resp.ok) throw new Error(json.message || 'Failed to reject request');
+
+      setHospitalOrganRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'Rejected' } : r));
+      updateOrganRequestStatus(requestId, 'Rejected');
+    } catch (err) {
+      console.error('Reject organ request failed', err);
+    }
+  };
 
   const handleDonorRequestAction = (donorId, action) => {
     setDonorRequests(prev => prev.map(d => 
@@ -284,10 +341,10 @@ const ManageRequests = () => {
                         </Button>
                         {req.status === 'pending' && (
                           <>
-                            <Button size="sm" variant="outline" className="text-success" onClick={() => updateOrganRequestStatus(req.id, 'Accepted')}>
+                            <Button size="sm" variant="outline" className="text-success" onClick={() => handleAcceptOrganRequest(req.id)}>
                               <Check className="w-4 h-4" />
                             </Button>
-                            <Button size="sm" variant="outline" className="text-destructive" onClick={() => updateOrganRequestStatus(req.id, 'Rejected')}>
+                            <Button size="sm" variant="outline" className="text-destructive" onClick={() => handleRejectOrganRequest(req.id)}>
                               <X className="w-4 h-4" />
                             </Button>
                           </>
@@ -404,9 +461,16 @@ const ManageRequests = () => {
             <DialogDescription>Details submitted by the patient for this organ request.</DialogDescription>
           </DialogHeader>
           <div className="mt-2 space-y-2">
-            {organDetails ? (
+              {organDetails ? (
               <div className="text-sm space-y-2">
-                <p><strong>Patient:</strong> {organDetails.patientName}</p>
+                <p>
+                  <strong>Patient:</strong>{' '}
+                  {organDetails.patientName || (
+                    organDetails.raw
+                      ? organDetails.raw.patientId?.name || organDetails.raw.requestedBy?.name || organDetails.raw.patientName || organDetails.raw.name
+                      : 'Unknown'
+                  )}
+                </p>
                 <p><strong>Organ:</strong> {organDetails.organType}</p>
                 <p><strong>Urgency:</strong> {organDetails.urgency}</p>
                 <p><strong>Submitted:</strong> {formatDistanceToNow(organDetails.createdAt, { addSuffix: true })}</p>
