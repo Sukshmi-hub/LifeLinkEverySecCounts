@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,11 +21,24 @@ const NgoProfile = () => {
   const [profile, setProfile] = useState({
     name: user?.name || 'LifeLink NGO',
     email: user?.email || 'contact@lifelinkngo.org',
-    phone: '+91 98765 43210',
+    phone: user?.phone || '',
     registrationNumber: 'NGO-2024-MH-12345',
-    address: '789, NGO Complex, Social Welfare District, Mumbai - 400001',
+    // AuthContext stores a readable address in `location` for many users
+    address: user?.location || user?.address || '',
     mission: 'To provide financial assistance to patients in need of organ transplants and critical medical care, ensuring that no life is lost due to lack of funds.',
   });
+
+  // Keep the local profile state in sync when the auth `user` is loaded/updated
+  useEffect(() => {
+    if (!user) return;
+    setProfile((prev) => ({
+      ...prev,
+      name: user.name || prev.name,
+      email: user.email || prev.email,
+      phone: user.phone || prev.phone || '',
+      address: user.location || user.address || prev.address || '',
+    }));
+  }, [user]);
 
   const [isEditing, setIsEditing] = useState(false);
 

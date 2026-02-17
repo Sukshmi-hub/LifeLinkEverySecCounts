@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,36 @@ const HospitalProfile = () => {
     address: '123 Healthcare Avenue, Medical District, Mumbai - 400001',
     workingHours: '24/7',
   });
+
+  // Load hospital profile from backend when available
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const resp = await fetch('http://localhost:5000/api/profile', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!resp.ok) return;
+        const json = await resp.json();
+        if (!json || !json.success || !json.data || !json.data.user) return;
+        const p = json.data.user;
+
+        setProfile(prev => ({
+          ...prev,
+          name: p.name || p.organizationName || prev.name,
+          registrationNumber: p.registration_number || p.registrationNumber || prev.registrationNumber,
+          type: p.hospital_type || p.type || prev.type,
+          email: p.email || prev.email,
+          emergencyPhone: p.contact_phone || p.hospitalContactPhone || prev.emergencyPhone,
+          address: p.address || (p.location && p.location.full_address) || prev.address,
+          workingHours: p.working_hours || p.workingHours || prev.workingHours,
+        }));
+      } catch (err) {
+        // ignore errors
+      }
+    })();
+  }, []);
 
   const handleSave = () => {
     setIsEditing(false);
