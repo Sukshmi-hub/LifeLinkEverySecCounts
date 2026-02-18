@@ -101,11 +101,23 @@ router.get('/', optionalAuth, async (req, res) => {
       const p = await Patient.findOne({ userId: user._id })
       if (p) patientIdToQuery = p._id
     } else if (queryPatientId) {
+      // frontend may pass either the Patient._id or the account/user id
       patientIdToQuery = queryPatientId
     }
 
     if (!patientIdToQuery) return res.status(400).json({ success: false, message: 'patientId required' })
-    const list = await Request.find({ patientId: patientIdToQuery }).sort({ createdAt: -1 }).lean()
+
+    // First try to find requests directly by patientId (if it is a Patient._id)
+    let list = await Request.find({ patientId: patientIdToQuery }).sort({ createdAt: -1 }).lean()
+
+    // If no requests found and the provided id looks like an account/user id, try resolving Patient by userId
+    if ((!list || list.length === 0) && queryPatientId) {
+      const potentialPatient = await Patient.findOne({ userId: queryPatientId })
+      if (potentialPatient) {
+        list = await Request.find({ patientId: potentialPatient._id }).sort({ createdAt: -1 }).lean()
+      }
+    }
+
     return res.json({ success: true, data: list })
   } catch (err) {
     console.error('Fetch requests failed:', err)

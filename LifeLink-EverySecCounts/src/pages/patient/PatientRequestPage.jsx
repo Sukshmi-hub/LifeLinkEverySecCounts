@@ -288,9 +288,9 @@ const PatientRequestPage = () => {
                 <Card className="border-none bg-destructive/5 shadow-none">
                   <CardContent className="flex items-center gap-4 p-6">
                     <AlertTriangle className="w-8 h-8 text-destructive" />
-                    <div>
+                      <div>
                       <p className="text-2xl font-bold">
-                        {patientRequests.filter(r => r.urgency === 'High').length}
+                        {patientRequests.filter(r => ['high','critical'].includes(String(r.urgency || '').toLowerCase())).length}
                       </p>
                       <p className="text-muted-foreground text-xs uppercase tracking-wider font-semibold">Critical</p>
                     </div>
@@ -318,6 +318,9 @@ const PatientRequestPage = () => {
                     <div className="space-y-4">
                       {patientRequests.map(request => {
                         const OrganIcon = getOrganIcon(request.organType);
+                        const hospitalForReq = hospitals.find(h => String(h.id) === String(request.hospitalId));
+                        const appliedFor = request.organType || (request.bloodType ? `Blood (${request.bloodType})` : 'Request');
+                        const isFound = /accepted|matched|donor matched/i.test(String(request.status || ''));
                         return (
                           <div
                             key={request.id}
@@ -328,29 +331,42 @@ const PatientRequestPage = () => {
                                 <OrganIcon className="w-7 h-7 text-primary" />
                               </div>
                               <div>
-                                <h4 className="font-bold text-lg">{request.organType}</h4>
+                                <h4 className="font-bold text-lg">{appliedFor}</h4>
                                 <div className="flex items-center gap-3 mt-1">
                                     <span className={cn(
                                         "text-[10px] uppercase font-bold px-2 py-0.5 rounded",
-                                        request.urgency === 'High' ? 'bg-destructive text-destructive-foreground' : 'bg-muted text-muted-foreground'
+                                        (String(request.urgency || '').toLowerCase() === 'high' || String(request.urgency || '').toLowerCase() === 'critical') ? 'bg-destructive text-destructive-foreground' : 'bg-muted text-muted-foreground'
                                     )}>
-                                        {request.urgency} Priority
+                                        {(request.urgency || 'Medium').toUpperCase()} Priority
                                     </span>
                                     <span className="text-xs text-muted-foreground flex items-center gap-1">
                                         <Clock className="w-3 h-3" />
                                         {request.createdAt ? formatDistanceToNow(new Date(request.createdAt), { addSuffix: true }) : 'Just now'}
                                     </span>
+                                    {hospitalForReq && (
+                                      <span className="text-xs text-muted-foreground">• {hospitalForReq.name}</span>
+                                    )}
                                 </div>
                               </div>
                             </div>
 
                             <div className="mt-4 md:mt-0 flex flex-col items-start md:items-end gap-2">
-                              <span className={cn(
-                                "px-4 py-1.5 rounded-full text-xs font-bold border", 
-                                getStatusColor(request.status)
-                              )}>
-                                {request.status}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className={cn(
+                                  "px-4 py-1.5 rounded-full text-xs font-bold border", 
+                                  getStatusColor(request.status)
+                                )}>
+                                  {request.status}
+                                </span>
+
+                                <span className={cn(
+                                  "px-3 py-1 rounded-full text-[11px] font-semibold border", 
+                                  isFound ? 'bg-success/10 text-success border-success/30' : 'bg-muted text-muted-foreground border-border'
+                                )}>
+                                  {isFound ? 'Found' : 'Not Found'}
+                                </span>
+                              </div>
+
                               <p className="text-[11px] text-muted-foreground italic">
                                 ID: #{request.id?.slice(-6).toUpperCase() || 'N/A'}
                               </p>

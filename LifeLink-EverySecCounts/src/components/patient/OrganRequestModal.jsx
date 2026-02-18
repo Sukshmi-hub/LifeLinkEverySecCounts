@@ -82,6 +82,8 @@ const OrganRequestModal = ({ isOpen, onClose }) => {
     e.preventDefault();
     if (!organType) return toast.error('Please select an organ type');
     if (medicalReports.length === 0) return toast.error('At least one medical report is mandatory');
+    if (!prescription || !prescription.file) return toast.error('Prescription is required');
+    if (!identityProof || !identityProof.file) return toast.error('ID Proof is required');
 
     setIsSubmitting(true);
     try {
@@ -236,6 +238,7 @@ const OrganRequestModal = ({ isOpen, onClose }) => {
                     label="Prescription" 
                     icon={ImageIcon} 
                     file={prescription} 
+                    required
                     onFileChange={e => handleFileChange(e, setPrescription)} 
                     onRemove={() => setPrescription(null)} 
                   />
@@ -243,6 +246,7 @@ const OrganRequestModal = ({ isOpen, onClose }) => {
                     label="ID Proof" 
                     icon={CreditCard} 
                     file={identityProof} 
+                    required
                     onFileChange={e => handleFileChange(e, setIdentityProof)} 
                     onRemove={() => setIdentityProof(null)} 
                   />
@@ -268,13 +272,13 @@ const OrganRequestModal = ({ isOpen, onClose }) => {
   );
 };
 
-const SingleFileUploadCard = ({ label, icon: Icon, file, onFileChange, onRemove }) => (
+const SingleFileUploadCard = ({ label, icon: Icon, file, onFileChange, onRemove, required = false }) => (
   <Card className="border-dashed bg-muted/30">
     <CardContent className="p-4">
       <div className="flex items-center gap-3">
         <Icon className="w-5 h-5 text-primary" />
         <div className="flex-1 overflow-hidden">
-          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</Label>
+          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}{required ? ' *' : ''}</Label>
           {file ? (
             <div className="flex items-center justify-between mt-1 p-1.5 bg-background rounded border">
               <span className="text-xs truncate max-w-[100px]">{file.file.name}</span>

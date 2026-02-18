@@ -65,12 +65,22 @@ export const NotificationProvider = ({ children }) => {
           id: r._id,
           patientId: r.patientId,
           patientName: r.patientName,
-          organType: r.organType,
-          urgency: r.urgency,
-          status: r.status,
+          organType: r.organType || r.organ || null,
+          bloodType: r.bloodType || null,
+          urgency: r.urgency || null,
+          // normalize backend status values to user-friendly labels
+          status: (function(s) {
+            if (!s) return 'Pending – Hospital Review'
+            const low = String(s).toLowerCase()
+            if (low === 'pending') return 'Pending – Hospital Review'
+            if (low === 'approved') return 'Accepted'
+            if (low === 'rejected') return 'Rejected'
+            return s
+          })(r.status),
           createdAt: r.createdAt,
-          hospitalId: r.hospital,
-          details: r.details,
+          // backend stores hospital id in `hospitalId` field
+          hospitalId: r.hospitalId || r.hospital || null,
+          details: r.message || r.details || null,
         }))
         setOrganRequests(mapped)
       }
