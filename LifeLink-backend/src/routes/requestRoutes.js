@@ -5,6 +5,7 @@ import multer from 'multer'
 import { authenticate, optionalAuth, requireRole } from '../middleware/auth.js'
 import Request from '../models/Request.js'
 import Patient from '../models/Patient.js'
+import NGO from '../models/NGO.js'
 const router = express.Router()
 
 // Ensure uploads folder exists
@@ -86,6 +87,7 @@ router.post('/', authenticate, upload.fields([
 router.post('/fund', authenticate, upload.single('document'), async (req, res) => {
   try {
     const user = req.user
+    console.log('POST /api/requests/fund - incoming', { user: user?._id, headers: req.headers && { authorization: req.headers.authorization }, body: req.body, file: req.file && { originalname: req.file.originalname, filename: req.file.filename } })
     const body = req.body || {}
     const amount = parseFloat(body.amount || '0')
     const ngoId = body.ngoId || body.ngo_id || null
@@ -138,6 +140,27 @@ router.get('/', optionalAuth, async (req, res) => {
     // If hospitalId provided, return requests for that hospital
     if (queryHospitalId) {
       const list = await Request.find({ hospitalId: queryHospitalId }).sort({ createdAt: -1 }).lean()
+      return res.json({ success: true, data: list })
+    }
+
+    // If ngoId provided, return requests for that NGO (fund requests sent to this NGO)
+    const queryNgoId = req.query.ngoId || req.body.ngoId
+    if (queryNgoId) {
+      console.log('GET /api/requests - ngoId query', { ngoId: queryNgoId })
+      // Try to query by ngo._id first
+      let aja = queryNgoId
+      // If not found, attempt to resolve NGO by userId (frontend may pass NGO's account id)
+      let list = await Request.find({ ngoId: aja }).sort({ createdAt: -1 }).lean()
+      if ((!list || list.length === 0)) {
+        try {
+          const ngoDoc = await NGO.findOne({ userId: queryNgoId })
+          if (ngoDoc) {
+            list = await Request.find({ ngoId: ngoDoc._id }).sort({ createdAt: -1 }).lean()
+          }
+        } catch (e) {
+          console.error('Failed to resolve NGO by userId', e)
+        }
+      }
       return res.json({ success: true, data: list })
     }
 

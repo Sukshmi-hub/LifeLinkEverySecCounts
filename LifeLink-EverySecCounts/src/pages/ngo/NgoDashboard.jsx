@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils';
 
 const NgoDashboard = () => {
   const { user } = useAuth();
-  const { fundRequests, updateFundRequestStatus } = useNotifications();
+  const { fundRequests, updateFundRequestStatus, loadNgoFundRequests } = useNotifications();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
@@ -46,6 +46,12 @@ const NgoDashboard = () => {
     setShowDetails(false);
     setShowHospitalChat(true);
   };
+
+  useEffect(() => {
+    if (user?.role === 'ngo' && user?.id && typeof loadNgoFundRequests === 'function') {
+      loadNgoFundRequests(user.id)
+    }
+  }, [user?.id, user?.role])
 
   const renderDashboard = () => (
     <div className="space-y-8">

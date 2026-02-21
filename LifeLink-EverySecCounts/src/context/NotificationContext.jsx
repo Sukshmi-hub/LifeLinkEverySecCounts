@@ -136,6 +136,33 @@ export const NotificationProvider = ({ children }) => {
     }
   }
 
+  // Load fund requests for a given ngoId (for NGO dashboard)
+  const loadNgoFundRequests = async (ngoId) => {
+    if (!ngoId) return
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`http://localhost:5000/api/requests?ngoId=${encodeURIComponent(ngoId)}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+      const json = await res.json()
+      if (json && json.success && Array.isArray(json.data)) {
+        const mapped = json.data.filter(r => r.requestType === 'fund_request').map(r => ({
+          id: r._id,
+          amount: r.amount,
+          status: r.status,
+          createdAt: r.createdAt,
+          ngoId: r.ngoId,
+          ngoName: r.ngoName,
+          patientId: r.patientId,
+          patientName: r.patientName,
+          description: r.message || r.details || '' ,
+          document: r.files?.medicalReports?.[0] || null,
+        }))
+        setFundRequests(mapped)
+      }
+    } catch (err) {
+      console.error('Failed to load NGO fund requests', err)
+    }
+  }
+
   const addFundRequest = (request) => {
     (async () => {
       try {
@@ -329,6 +356,7 @@ export const NotificationProvider = ({ children }) => {
         addOrganRequest,
         loadOrganRequests,
         loadFundRequests,
+        loadNgoFundRequests,
         updateOrganRequestStatus,
         addFundRequest,
         updateFundRequestStatus,
