@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
+import { toast } from 'sonner';
 
 const NotificationContext = createContext(undefined);
 
@@ -108,22 +109,102 @@ export const NotificationProvider = ({ children }) => {
     });
   };
 
-  const addFundRequest = (request) => {
-    const newRequest = {
-      ...request,
-      id: `fund_${Date.now()}`,
-      status: 'Pending',
-      createdAt: new Date(),
-    };
-    setFundRequests(prev => [newRequest, ...prev]);
+  // Load fund requests for a given patientId from backend
+  const loadFundRequests = async (patientId) => {
+    if (!patientId) return
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`http://localhost:5000/api/requests?patientId=${encodeURIComponent(patientId)}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+      const json = await res.json()
+      if (json && json.success && Array.isArray(json.data)) {
+        const mapped = json.data.filter(r => r.requestType === 'fund_request').map(r => ({
+          id: r._id,
+          amount: r.amount,
+          status: r.status,
+          createdAt: r.createdAt,
+          ngoId: r.ngoId,
+          ngoName: r.ngoName,
+          patientId: r.patientId,
+          patientName: r.patientName,
+          description: r.message || r.details || '' ,
+          document: r.files?.medicalReports?.[0] || null,
+        }))
+        setFundRequests(mapped)
+      }
+    } catch (err) {
+      console.error('Failed to load fund requests', err)
+    }
+  }
 
-    // Send notification to NGO
-    addNotification({
-      type: 'info',
-      title: 'New Fund Request',
-      message: `New patient fund request received from ${request.patientName} for ₹${request.amount.toLocaleString()}.`,
-      targetRole: 'ngo',
-    });
+  const addFundRequest = (request) => {
+    (async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const form = new FormData()
+        form.append('amount', String(request.amount || 0))
+        form.append('ngoId', request.ngoId || '')
+        form.append('ngoName', request.ngoName || '')
+        form.append('message', request.description || request.message || '')
+        // attach document file if present
+        if (request.document && request.document instanceof File) {
+          form.append('document', request.document)
+        }
+
+        const res = await fetch('http://localhost:5000/api/requests/fund', {
+          method: 'POST',
+          body: form,
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        })
+
+        const json = await res.json()
+        if (res.ok && json.success) {
+          const saved = json.data
+          const mapped = {
+            id: saved._id,
+            amount: saved.amount,
+            status: saved.status || 'Pending',
+            createdAt: saved.createdAt,
+            ngoId: saved.ngoId,
+            ngoName: saved.ngoName,
+            document: saved.files?.medicalReports?.[0] || null,
+            patientName: saved.patientName
+          }
+          setFundRequests(prev => [mapped, ...prev])
+
+          addNotification({
+            type: 'info',
+            title: 'New Fund Request',
+            message: `New patient fund request received from ${mapped.patientName} for ₹${(mapped.amount || 0).toLocaleString()}${mapped.ngoName ? ' (to ' + mapped.ngoName + ')' : ''}.`,
+            targetRole: 'ngo',
+          });
+          toast.success('Fund request submitted successfully')
+          return
+        }
+
+        // failure — fallback to local add and notify user
+        console.error('Failed to persist fund request', json)
+        const fallback = {
+          id: `fund_${Date.now()}`,
+          ...request,
+          status: 'Pending',
+          createdAt: new Date(),
+        }
+        setFundRequests(prev => [fallback, ...prev])
+        addNotification({ type: 'error', title: 'Fund Request Failed', message: 'Could not save fund request to server — saved locally.' })
+        toast.error('Could not save fund request to server — saved locally')
+      } catch (err) {
+        console.error('addFundRequest error', err)
+        const fallback = {
+          id: `fund_${Date.now()}`,
+          ...request,
+          status: 'Pending',
+          createdAt: new Date(),
+        }
+        setFundRequests(prev => [fallback, ...prev])
+        addNotification({ type: 'error', title: 'Fund Request Failed', message: 'Could not save fund request to server — saved locally.' })
+        toast.error('Could not save fund request to server — saved locally')
+      }
+    })()
   };
 
   const updateFundRequestStatus = (id, status) => {
@@ -247,6 +328,7 @@ export const NotificationProvider = ({ children }) => {
         getUnreadCount,
         addOrganRequest,
         loadOrganRequests,
+        loadFundRequests,
         updateOrganRequestStatus,
         addFundRequest,
         updateFundRequestStatus,

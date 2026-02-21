@@ -56,9 +56,17 @@ const PatientRequestPage = () => {
       try {
         const resp = await fetch('http://localhost:5000/api/hospitals');
         const json = await resp.json();
-        if (resp.ok && json.data) setHospitals(json.data);
+        if (resp.ok && Array.isArray(json.data) && json.data.length > 0) {
+          setHospitals(json.data);
+          return;
+        }
+        // fallback to sample hospitals if backend fails or returns empty
+        const { sampleHospitals } = await import('@/data/sampleData');
+        setHospitals(sampleHospitals);
       } catch (err) {
         console.error('Failed to load hospitals', err);
+        const { sampleHospitals } = await import('@/data/sampleData');
+        setHospitals(sampleHospitals);
       } finally {
         setHospitalsLoading(false);
       }
@@ -285,17 +293,7 @@ const PatientRequestPage = () => {
                   </CardContent>
                 </Card>
 
-                <Card className="border-none bg-destructive/5 shadow-none">
-                  <CardContent className="flex items-center gap-4 p-6">
-                    <AlertTriangle className="w-8 h-8 text-destructive" />
-                      <div>
-                      <p className="text-2xl font-bold">
-                        {patientRequests.filter(r => ['high','critical'].includes(String(r.urgency || '').toLowerCase())).length}
-                      </p>
-                      <p className="text-muted-foreground text-xs uppercase tracking-wider font-semibold">Critical</p>
-                    </div>
-                  </CardContent>
-                </Card>
+                {/* Removed Critical card by request */}
               </div>
 
               {/* Requests List */}

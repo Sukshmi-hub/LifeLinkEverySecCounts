@@ -82,6 +82,52 @@ router.post('/', authenticate, upload.fields([
   }
 })
 
+// Create a new fund request (financial assistance sent to an NGO)
+router.post('/fund', authenticate, upload.single('document'), async (req, res) => {
+  try {
+    const user = req.user
+    const body = req.body || {}
+    const amount = parseFloat(body.amount || '0')
+    const ngoId = body.ngoId || body.ngo_id || null
+    const ngoName = body.ngoName || body.ngo_name || body.ngo || ''
+    const message = body.message || body.description || ''
+
+    if (!user) return res.status(401).json({ success: false, message: 'Authentication required' })
+    if (!amount || amount <= 0) return res.status(400).json({ success: false, message: 'Valid amount required' })
+
+    // Resolve Patient document for this user to store the correct patientId reference
+    let patientDoc = await Patient.findOne({ userId: user._id });
+    const patientRefId = patientDoc ? patientDoc._id : null;
+    const patientNameToStore = patientDoc?.name || user.name || user.fullName || (body.patientName || '')
+
+    const reqDoc = new Request({
+      requestType: 'fund_request',
+      status: 'pending',
+      patientId: patientRefId,
+      patientName: patientNameToStore,
+      hospitalId: body.hospitalId || null,
+      requestedBy: user._id,
+      message,
+      amount,
+      ngoId: ngoId || null,
+      ngoName: ngoName || ''
+    })
+
+    if (req.file) {
+      const baseUrl = '/uploads/requests'
+      reqDoc.files = reqDoc.files || {}
+      reqDoc.files.medicalReports = reqDoc.files.medicalReports || []
+      reqDoc.files.medicalReports.push(`${baseUrl}/${req.file.filename}`)
+    }
+
+    await reqDoc.save()
+    return res.status(201).json({ success: true, data: reqDoc })
+  } catch (err) {
+    console.error('Create fund request failed:', err)
+    return res.status(500).json({ success: false, message: 'Failed to create fund request' })
+  }
+})
+
 // Get requests; supports filtering by patientId or hospitalId
 router.get('/', optionalAuth, async (req, res) => {
   try {

@@ -21,6 +21,14 @@ try {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
     console.log('🚀 Backend is ready to save lives!')
   })
+  // Initialize Socket.io and pass the running server
+  try {
+    const { initSocket } = await import('./src/socket.js')
+    initSocket(server)
+    console.log('🔌 Socket.io initialized')
+  } catch (err) {
+    console.error('Failed to initialize Socket.io', err)
+  }
   server.on('error', (err) => {
     if (err && err.code === 'EADDRINUSE') {
       console.error(`❌ Port ${PORT} is already in use. Please stop the process using this port or set a different PORT in your .env`)

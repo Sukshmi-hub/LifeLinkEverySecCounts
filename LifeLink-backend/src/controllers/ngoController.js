@@ -91,3 +91,16 @@ export const updateMyNgoProfile = async (req, res) => {
 }
 
 export default { getMyNgoProfile, updateMyNgoProfile }
+
+export const getAllNgos = async (req, res) => {
+  try {
+    // Return a small public listing of NGOs for dropdowns
+    const ngos = await NGO.find({}, 'name')
+
+    const data = ngos.map(n => ({ _id: n._id, name: n.name || n.organizationName || 'Unnamed NGO' }))
+
+    return res.json({ success: true, data })
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+}

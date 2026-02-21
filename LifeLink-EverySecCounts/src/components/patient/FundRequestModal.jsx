@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { Button } from '@/components/ui/button';
@@ -38,6 +38,8 @@ const FundRequestModal = ({ isOpen, onClose }) => {
   const [reason, setReason] = useState('');
   const [description, setDescription] = useState('');
   const [document, setDocument] = useState(null);
+  const [ngos, setNgos] = useState([]);
+  const [selectedNgo, setSelectedNgo] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
@@ -47,8 +49,38 @@ const FundRequestModal = ({ isOpen, onClose }) => {
     }
   };
 
+  useEffect(() => {
+    // load NGOs from backend
+    (async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/ngo');
+        const json = await res.json();
+        if (res.ok && Array.isArray(json.data)) {
+          // accept items in shape { id, name } or { _id, name }
+          const mapped = json.data.map(x => ({ id: String(x.id || x._id || x._id), name: x.name || x.organizationName || x.name }));
+          setNgos(mapped);
+          return;
+        }
+        // no NGOs returned -> set empty list so UI shows "No NGOs available"
+        setNgos([]);
+      } catch (err) {
+        console.error('Failed to load NGOs', err);
+        setNgos([]);
+      }
+    })();
+  }, []);
+
+  // render guard to avoid hydration/runtime issues when opening modal
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); return () => setMounted(false); }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const token = localStorage.getItem('token')
+    if (!token) {
+      toast.error('Please sign in to submit a fund request (server login required)')
+      return
+    }
     
     if (!amount || parseFloat(amount) <= 0) {
       toast.error('Please enter a valid amount');
@@ -65,10 +97,22 @@ const FundRequestModal = ({ isOpen, onClose }) => {
       return;
     }
 
+    if (!selectedNgo || selectedNgo === '__no_ngos__') {
+      toast.error('Please select an NGO to send this request to');
+      return;
+    }
+
+    if (!document) {
+      toast.error('Please upload your medical report (PDF/JPG/PNG)');
+      return;
+    }
+
     setIsSubmitting(true);
 
     // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, 800));
+
+    const ngoObj = ngos.find(n => String(n.id) === String(selectedNgo));
 
     addFundRequest({
       patientId: user?.id || 'patient_1',
@@ -76,6 +120,9 @@ const FundRequestModal = ({ isOpen, onClose }) => {
       amount: parseFloat(amount),
       reason,
       description,
+      ngoId: ngoObj?.id || selectedNgo,
+      ngoName: ngoObj?.name || 'Selected NGO',
+      document,
     });
 
     setIsSubmitting(false);
@@ -91,6 +138,8 @@ const FundRequestModal = ({ isOpen, onClose }) => {
       onClose();
     }, 2000);
   };
+
+  if (!mounted) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -144,6 +193,22 @@ const FundRequestModal = ({ isOpen, onClose }) => {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="ngo">Select NGO *</Label>
+                <Select value={selectedNgo} onValueChange={setSelectedNgo}>
+                  <SelectTrigger id="ngo" className="bg-background">
+                    <SelectValue placeholder="Choose NGO" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover">
+                    {ngos.length === 0 ? (
+                          <SelectItem value="__no_ngos__" disabled>No NGOs available</SelectItem>
+                        ) : ngos.map(n => (
+                          <SelectItem key={n.id} value={String(n.id)}>{n.name}</SelectItem>
+                        ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="description">Description *</Label>
                 <Textarea
                   id="description"
@@ -156,7 +221,7 @@ const FundRequestModal = ({ isOpen, onClose }) => {
               </div>
 
               <div className="space-y-2">
-                <Label>Upload Document (Optional)</Label>
+                <Label>Medical Report (Required)</Label>
                 <div className="relative">
                   <input
                     type="file"

@@ -6,7 +6,7 @@ const RequestSchema = new Schema({
   requestType: {
     type: String,
     required: true,
-    enum: ['user_verification', 'organ_request', 'donor_registration'],
+    enum: ['user_verification', 'organ_request', 'donor_registration', 'fund_request'],
   },
   status: {
     type: String,
@@ -27,7 +27,7 @@ const RequestSchema = new Schema({
   hospitalId: {
     type: Schema.Types.ObjectId,
     ref: 'Hospital',
-    required: true,
+    required: false,
   },
   requestedBy: {
     type: Schema.Types.ObjectId,
@@ -64,6 +64,10 @@ const RequestSchema = new Schema({
   reviewedAt: {
     type: Date,
   },
+  // Fund request specific fields
+  amount: { type: Number, default: 0 },
+  ngoId: { type: Schema.Types.ObjectId, ref: 'NGO', default: null },
+  ngoName: { type: String, default: '' },
 }, { timestamps: true });
 
 export default mongoose.models.Request || mongoose.model('Request', RequestSchema);

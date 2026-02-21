@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import PatientSidebar from '@/components/patient/PatientSidebar';
 import FundRequestModal from '@/components/patient/FundRequestModal';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { Button } from '@/components/ui/button';
@@ -11,11 +12,18 @@ import { formatDistanceToNow } from 'date-fns';
 
 const RequestFundsPage = () => {
   const { user } = useAuth();
-  const { fundRequests } = useNotifications();
+  const { fundRequests, loadFundRequests } = useNotifications();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showFundModal, setShowFundModal] = useState(false);
 
-  const patientFundRequests = fundRequests.filter(r => r.patientId === user?.id || r.patientName === user?.name);
+  React.useEffect(() => {
+    if (user?.id) {
+      loadFundRequests(user.id)
+    }
+  }, [user?.id])
+
+  const safeFundRequests = Array.isArray(fundRequests) ? fundRequests : [];
+  const patientFundRequests = safeFundRequests.filter(r => r && (r.patientId === user?.id || r.patientName === user?.name));
 
   const getStatusIcon = (status) => {
     switch (status) {
@@ -40,6 +48,7 @@ const RequestFundsPage = () => {
   };
 
   return (
+    <ErrorBoundary>
     <div className="min-h-screen bg-background">
       <PatientSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
       
@@ -68,7 +77,7 @@ const RequestFundsPage = () => {
                 </div>
                 <div>
                   <p className="text-2xl font-bold">
-                    ₹{patientFundRequests.reduce((sum, r) => sum + r.amount, 0).toLocaleString()}
+                    ₹{patientFundRequests.reduce((sum, r) => sum + (Number(r?.amount) || 0), 0).toLocaleString()}
                   </p>
                   <p className="text-muted-foreground text-sm">Total Requested</p>
                 </div>
@@ -94,7 +103,7 @@ const RequestFundsPage = () => {
                 </div>
                 <div>
                   <p className="text-2xl font-bold">
-                    ₹{patientFundRequests.filter(r => r.status === 'Approved').reduce((sum, r) => sum + r.amount, 0).toLocaleString()}
+                    ₹{patientFundRequests.filter(r => r.status === 'Approved').reduce((sum, r) => sum + (Number(r?.amount) || 0), 0).toLocaleString()}
                   </p>
                   <p className="text-muted-foreground text-sm">Approved</p>
                 </div>
@@ -120,30 +129,39 @@ const RequestFundsPage = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {patientFundRequests.map(request => (
-                    <div
-                      key={request.id}
-                      className="flex items-center justify-between p-4 bg-muted/30 rounded-lg"
-                    >
-                      <div className="flex items-center gap-4">
-                        {getStatusIcon(request.status)}
-                        <div>
-                          <h4 className="font-medium">₹{request.amount.toLocaleString()}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {request.reason} • {request.description.slice(0, 50)}...
+                  {patientFundRequests.map(request => {
+                    const createdAt = request?.createdAt ? new Date(request.createdAt) : new Date();
+                    const amountDisplay = Number(request?.amount) || 0;
+                    const desc = (request?.description || '').slice(0, 50);
+
+                    return (
+                      <div
+                        key={request.id}
+                        className="flex items-center justify-between p-4 bg-muted/30 rounded-lg"
+                      >
+                        <div className="flex items-center gap-4">
+                          {getStatusIcon(request.status)}
+                          <div>
+                            <h4 className="font-medium">₹{amountDisplay.toLocaleString()}</h4>
+                            <p className="text-sm text-muted-foreground">
+                              {request?.reason || ''} • {desc}...
+                              {request?.ngoName ? (
+                                <span className="text-xs text-muted-foreground block">NGO: {request.ngoName}</span>
+                              ) : null}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className={cn("px-3 py-1 rounded-full text-xs font-medium", getStatusColor(request.status))}>
+                            {request.status}
+                          </span>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            {formatDistanceToNow(createdAt, { addSuffix: true })}
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <span className={cn("px-3 py-1 rounded-full text-xs font-medium", getStatusColor(request.status))}>
-                          {request.status}
-                        </span>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          {formatDistanceToNow(request.createdAt, { addSuffix: true })}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -156,6 +174,7 @@ const RequestFundsPage = () => {
         onClose={() => setShowFundModal(false)} 
       />
     </div>
+    </ErrorBoundary>
   );
 };
 
