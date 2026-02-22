@@ -91,6 +91,7 @@ export const DonorProvider = ({ children }) => {
   const addDonationIntent = (intent) => {
     const newIntent = {
       ...intent,
+      donorHospitalId: intent.donorHospitalId || null,
       id: `intent_${Date.now()}`,
       status: 'Available for Donation',
       hospitalVerified: false,

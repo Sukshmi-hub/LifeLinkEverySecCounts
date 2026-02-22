@@ -35,14 +35,14 @@ export const getRoomsForUser = async (req, res) => {
     const Hospital = (await import('../models/Hospital.js')).default
     const NGO = (await import('../models/NGO.js')).default
 
-    const role = req.user.role
+    const role = String(req.user.role || '').toLowerCase()
     const roomsSet = new Set()
 
     // Helper to add room and ensure unique
     const addRoom = (roomId) => { if (roomId) roomsSet.add(roomId) }
 
     // Load role specific rooms
-    if (role === 'PATIENT') {
+    if (role === 'patient') {
       const patient = await Patient.findOne({ userId: userId })
       if (patient) {
         const pid = String(patient._id)
@@ -61,7 +61,7 @@ export const getRoomsForUser = async (req, res) => {
       }
     }
 
-    if (role === 'HOSPITAL') {
+    if (role === 'hospital') {
       const hospital = await Hospital.findOne({ userId: userId })
       if (hospital) {
         const hid = String(hospital._id)
@@ -79,7 +79,7 @@ export const getRoomsForUser = async (req, res) => {
       }
     }
 
-    if (role === 'DONOR') {
+    if (role === 'donor') {
       const donor = await Donor.findOne({ userId: userId })
       if (donor) {
         const did = String(donor._id)
@@ -96,7 +96,7 @@ export const getRoomsForUser = async (req, res) => {
       }
     }
 
-    if (role === 'NGO') {
+    if (role === 'ngo') {
       const ngo = await NGO.findOne({ userId: userId })
       if (ngo) {
         const nid = String(ngo._id)
@@ -104,8 +104,8 @@ export const getRoomsForUser = async (req, res) => {
         const messageRooms = await Message.distinct('roomId', { roomId: { $regex: `ngo_${nid}` } })
         messageRooms.forEach(addRoom)
 
-        // Include rooms from requests if any (support for fund requests if stored)
-        const requests = await (await import('../models/Request.js')).default.find({ hospitalId: ngo._id })
+        // Include rooms from fund requests where ngoId matches
+        const requests = await (await import('../models/Request.js')).default.find({ ngoId: ngo._id })
         for (const r of requests) {
           if (r.patientId) addRoom(`room_ngo_${nid}_patient_${String(r.patientId)}`)
         }

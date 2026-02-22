@@ -6,6 +6,7 @@ import { authenticate, optionalAuth, requireRole } from '../middleware/auth.js'
 import Request from '../models/Request.js'
 import Patient from '../models/Patient.js'
 import NGO from '../models/NGO.js'
+import Message from '../models/Message.js'
 const router = express.Router()
 
 // Ensure uploads folder exists
@@ -76,6 +77,15 @@ router.post('/', authenticate, upload.fields([
     }
 
     await reqDoc.save()
+    // create an initial chat message so a room is available for patient<->hospital
+    try {
+      const patientIdForRoom = patientRefId || req.user._id
+      const roomId = `room_hospital_${hospital}_patient_${patientIdForRoom}`
+      const msg = new Message({ senderId: req.user._id, senderRole: 'patient', roomId, content: `Organ request: ${organType}. ${details || ''}`, timestamp: new Date() })
+      await msg.save()
+    } catch (e) {
+      console.error('Failed to create chat message for organ request', e)
+    }
     return res.status(201).json({ success: true, data: reqDoc })
   } catch (err) {
     console.error('Create request failed:', err)
@@ -123,6 +133,17 @@ router.post('/fund', authenticate, upload.single('document'), async (req, res) =
     }
 
     await reqDoc.save()
+    // create chat message for patient->NGO conversation if NGO provided
+    try {
+      const patientIdForRoom = patientRefId || req.user._id
+      if (reqDoc.ngoId) {
+        const roomId = `room_ngo_${reqDoc.ngoId}_patient_${patientIdForRoom}`
+        const msg = new Message({ senderId: req.user._id, senderRole: 'patient', roomId, content: `Fund request: ₹${reqDoc.amount}. ${reqDoc.message || ''}`, timestamp: new Date() })
+        await msg.save()
+      }
+    } catch (e) {
+      console.error('Failed to create chat message for fund request', e)
+    }
     return res.status(201).json({ success: true, data: reqDoc })
   } catch (err) {
     console.error('Create fund request failed:', err)

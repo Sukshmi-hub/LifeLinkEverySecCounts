@@ -124,6 +124,56 @@ export const approveRequest = async (req, res) => {
   }
 };
 
+// Complete a donor registration (hospital signals donation completed) -> increment inventory
+export const completeRequest = async (req, res) => {
+  try {
+    if (!req.user) return res.status(401).json({ success: false, message: 'Not authenticated' });
+    if (req.user.role !== 'hospital') return res.status(403).json({ success: false, message: 'Forbidden' });
+
+    const requestId = req.params.id;
+    const request = await Request.findById(requestId);
+    if (!request) return res.status(404).json({ success: false, message: 'Request not found' });
+
+    const hospital = await Hospital.findOne({ userId: req.user._id });
+    if (!hospital) return res.status(404).json({ success: false, message: 'Hospital not found for user' });
+    if (String(request.hospitalId) !== String(hospital._id)) return res.status(403).json({ success: false, message: 'Request does not belong to your hospital' });
+
+    // Only donor_registration requests should be completed here
+    if (request.requestType !== 'donor_registration') {
+      return res.status(400).json({ success: false, message: 'Only donor registration requests can be completed via this endpoint' });
+    }
+
+    request.status = 'completed';
+    request.reviewedBy = req.user._id;
+    request.reviewedAt = new Date();
+    await request.save();
+
+    // Increment inventory atomically (upsert)
+    try {
+      const Inventory = (await import('../models/Inventory.js')).default
+      const query = { hospitalId: hospital._id }
+      let update = { $inc: { count: 1 } }
+      if (request.organType) {
+        query.itemType = 'organ'
+        query.organType = request.organType
+      } else if (request.bloodType) {
+        query.itemType = 'blood'
+        query.bloodType = request.bloodType
+      }
+      if (query.itemType) {
+        await Inventory.findOneAndUpdate(query, update, { upsert: true, new: true })
+      }
+    } catch (invErr) {
+      console.error('Failed to update inventory after completing donation:', invErr)
+    }
+
+    return res.status(200).json({ success: true, message: 'Request completed and inventory updated', data: request });
+  } catch (error) {
+    console.error('completeRequest error:', error);
+    return res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+}
+
 export const rejectRequest = async (req, res) => {
   try {
     if (!req.user) return res.status(401).json({ success: false, message: 'Not authenticated' });

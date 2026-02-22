@@ -13,9 +13,24 @@ function reducer(state, action) {
     case 'SET_ACTIVE_ROOM':
       return { ...state, activeRoomId: action.roomId, messages: [], unreadCount: 0 }
     case 'ADD_MESSAGES':
-      return { ...state, messages: [...state.messages, ...action.messages] }
+      // add messages while avoiding duplicates by _id
+      try {
+        const existingIds = new Set(state.messages.map(m => String(m._id)))
+        const toAdd = (action.messages || []).filter(m => m && !existingIds.has(String(m._id)))
+        return { ...state, messages: [...state.messages, ...toAdd] }
+      } catch (e) {
+        return { ...state, messages: [...state.messages, ...action.messages] }
+      }
     case 'RECEIVE_MESSAGE':
-      return { ...state, messages: [...state.messages, action.message], unreadCount: state.activeRoomId === action.roomId ? state.unreadCount : state.unreadCount + 1 }
+      try {
+        const id = String(action.message?._id || action.message?.id || '')
+        if (id && state.messages.some(m => String(m._id) === id)) {
+          return state
+        }
+        return { ...state, messages: [...state.messages, action.message], unreadCount: state.activeRoomId === action.roomId ? state.unreadCount : state.unreadCount + 1 }
+      } catch (e) {
+        return { ...state, messages: [...state.messages, action.message], unreadCount: state.activeRoomId === action.roomId ? state.unreadCount : state.unreadCount + 1 }
+      }
     case 'SET_TYPING':
       return { ...state, typingUsers: { ...state.typingUsers, [action.userId]: action.isTyping } }
     case 'MARK_READ':
@@ -39,18 +54,33 @@ export function useChat(serverUrl) {
     const onStopTyping = ({ userId }) => dispatch({ type: 'SET_TYPING', userId, isTyping: false })
     const onMessagesRead = ({ messageIds }) => dispatch({ type: 'MARK_READ', ids: messageIds })
 
+    // Ensure we re-join active room after reconnect
+    const onConnect = () => {
+      try {
+        if (state.activeRoomId && socket) {
+          socket.emit('join_room', { roomId: state.activeRoomId }, (res) => {
+            // ignore res; server will emit messages as needed
+          })
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
     socket.on('receive_message', onReceive)
     socket.on('user_typing', onTyping)
     socket.on('user_stop_typing', onStopTyping)
     socket.on('messages_read', onMessagesRead)
+    socket.on('connect', onConnect)
 
     return () => {
       socket.off('receive_message', onReceive)
       socket.off('user_typing', onTyping)
       socket.off('user_stop_typing', onStopTyping)
       socket.off('messages_read', onMessagesRead)
+      socket.off('connect', onConnect)
     }
-  }, [socket])
+  }, [socket, state.activeRoomId])
 
   const joinRoom = useCallback(async (roomId) => {
     if (!socket) return { success: false, message: 'No socket' }
@@ -64,6 +94,11 @@ export function useChat(serverUrl) {
     })
   }, [socket])
 
+  // allow setting active room locally when socket is not available
+  const setActiveRoomLocal = useCallback((roomId) => {
+    dispatch({ type: 'SET_ACTIVE_ROOM', roomId })
+  }, [])
+
   const loadHistory = useCallback(async (roomId, opts = { limit: 50, offset: 0 }) => {
     try {
       const token = localStorage.getItem('token')
@@ -72,10 +107,12 @@ export function useChat(serverUrl) {
       const json = await res.json()
       if (json.success && Array.isArray(json.data)) {
         dispatch({ type: 'ADD_MESSAGES', messages: json.data })
+        return json.data
       }
     } catch (err) {
       // ignore
     }
+    return []
   }, [serverUrl])
 
   const leaveRoom = useCallback((roomId) => {
@@ -88,19 +125,43 @@ export function useChat(serverUrl) {
     if (!socket) return Promise.resolve({ success: false, message: 'No socket' })
     return new Promise((resolve) => {
       socket.emit('send_message', { roomId, content }, (res) => {
+        // Optimistically add message to local state when server confirms
+        try {
+          if (res && res.success && res.data) {
+            const msg = res.data
+            dispatch({ type: 'RECEIVE_MESSAGE', message: msg, roomId: msg.roomId })
+          }
+        } catch (e) {
+          // ignore
+        }
         resolve(res)
       })
     })
   }, [socket])
 
   const markRead = useCallback((roomId, messageIds) => {
-    if (!socket) return
-    socket.emit('mark_read', { roomId, messageIds }, (res) => {
-      if (res && res.success) dispatch({ type: 'MARK_READ', ids: messageIds })
-    })
+    if (socket) {
+      socket.emit('mark_read', { roomId, messageIds }, (res) => {
+        if (res && res.success) dispatch({ type: 'MARK_READ', ids: messageIds })
+      })
+      return
+    }
+
+    // Fallback: call REST API to mark messages read
+    (async () => {
+      try {
+        const token = localStorage.getItem('token')
+        for (const id of (messageIds || [])) {
+          await fetch(`${serverUrl}/api/chat/messages/${id}/read`, { method: 'PATCH', headers: { Authorization: token ? `Bearer ${token}` : '' } })
+        }
+        dispatch({ type: 'MARK_READ', ids: messageIds })
+      } catch (e) {
+        // ignore
+      }
+    })()
   }, [socket])
 
-  return { socket, isConnected, connectionError, connect, state, joinRoom, leaveRoom, sendMessage, markRead, loadHistory }
+  return { socket, isConnected, connectionError, connect, state, joinRoom, leaveRoom, sendMessage, markRead, loadHistory, setActiveRoomLocal }
 }
 
 export default useChat

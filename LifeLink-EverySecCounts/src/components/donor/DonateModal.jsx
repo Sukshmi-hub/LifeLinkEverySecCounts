@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -51,6 +52,8 @@ const DonateModal = ({ isOpen, onClose }) => {
 
   const [step, setStep] = useState('select');
   const [selectedOrgan, setSelectedOrgan] = useState(null);
+  const [hospitals, setHospitals] = useState([])
+  const [selectedHospitalId, setSelectedHospitalId] = useState(null)
   
   // Document uploads state
   const [fitnessCertificate, setFitnessCertificate] = useState(null);
@@ -93,6 +96,10 @@ const DonateModal = ({ isOpen, onClose }) => {
       toast({ title: 'Please select an organ', variant: 'destructive' });
       return;
     }
+    if (!selectedHospitalId) {
+      toast({ title: 'Please select a hospital', variant: 'destructive' });
+      return;
+    }
     setStep('documents');
   };
 
@@ -108,11 +115,13 @@ const DonateModal = ({ isOpen, onClose }) => {
     if (!allConsentsChecked) return;
 
     const organ = organOptions.find(o => o.id === selectedOrgan);
+    const chosenHospital = hospitals.find(h => String(h._id) === String(selectedHospitalId))
     addDonationIntent({
       donorId: user?.id || 'donor_1',
       donorName: donorProfile?.fullName || user?.name || 'Anonymous Donor',
       organType: organ?.name,
-      donorHospitalName: 'City General Hospital',
+      donorHospitalId: chosenHospital?._id || null,
+      donorHospitalName: chosenHospital?.organizationName || chosenHospital?.name || 'Selected Hospital',
     });
 
     setStep('success');
@@ -129,6 +138,22 @@ const DonateModal = ({ isOpen, onClose }) => {
     setConsentChecks({ voluntary: false, risks: false, pressure: false, verification: false, terms: false });
     onClose();
   };
+
+  // fetch hospitals when modal opens
+  useEffect(() => {
+    if (!isOpen) return
+    (async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const res = await fetch('http://localhost:5000/api/hospital/list', { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+        if (!res.ok) return
+        const json = await res.json()
+        if (json && json.success && Array.isArray(json.data)) setHospitals(json.data)
+      } catch (e) {
+        // ignore
+      }
+    })()
+  }, [isOpen])
 
   // Reusable File Card
   const FileUploadCard = ({ label, description, icon: Icon, required, file, onFileChange, onRemove }) => (
@@ -182,6 +207,18 @@ const DonateModal = ({ isOpen, onClose }) => {
                   </button>
                 );
               })}
+            </div>
+            {/* Hospital selector */}
+            <div className="mt-4">
+              <Label className="text-sm font-medium">Select Hospital</Label>
+              <div className="mt-2">
+                <select value={selectedHospitalId || ''} onChange={e => setSelectedHospitalId(e.target.value)} className="w-full border rounded p-2">
+                  <option value="">-- Select hospital --</option>
+                  {hospitals.map(h => (
+                    <option key={h._id} value={h._id}>{h.organizationName || h.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="flex justify-end gap-3 mt-6">
               <Button variant="outline" onClick={handleClose}>Cancel</Button>

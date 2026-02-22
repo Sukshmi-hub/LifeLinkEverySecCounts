@@ -5,6 +5,7 @@ import Donor from '../models/Donor.js';
 import Hospital from '../models/Hospital.js';
 import NGO from '../models/NGO.js';
 import Admin from '../models/Admin.js';
+import Message from '../models/Message.js'
 import jwt from 'jsonwebtoken';
 
 // Helper to parse MongoDB duplicate key errors into { field, value }
@@ -362,6 +363,26 @@ export const register = async (req, res) => {
             });
             await verificationRequest.save();
             console.log('Verification request created for hospital', verificationRequest._id);
+            // Create an initial chat message so room appears for the patient-hospital conversation
+            try {
+              const pid = role === 'patient' ? (roleDoc?._id || newUser._id) : (roleDoc?._id || newUser._id)
+              const roomId = `room_hospital_${selectedHospitalId}_patient_${pid}`
+              // Attempt to use hospital account as sender if available
+              let hospitalAccountUserId = null
+              try {
+                const hospDoc = await Hospital.findById(selectedHospitalId).exec()
+                if (hospDoc && hospDoc.userId) hospitalAccountUserId = hospDoc.userId
+              } catch (e) {
+                // ignore
+              }
+              const senderId = hospitalAccountUserId || newUser._id
+              const senderRole = hospitalAccountUserId ? 'hospital' : 'system'
+
+              const welcomeMsg = new Message({ senderId, senderRole, roomId, content: `Verification request created and sent to hospital.`, timestamp: new Date() })
+              await welcomeMsg.save()
+            } catch (e) {
+              console.error('Failed to create initial chat message for verification request', e)
+            }
           }
         } catch (reqError) {
           console.error('Failed to create verification request:', reqError.message);

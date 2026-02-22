@@ -100,4 +100,16 @@ export const updateMyHospitalProfile = async (req, res) => {
   }
 }
 
+// Public list of hospitals for dropdowns (authenticated)
+export const listHospitals = async (req, res) => {
+  try {
+    const Hospital = (await import('../models/Hospital.js')).default
+    const hospitals = await Hospital.find({}).select('organizationName name location address').lean()
+    return res.json({ success: true, data: hospitals })
+  } catch (err) {
+    console.error('listHospitals error', err)
+    return res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+}
+
 export default { getMyHospitalProfile, updateMyHospitalProfile }

@@ -128,6 +128,7 @@ export function initSocket(server) {
 async function canAccessRoom(userId, role, roomId) {
   try {
     if (!roomId) return false
+    const r = String(role || '').toLowerCase()
     // room_hospital_{hospitalId}_patient_{patientId}
     if (roomId.startsWith('room_hospital_')) {
       // check patterns
@@ -140,12 +141,22 @@ async function canAccessRoom(userId, role, roomId) {
         const hospitalId = parts[hospIndex + 1]
         const patientId = parts[patientIndex + 1]
         // patient should be admitted in hospital or user is that patient or hospital user
-        if (role === 'HOSPITAL') {
+        if (r === 'hospital') {
           const hospital = await Hospital.findOne({ userId })
           return hospital && String(hospital._id) === hospitalId
         }
-        if (role === 'PATIENT') return String(userId) === patientId
-        if (role === 'DONOR') {
+        if (r === 'patient') {
+          if (String(userId) === patientId) return true
+          // allow if this user owns the Patient document referenced by patientId
+          try {
+            const pat = await Patient.findById(patientId)
+            if (pat && String(pat.userId) === String(userId)) return true
+          } catch (e) {
+            // ignore
+          }
+          return false
+        }
+        if (r === 'donor') {
           const donor = await Donor.findOne({ userId })
           return donor && String(donor.hospital || '') === hospitalId
         }
@@ -153,11 +164,11 @@ async function canAccessRoom(userId, role, roomId) {
       if (donorIndex !== -1 && hospIndex !== -1) {
         const hospitalId = parts[hospIndex + 1]
         const donorId = parts[donorIndex + 1]
-        if (role === 'HOSPITAL') {
+        if (r === 'hospital') {
           const hospital = await Hospital.findOne({ userId })
           return hospital && String(hospital._id) === hospitalId
         }
-        if (role === 'DONOR') return String(userId) === donorId
+        if (r === 'donor') return String(userId) === donorId
       }
     }
 
@@ -169,11 +180,18 @@ async function canAccessRoom(userId, role, roomId) {
       if (ngoIndex !== -1 && patientIndex !== -1) {
         const ngoId = parts[ngoIndex + 1]
         const patientId = parts[patientIndex + 1]
-        if (role === 'NGO') {
+        if (r === 'ngo') {
           const ngo = await NGO.findOne({ userId })
           return ngo && String(ngo._id) === ngoId
         }
-        if (role === 'PATIENT') return String(userId) === patientId
+        if (r === 'patient') {
+          if (String(userId) === patientId) return true
+          try {
+            const pat = await Patient.findById(patientId)
+            if (pat && String(pat.userId) === String(userId)) return true
+          } catch (e) {}
+          return false
+        }
       }
     }
 
@@ -185,8 +203,15 @@ async function canAccessRoom(userId, role, roomId) {
       if (donorIndex !== -1 && patientIndex !== -1) {
         const donorId = parts[donorIndex + 1]
         const patientId = parts[patientIndex + 1]
-        if (role === 'DONOR') return String(userId) === donorId
-        if (role === 'PATIENT') return String(userId) === patientId
+        if (r === 'donor') return String(userId) === donorId
+        if (r === 'patient') {
+          if (String(userId) === patientId) return true
+          try {
+            const pat = await Patient.findById(patientId)
+            if (pat && String(pat.userId) === String(userId)) return true
+          } catch (e) {}
+          return false
+        }
       }
     }
 
@@ -196,7 +221,7 @@ async function canAccessRoom(userId, role, roomId) {
       const idx = parts.indexOf('hospital')
       const id1 = parts[idx + 1]
       const id2 = parts[idx + 3]
-      if (role === 'HOSPITAL') {
+      if (r === 'hospital') {
         const hospital = await Hospital.findOne({ userId })
         return hospital && (String(hospital._id) === id1 || String(hospital._id) === id2)
       }
