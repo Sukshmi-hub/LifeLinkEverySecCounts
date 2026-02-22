@@ -77,7 +77,8 @@ export const getDonorRegistrationRequests = async (req, res) => {
     if (!hospital) return res.status(404).json({ success: false, message: 'Hospital not found for user' });
 
     const requests = await Request.find({ requestType: 'donor_registration', hospitalId: hospital._id })
-      .populate('donorId', 'name email age blood_type donation_type address')
+      // include phone and aadhaar_no so frontend can display them in details
+      .populate('donorId', 'name email age blood_type donation_type address aadhaar_no phone location emergency_contact')
       .sort({ createdAt: -1 });
 
     return res.status(200).json({ success: true, count: requests.length, data: requests });

@@ -6,6 +6,7 @@ import { authenticate, optionalAuth, requireRole } from '../middleware/auth.js'
 import Request from '../models/Request.js'
 import Patient from '../models/Patient.js'
 import NGO from '../models/NGO.js'
+import Donor from '../models/Donor.js'
 import Message from '../models/Message.js'
 const router = express.Router()
 
@@ -148,6 +149,69 @@ router.post('/fund', authenticate, upload.single('document'), async (req, res) =
   } catch (err) {
     console.error('Create fund request failed:', err)
     return res.status(500).json({ success: false, message: 'Failed to create fund request' })
+  }
+})
+
+// Create a new donor registration / donation intent (donor submits intent)
+router.post('/donor', authenticate, upload.fields([
+  { name: 'medicalReports', maxCount: 10 },
+  { name: 'idProof', maxCount: 1 },
+  { name: 'additionalDocs', maxCount: 10 },
+]), async (req, res) => {
+  try {
+    const user = req.user
+    const body = req.body || {}
+    const hospital = body.hospital || body.hospitalId || body.hospital_id
+    const organType = body.organType || body.organ || ''
+    const bloodType = body.bloodType || ''
+
+    if (!user) return res.status(401).json({ success: false, message: 'Authentication required' })
+    if (!hospital) return res.status(400).json({ success: false, message: 'hospital id required' })
+
+    // Try to find donor profile for this user
+    let donorDoc = await Donor.findOne({ userId: user._id })
+
+    const reqDoc = new Request({
+      requestType: 'donor_registration',
+      status: 'pending',
+      donorId: donorDoc ? donorDoc._id : null,
+      organType: organType || undefined,
+      bloodType: bloodType || undefined,
+      hospitalId: hospital,
+      requestedBy: user._id,
+      message: body.message || ''
+    })
+
+    if (req.files) {
+      const baseUrl = '/uploads/requests'
+      reqDoc.files = reqDoc.files || {}
+      if (req.files.medicalReports) {
+        reqDoc.files.medicalReports = req.files.medicalReports.map(f => `${baseUrl}/${f.filename}`)
+      }
+      if (req.files.idProof && req.files.idProof[0]) {
+        reqDoc.files.idProof = `${baseUrl}/${req.files.idProof[0].filename}`
+      }
+      if (req.files.additionalDocs) {
+        reqDoc.files.additional = req.files.additionalDocs.map(f => `${baseUrl}/${f.filename}`)
+      }
+    }
+
+    await reqDoc.save()
+
+    // Create a short chat message so hospital<->donor room exists
+    try {
+      const roomId = `room_hospital_${hospital}_donor_${reqDoc.donorId || req.user._id}`
+      const MessageMod = (await import('../models/Message.js')).default
+      const msg = new MessageMod({ senderId: req.user._id, senderRole: 'donor', roomId, content: `Donor registration: ${organType || bloodType || 'donation'}. ${reqDoc.message || ''}`, timestamp: new Date() })
+      await msg.save()
+    } catch (e) {
+      console.error('Failed to create chat message for donor registration', e)
+    }
+
+    return res.status(201).json({ success: true, data: reqDoc })
+  } catch (err) {
+    console.error('Create donor registration failed:', err)
+    return res.status(500).json({ success: false, message: 'Failed to create donor registration' })
   }
 })
 

@@ -37,6 +37,7 @@ import { MdBiotech } from "react-icons/md";
 
 const organOptions = [
   { id: 'kidney', name: 'Kidney', description: 'Most commonly transplanted organ', icon: GiKidneys },
+  { id: 'blood', name: 'Blood', description: 'Donate blood to save lives', icon: Droplet },
   { id: 'liver', name: 'Liver', description: 'Can regenerate after partial donation', icon: GiLiver },
   { id: 'heart', name: 'Heart', description: 'Critical for cardiac patients', icon: FaHeart },
   { id: 'lung', name: 'Lung', description: 'For respiratory failure patients', icon: GiLungs },
@@ -111,21 +112,63 @@ const DonateModal = ({ isOpen, onClose }) => {
     setStep('consent');
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!allConsentsChecked) return;
 
-    const organ = organOptions.find(o => o.id === selectedOrgan);
-    const chosenHospital = hospitals.find(h => String(h._id) === String(selectedHospitalId))
-    addDonationIntent({
-      donorId: user?.id || 'donor_1',
-      donorName: donorProfile?.fullName || user?.name || 'Anonymous Donor',
-      organType: organ?.name,
-      donorHospitalId: chosenHospital?._id || null,
-      donorHospitalName: chosenHospital?.organizationName || chosenHospital?.name || 'Selected Hospital',
-    });
+    try {
+      const organ = organOptions.find(o => o.id === selectedOrgan);
+      const chosenHospital = hospitals.find(h => String(h._id) === String(selectedHospitalId));
 
-    setStep('success');
-    toast({ title: 'Donation Intent Submitted', description: 'Verification is now in progress.' });
+      const form = new FormData();
+      form.append('hospital', selectedHospitalId);
+      if (selectedOrgan === 'blood') {
+        form.append('bloodType', donorProfile?.bloodGroup || '');
+      } else {
+        form.append('organType', organ?.name || '');
+      }
+      form.append('requestType', 'donor_registration');
+      form.append('message', `Donor intent for ${organ?.name || 'donation'}`);
+
+      // Attach files
+      if (fitnessCertificate && fitnessCertificate.file) form.append('medicalReports', fitnessCertificate.file);
+      if (bloodGroupReport && bloodGroupReport.file) form.append('medicalReports', bloodGroupReport.file);
+      if (identityProof && identityProof.file) form.append('idProof', identityProof.file);
+      otherDocuments.forEach(d => { if (d.file) form.append('additionalDocs', d.file) });
+
+      const token = localStorage.getItem('token');
+      const res = await fetch('http://localhost:5000/api/requests/donor', {
+        method: 'POST',
+        body: form,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast({ title: 'Submission failed', description: err.message || 'Could not submit donation intent', variant: 'destructive' });
+        return;
+      }
+
+      const json = await res.json();
+      if (json && json.success && json.data) {
+        const req = json.data;
+        addDonationIntent({
+          donorId: user?._id || user?.id || 'donor_1',
+          donorName: donorProfile?.fullName || user?.name || 'Anonymous Donor',
+          organType: req.organType || null,
+          bloodType: req.bloodType || null,
+          donorHospitalId: req.hospitalId || selectedHospitalId,
+          donorHospitalName: chosenHospital?.organizationName || chosenHospital?.name || 'Selected Hospital',
+        });
+
+        setStep('success');
+        toast({ title: 'Donation Intent Submitted', description: 'Verification is now in progress.' });
+      } else {
+        toast({ title: 'Submission failed', description: 'Unexpected server response', variant: 'destructive' });
+      }
+    } catch (err) {
+      console.error('Donate submit error', err);
+      toast({ title: 'Submission error', description: 'An error occurred', variant: 'destructive' });
+    }
   };
 
   const handleClose = () => {

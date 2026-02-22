@@ -20,10 +20,7 @@ const ManageRequests = () => {
   const [loadingPending, setLoadingPending] = useState(false);
   const [pendingError, setPendingError] = useState(null);
 
-  const [donorRequests, setDonorRequests] = useState([
-    { id: 'dr1', name: 'Rahul Sharma', organOffered: 'Kidney', bloodGroup: 'O+', availability: 'Available', status: 'pending', createdAt: new Date(Date.now() - 1800000) },
-    { id: 'dr2', name: 'Priya Patel', organOffered: 'Liver', bloodGroup: 'A+', availability: 'Available', status: 'pending', createdAt: new Date(Date.now() - 5400000) },
-  ]);
+  const [donorRequests, setDonorRequests] = useState([]);
 
   // Helper to robustly extract a person's name from possible backend shapes
   const getNameFromObject = (obj) => {
@@ -186,6 +183,44 @@ const ManageRequests = () => {
     };
 
     fetchPending();
+    // Load donor registration requests for this hospital
+    const loadDonorRequests = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const resp = await fetch('http://localhost:5000/api/hospital-requests/donor-requests', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = await resp.json();
+        console.debug('hospital donor-requests response:', json);
+        if (resp.ok && Array.isArray(json.data)) {
+          const mapped = json.data.map(r => {
+            // donor info may be in r.donorId or r.requestedBy
+            const donorObj = r.donorId || r.requestedBy || {};
+            const name = donorObj.name || donorObj.fullName || donorObj.user?.name || extractName(r) || 'Unknown';
+            const organOffered = r.organType || (r.bloodType ? 'Blood' : '') || '';
+            const bloodGroup = r.bloodType || donorObj.blood_type || donorObj.bloodGroup || '';
+            // merge requester and donor objects to have a comprehensive details object
+            const mergedDetails = { ...(r.requestedBy || {}), ...(donorObj || {}) };
+            return {
+              id: r._id,
+              name,
+              organOffered,
+              bloodGroup,
+              availability: 'Available',
+              status: r.status || 'pending',
+              createdAt: r.createdAt,
+              raw: r,
+              details: Object.keys(mergedDetails).length ? mergedDetails : null,
+            };
+          });
+          setDonorRequests(mapped);
+        }
+      } catch (e) {
+        console.error('Failed to load donor requests', e);
+      }
+    };
+    loadDonorRequests();
   }, []);
 
   // Approve/Reject organ request (calls backend then updates local state + notifies patient)
@@ -432,38 +467,50 @@ const ManageRequests = () => {
               ) : (
                 <div className="space-y-4">
                   {donorRequests.filter(d => d.status === 'pending').map(donor => (
-                    <div key={donor.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border border-border">
-                      <div>
-                        <h4 className="font-medium">{donor.name}</h4>
-                        <p className="text-sm text-muted-foreground">
-                          Organ: {donor.organOffered} • Blood Group: {donor.bloodGroup}
-                        </p>
-                        <p className="text-xs mt-1">
-                          <span className={cn(
-                            "px-2 py-0.5 rounded-full text-xs",
-                            donor.availability === 'Available' ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"
-                          )}>
-                            {donor.availability}
-                          </span>
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          className="text-success"
-                          onClick={() => handleDonorRequestAction(donor.id, 'approved')}
-                        >
-                          <Check className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          className="text-destructive"
-                          onClick={() => handleDonorRequestAction(donor.id, 'rejected')}
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
+                    <div key={donor.id} className="p-4 bg-muted/30 rounded-lg border border-border">
+                      <div className="flex gap-4 items-start">
+                        {/* Left: details box */}
+                        <div className="w-1/3 min-w-[220px] pr-4">
+                          <h4 className="font-medium">{donor.name}</h4>
+                          <p className="text-sm text-muted-foreground mt-2">Organ: {donor.organOffered || '—'} • Blood Group: {donor.bloodGroup || '—'}</p>
+                          <p className="mt-2">
+                            <span className={cn(
+                              "px-2 py-0.5 rounded-full text-xs",
+                              donor.availability === 'Available' ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"
+                            )}>
+                              {donor.availability}
+                            </span>
+                          </p>
+                        </div>
+
+                        {/* Right: actions only (organ/blood shown on left preview) */}
+                        <div className="flex-1 flex items-center justify-end">
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => { setDetailsUser({ name: donor.name, details: donor.details, raw: donor.raw }); setShowDetailsOpen(true); }}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="text-success"
+                              onClick={() => handleDonorRequestAction(donor.id, 'approved')}
+                            >
+                              <Check className="w-4 h-4" />
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="text-destructive"
+                              onClick={() => handleDonorRequestAction(donor.id, 'rejected')}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -483,22 +530,93 @@ const ManageRequests = () => {
           <div className="mt-2 space-y-2">
             {detailsUser && detailsUser.details ? (
               (() => {
-                const d = detailsUser.details;
-                const phone = d.phone || d.mobile || d.contact || d.phoneNumber || d.contact_number || '—';
-                const address = d.location?.full_address || d.full_address || d.address || d.location?.address || d.location?.city || '—';
-                const aadhaar = d.aadhaar_no || d.aadhaarNumber || d.aadhaar || '—';
-                const blood = d.blood_type || d.bloodGroup || '—';
-                const email = d.email || d.contact?.email || '—';
-                const age = d.age ?? '—';
+                const d = detailsUser.details || {};
+                const raw = detailsUser.raw || {};
+                const phone = d.phone || d.mobile || d.contact || d.phoneNumber || d.contact_number || d.primaryPhone || d.user?.phone || raw.phone || raw.donorPhone || raw.requestedBy?.phone || raw.donorId?.phone || '—';
+                const aadhaar = d.aadhaar_no || d.aadhaarNumber || d.aadhaar || d.aadhaarNo || d.aadhaarNo?.toString?.() || raw.aadhaar || raw.donorId?.aadhaar || raw.requestedBy?.aadhaar || '—';
+                const address = d.location?.full_address || d.full_address || d.address || d.location?.address || d.location?.city || d.city || '—';
+                const blood = d.blood_type || d.bloodGroup || detailsUser.bloodGroup || '—';
+                const email = d.email || d.contact?.email || d.user?.email || '—';
+                const age = d.age ?? d.dob ?? '—';
+
+                // Find uploaded documents in multiple possible locations/keys
+                const files = detailsUser.raw?.files || detailsUser.details?.files || {};
+                const getFile = (keys) => {
+                  for (const k of keys) {
+                    if (!files) continue;
+                    if (files[k]) return files[k];
+                    // sometimes files stored under details object
+                    if (detailsUser.details && detailsUser.details[k]) return detailsUser.details[k];
+                  }
+                  return null;
+                };
+
+                const fitness = getFile(['fitnessCertificate', 'fitness_certificate', 'fitness', 'fitnessCert']);
+                const bloodReport = getFile(['bloodGroupReport', 'blood_group_report', 'bloodReport', 'blood_report']);
+                const idProof = getFile(['identityProof', 'idProof', 'identity_proof', 'id_proof', 'identity']);
+
+                const renderFileLink = (f) => {
+                  if (!f) return null;
+                  // file could be string or array
+                  if (Array.isArray(f)) f = f[0];
+                  const src = typeof f === 'string' && f.startsWith('/') ? `http://localhost:5000${f}` : f;
+                  return (
+                    <a href={src} target="_blank" rel="noreferrer" className="text-sm text-primary block mt-1">Open</a>
+                  );
+                };
+
                 return (
-                  <div className="text-sm">
+                  <div className="text-sm space-y-2">
                     <p><strong>Name:</strong> {d.name || detailsUser.name}</p>
                     <p><strong>Email:</strong> {email}</p>
                     <p><strong>Phone:</strong> {phone}</p>
                     <p><strong>Aadhaar:</strong> {aadhaar}</p>
-                    <p><strong>Age:</strong> {age}</p>
+                    <p><strong>Age/DOB:</strong> {age}</p>
                     <p><strong>Blood Type:</strong> {blood}</p>
-                    <p><strong>Address:</strong> {address}</p>
+                    <p className="truncate"><strong>Address:</strong> {address}</p>
+
+                    <div className="pt-2">
+                      <p className="font-medium">Uploaded Documents:</p>
+                      <div className="mt-2 space-y-2">
+                        {fitness && (
+                          <div>
+                            <p className="text-xs text-muted-foreground">Fitness Certificate:</p>
+                            {renderFileLink(fitness)}
+                          </div>
+                        )}
+                        {bloodReport && (
+                          <div>
+                            <p className="text-xs text-muted-foreground">Blood Group Report:</p>
+                            {renderFileLink(bloodReport)}
+                          </div>
+                        )}
+                        {idProof && (
+                          <div>
+                            <p className="text-xs text-muted-foreground">Identity Proof:</p>
+                            {renderFileLink(idProof)}
+                          </div>
+                        )}
+                        {/* Fallback: show any file thumbnails if available */}
+                        {files && typeof files === 'object' && Object.keys(files).length > 0 && (
+                          <div>
+                            {Object.keys(files).map((k, i) => {
+                              // skip generic/additional bucket as it's rendered elsewhere or not needed
+                              if (k === 'additional') return null;
+                              const f = files[k];
+                              if (!f) return null;
+                              const fileItem = Array.isArray(f) ? f[0] : f;
+                              const src = typeof fileItem === 'string' && fileItem.startsWith('/') ? `http://localhost:5000${fileItem}` : fileItem;
+                              return (
+                                <div key={i} className="mt-1">
+                                  <p className="text-xs text-muted-foreground">{k}:</p>
+                                  <a href={src} target="_blank" rel="noreferrer" className="text-sm text-primary">Open</a>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 );
               })()
