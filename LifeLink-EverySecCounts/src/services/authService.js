@@ -1,4 +1,6 @@
-const API_URL = 'http://localhost:5000/api/auth';
+import { serverUrl } from '../lib/serverConfig.js';
+
+const API_URL = `${serverUrl}/api/auth`;
 
 const handleResponse = async (res) => {
   const text = await res.text();

@@ -112,4 +112,69 @@ export const listHospitals = async (req, res) => {
   }
 }
 
+// Get hospital inventory (organs/blood) for current hospital
+export const getHospitalInventory = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, message: 'Not authenticated' });
+    const hospital = await Hospital.findOne({ userId });
+    if (!hospital) return res.status(404).json({ success: false, message: 'Hospital not found for user' });
+
+    const Inventory = (await import('../models/Inventory.js')).default;
+    const items = await Inventory.find({ hospitalId: hospital._id, itemType: { $in: ['organ', 'blood'] } }).lean();
+    return res.json({ success: true, data: items });
+  } catch (err) {
+    console.error('getHospitalInventory error', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+}
+
+// Update multiple inventory items (upsert). Expects body.items = [{ organType, count }]
+export const updateHospitalInventory = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, message: 'Not authenticated' });
+    const hospital = await Hospital.findOne({ userId });
+    if (!hospital) return res.status(404).json({ success: false, message: 'Hospital not found for user' });
+
+    const { items } = req.body;
+    console.log('updateHospitalInventory called by user:', String(userId), 'items:', JSON.stringify(items).slice(0,200));
+    if (!Array.isArray(items)) return res.status(400).json({ success: false, message: 'items must be an array' });
+
+    const Inventory = (await import('../models/Inventory.js')).default;
+    const results = [];
+    for (const it of items) {
+      const count = Number(it.count) || 0;
+      // Organ item
+      if (it.organType && String(it.organType).trim()) {
+        const organType = String(it.organType || '').trim();
+        const updated = await Inventory.findOneAndUpdate(
+          { hospitalId: hospital._id, itemType: 'organ', organType },
+          { $set: { count } },
+          { upsert: true, new: true }
+        ).lean();
+        results.push(updated);
+        continue;
+      }
+      // Blood item
+      if (it.bloodType && String(it.bloodType).trim()) {
+        const bloodType = String(it.bloodType || '').trim();
+        const updated = await Inventory.findOneAndUpdate(
+          { hospitalId: hospital._id, itemType: 'blood', bloodType },
+          { $set: { count } },
+          { upsert: true, new: true }
+        ).lean();
+        results.push(updated);
+        continue;
+      }
+      // ignore invalid entries
+    }
+
+    return res.json({ success: true, message: 'Inventory updated', data: results });
+  } catch (err) {
+    console.error('updateHospitalInventory error', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+}
+
 export default { getMyHospitalProfile, updateMyHospitalProfile }

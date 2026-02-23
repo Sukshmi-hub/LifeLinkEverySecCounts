@@ -31,6 +31,7 @@ import {
   PhoneCall
 } from 'lucide-react';
 import useGeolocation from '@/hooks/use-geolocation';
+import { serverUrl } from '@/lib/serverConfig';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -189,7 +190,7 @@ const Login = () => {
   useEffect(() => {
     const fetchHospitals = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/hospitals');
+        const response = await fetch(`${serverUrl}/api/hospitals`);
         const result = await response.json();
         if (result.success) {
           setHospitals(result.data);
@@ -358,7 +359,7 @@ const Login = () => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/auth/login', {
+      const response = await fetch(`${serverUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: loginEmail, password: loginPassword }),
@@ -460,7 +461,7 @@ const Login = () => {
         }
       }
 
-      const response = await fetch('http://127.0.0.1:5000/api/auth/register', {
+      const response = await fetch(`${serverUrl}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import DashboardCard from '@/components/DashboardCard';
 import { FileText, AlertTriangle, Users, Activity, UserCheck, Clock, TrendingUp, Heart } from 'lucide-react';
@@ -11,6 +11,7 @@ const HospitalDashboardOverview = ({
   pendingVerifications,
   redAlertsCount,
 }) => {
+  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5001';
   const { organRequests, notifications } = useNotifications();
 
   const pendingRequests = organRequests.filter(r => r.status === 'Pending – Hospital Review').length;
@@ -23,6 +24,80 @@ const HospitalDashboardOverview = ({
     { id: 3, action: 'Donor matched successfully', time: new Date(Date.now() - 7200000), type: 'success' },
     { id: 4, action: 'Emergency case escalated', time: new Date(Date.now() - 14400000), type: 'error' },
   ];
+
+  const organs = ['Kidney','Liver','Heart','Lung','Pancreas','Cornea','Bone Marrow'];
+  const [inventory, setInventory] = useState({});
+  const [initialInventory, setInitialInventory] = useState({});
+  const [editing, setEditing] = useState(false);
+  const [saved, setSaved] = useState(false); // whether inventory has been saved before
+  const bloodGroupsList = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
+  const [selectedBlood, setSelectedBlood] = useState([]);
+  const [initialSelectedBlood, setInitialSelectedBlood] = useState([]);
+
+  useEffect(() => {
+    const loadInventory = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const resp = await fetch(`${API_BASE}/api/hospital/inventory`, { headers: { Authorization: `Bearer ${token}` } });
+        const json = await resp.json();
+        if (resp.ok && Array.isArray(json.data)) {
+          const map = {};
+          const selected = [];
+          json.data.forEach(it => {
+            if (it.itemType === 'organ' && it.organType) map[it.organType] = it.count || 0;
+            if (it.itemType === 'blood' && it.bloodType) { selected.push(it.bloodType); }
+          });
+          setInventory(map);
+          setInitialInventory(map);
+          setSaved((json.data || []).length > 0);
+          setSelectedBlood(selected);
+          setInitialSelectedBlood(selected);
+        }
+      } catch (err) {
+        console.error('Failed to load inventory', err);
+      }
+    };
+    loadInventory();
+  }, []);
+
+  const handleChangeCount = (organ, value) => {
+    setInventory(prev => ({ ...prev, [organ]: Number(value) }));
+  };
+
+  const toggleBlood = (bg) => {
+    setSelectedBlood(prev => {
+      if (prev.includes(bg)) return prev.filter(x => x !== bg);
+      return [...prev, bg];
+    });
+  }
+
+  const saveInventory = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const organItems = organs.map(o => ({ organType: o, count: Number(inventory[o] || 0) }));
+      // no per-blood counts UI — save selected blood groups with default count 0
+      const bloodItems = selectedBlood.map(b => ({ bloodType: b, count: 0 }));
+      const items = [...organItems, ...bloodItems];
+      const resp = await fetch(`${API_BASE}/api/hospital/inventory`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ items })
+      });
+      const text = await resp.text();
+      let json = {};
+      try { json = text ? JSON.parse(text) : {}; } catch (e) { console.warn('Invalid JSON from save:', text); }
+      if (!resp.ok) throw new Error(json.message || resp.statusText || 'Failed to save');
+      setEditing(false);
+      setSaved(true);
+      setInitialInventory({ ...inventory });
+      setInitialSelectedBlood([...selectedBlood]);
+    } catch (err) {
+      console.error('Failed to save inventory', err);
+      alert(err?.message || 'Failed to save inventory');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -63,36 +138,98 @@ const HospitalDashboardOverview = ({
         {/* Recent Organ Requests */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Heart className="w-5 h-5 text-destructive" />
-              Recent Organ Requests
-            </CardTitle>
+            <div className="flex items-center justify-between w-full">
+              <CardTitle className="flex items-center gap-2">
+                <Heart className="w-5 h-5 text-destructive" />
+                Available Organs / Inventory
+              </CardTitle>
+              <div>
+                {!saved && !editing && (
+                  <button
+                    onClick={() => setEditing(true)}
+                    className="px-4 py-2 bg-red-600 text-white rounded-md"
+                  >
+                    Fill Details
+                  </button>
+                )}
+                {!saved && editing && (
+                  <div className="flex items-center gap-2">
+                    <button className="px-3 py-2 bg-gray-200 rounded-md" onClick={() => { setEditing(false); setInventory(initialInventory); setSelectedBlood(initialSelectedBlood); }}>Cancel</button>
+                    <button className="px-4 py-2 bg-blue-600 text-white rounded-md" onClick={saveInventory}>Save</button>
+                  </div>
+                )}
+                {saved && !editing && (
+                  <button className="px-4 py-2 bg-gray-800 text-white rounded-md" onClick={() => setEditing(true)}>Edit</button>
+                )}
+                {saved && editing && (
+                  <div className="flex items-center gap-2">
+                    <button className="px-3 py-2 bg-gray-200 rounded-md" onClick={() => { setEditing(false); setInventory(initialInventory); setSelectedBlood(initialSelectedBlood); }}>Cancel</button>
+                    <button className="px-4 py-2 bg-blue-600 text-white rounded-md" onClick={saveInventory}>Save</button>
+                  </div>
+                )}
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            {organRequests.length === 0 ? (
-              <p className="text-center py-8 text-muted-foreground">No requests yet</p>
-            ) : (
-              <div className="space-y-4">
-                {organRequests.slice(0, 4).map(req => (
-                  <div key={req.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                    <div>
-                      <h4 className="font-medium text-sm">{req.patientName}</h4>
-                      <p className="text-xs text-muted-foreground">
-                        {req.organType} • <span className={req.urgency === 'High' ? 'text-destructive' : ''}>{req.urgency}</span>
-                      </p>
-                    </div>
-                    <span className={cn(
-                      "px-2 py-1 rounded-full text-xs font-medium",
-                      req.status === 'Donor Matched' ? 'bg-success/20 text-success' :
-                      req.status === 'Accepted' ? 'bg-primary/20 text-primary' :
-                      'bg-muted text-muted-foreground'
-                    )}>
-                      {req.status}
-                    </span>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {organs.map(org => (
+                      <div key={org} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+                        <div>
+                          <h4 className="font-medium">{org}</h4>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input disabled={!editing} type="number" min={0} value={inventory[org] ?? 0} onChange={(e) => handleChangeCount(org, e.target.value)} className="w-24 px-2 py-1 border rounded bg-white" />
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
+
+                <div className="md:col-span-1 p-2 bg-muted/20 rounded-md md:row-start-4">
+                  <h4 className="font-medium mb-2">BLOOD</h4>
+                  <div className="flex gap-4 items-start">
+                    {/* If saved and not editing, hide the selectable list and show only chips */}
+                    {saved && !editing ? (
+                      <div className="w-full">
+                        <div className="flex flex-wrap gap-2">
+                          {selectedBlood.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">No blood groups selected</p>
+                          ) : selectedBlood.map(bg => (
+                            <div key={bg} className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-600 text-white">
+                              <span className="text-sm">{bg}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex-1 max-h-28 w-56 overflow-auto border rounded bg-white">
+                          {bloodGroupsList.map(bg => (
+                            <button key={bg} type="button" disabled={!editing} onClick={() => toggleBlood(bg)} className={`w-full text-left px-3 py-2 ${selectedBlood.includes(bg) ? 'bg-red-600 text-white' : ''}`}>
+                              {bg}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="min-w-[72px]">
+                          <div className="flex flex-col gap-2">
+                            {selectedBlood.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">None</p>
+                            ) : selectedBlood.map(bg => (
+                              <div key={bg} className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-600 text-white">
+                                <span className="text-sm">{bg}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
 
