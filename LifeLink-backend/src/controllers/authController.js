@@ -335,6 +335,47 @@ export const register = async (req, res) => {
         setDefaultsOnInsert: true,
         runValidators: true,
       });
+
+      // If registering a hospital, ensure it has inventory rows created with default 0 counts
+      if (role === 'hospital') {
+        try {
+          const hospDoc = await Hospital.findOne({ userId: newUser._id }).exec();
+          if (hospDoc) {
+            const Inventory = (await import('../models/Inventory.js')).default;
+            const ORGANS_LIST = ['KIDNEY','LIVER','HEART','LUNG','PANCREAS','CORNEA','BONE MARROW'];
+            const BLOOD_GROUPS = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
+
+            // Upsert organ entries with count 0 if missing. Use case-insensitive match
+            // to avoid creating duplicates like 'Kidney' and 'KIDNEY'.
+            for (const organ of ORGANS_LIST) {
+              try {
+                await Inventory.findOneAndUpdate(
+                  { hospitalId: hospDoc._id, itemType: 'organ', organType: { $regex: `^${organ}$`, $options: 'i' } },
+                  { $setOnInsert: { organType: organ, count: 0, bloodType: '' } },
+                  { upsert: true, new: true }
+                );
+              } catch (e) {
+                console.error('Failed to upsert organ inventory for', organ, e);
+              }
+            }
+
+            // Upsert blood group entries with count 0 if missing
+            for (const bg of BLOOD_GROUPS) {
+              try {
+                await Inventory.findOneAndUpdate(
+                  { hospitalId: hospDoc._id, itemType: 'blood', bloodType: { $regex: `^${bg}$`, $options: 'i' } },
+                  { $setOnInsert: { bloodType: bg, count: 0, organType: '' } },
+                  { upsert: true, new: true }
+                );
+              } catch (e) {
+                console.error('Failed to upsert blood inventory for', bg, e);
+              }
+            }
+          }
+        } catch (seedErr) {
+          console.error('Inventory seeding failed for hospital:', seedErr);
+        }
+      }
     
       // If registering a patient or donor and a hospital was selected, create a verification request
       if (role === 'patient' || role === 'donor') {

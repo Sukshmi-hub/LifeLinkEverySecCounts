@@ -56,13 +56,39 @@ const PatientRequestPage = () => {
       try {
         const resp = await fetch('http://localhost:5000/api/hospitals');
         const json = await resp.json();
+        let list = [];
         if (resp.ok && Array.isArray(json.data) && json.data.length > 0) {
-          setHospitals(json.data);
-          return;
+          list = json.data;
+        } else {
+          const { sampleHospitals } = await import('@/data/sampleData');
+          list = sampleHospitals;
         }
-        // fallback to sample hospitals if backend fails or returns empty
-        const { sampleHospitals } = await import('@/data/sampleData');
-        setHospitals(sampleHospitals);
+
+        // normalize id and fetch public inventory for each hospital (fall back to empty array)
+        const augmented = await Promise.all(list.map(async (h) => {
+          const id = h.id || h._id || h._id?.toString?.() || h.id?.toString?.();
+          const hosp = { ...h, id };
+          try {
+            // Try plural endpoint first (older routes), fallback to singular if missing
+            let invResp = await fetch(`http://localhost:5000/api/hospitals/${id}/inventory`);
+            let invJson = await invResp.json().catch(() => ({}));
+            if (!invResp.ok) {
+              // try singular mount
+              invResp = await fetch(`http://localhost:5000/api/hospital/${id}/inventory`);
+              invJson = await invResp.json().catch(() => ({}));
+            }
+            if (invResp.ok && Array.isArray(invJson.data)) {
+              hosp.inventory = invJson.data;
+            } else {
+              hosp.inventory = [];
+            }
+          } catch (err) {
+            hosp.inventory = [];
+          }
+          return hosp;
+        }));
+
+        setHospitals(augmented);
       } catch (err) {
         console.error('Failed to load hospitals', err);
         const { sampleHospitals } = await import('@/data/sampleData');
@@ -73,6 +99,42 @@ const PatientRequestPage = () => {
     };
     load();
   }, []);
+
+  // Fallback sample inventory (from image 2) when hospital inventory isn't available
+  // Known organ list and blood groups for consistent ordering
+  const ORGANS_LIST = ['KIDNEY','LIVER','HEART','LUNG','PANCREAS','CORNEA','BONE MARROW'];
+  const BLOOD_GROUPS = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
+
+  const formatOrgansSummary = (hospital) => {
+    const organsMap = {};
+    if (Array.isArray(hospital?.inventory)) {
+      hospital.inventory.forEach(it => {
+        if (it.itemType === 'organ' && it.organType) organsMap[String(it.organType).toUpperCase()] = Number(it.count) || 0;
+      });
+    }
+    // Only include organs with count > 0. If none, show a clear message.
+    const parts = ORGANS_LIST.map(k => {
+      const v = (organsMap[k] !== undefined) ? organsMap[k] : 0;
+      return { key: k, count: v };
+    }).filter(x => Number(x.count) > 0).map(x => `${x.key} (+${x.count})`);
+    if (parts.length === 0) return 'no organs present';
+    return parts.join(', ');
+  }
+
+  const formatBloodSummary = (hospital) => {
+    const bloodMap = {};
+    if (Array.isArray(hospital?.inventory)) {
+      hospital.inventory.forEach(it => {
+        if (it.itemType === 'blood' && it.bloodType) bloodMap[String(it.bloodType).toUpperCase()] = Number(it.count) || 0;
+      });
+    }
+    const parts = BLOOD_GROUPS.map(k => {
+      const v = (bloodMap[k] !== undefined) ? bloodMap[k] : 0;
+      return { key: k, count: v };
+    }).filter(x => Number(x.count) > 0).map(x => `${x.key} (+${x.count})`);
+    if (parts.length === 0) return 'no blood present';
+    return parts.join(', ');
+  }
 
   const handleSelectHospital = (hospital) => {
     setSelectedHospital({ id: hospital.id, name: hospital.name });
@@ -212,6 +274,14 @@ const PatientRequestPage = () => {
                           <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
                             <MapPin className="w-4 h-4" />
                             <span>{hospital.address || 'Address not available'}</span>
+                          </div>
+
+                          {/* Availability summaries (organs + blood) */}
+                          <div className="mt-3 text-sm text-muted-foreground">
+                            <div className="text-[13px] font-semibold">Organs present:</div>
+                            <div className="text-[13px] mt-1">{formatOrgansSummary(hospital)}</div>
+                            <div className="text-[13px] font-semibold mt-2">Blood groups present:</div>
+                            <div className="text-[13px] mt-1">{formatBloodSummary(hospital)}</div>
                           </div>
                         </div>
                         {String(selectedHospitalId) === String(hospital.id) && (

@@ -129,6 +129,25 @@ export const getHospitalInventory = async (req, res) => {
   }
 }
 
+// Public: get inventory for a hospital by id (no auth) - used by patient-facing pages
+export const getPublicHospitalInventory = async (req, res) => {
+  try {
+    const hospitalId = req.params.id;
+    if (!hospitalId) return res.status(400).json({ success: false, message: 'Hospital id is required' });
+    const HospitalModel = (await import('../models/Hospital.js')).default;
+    const Inventory = (await import('../models/Inventory.js')).default;
+
+    const hospital = await HospitalModel.findById(hospitalId);
+    if (!hospital) return res.status(404).json({ success: false, message: 'Hospital not found' });
+
+    const items = await Inventory.find({ hospitalId: hospital._id, itemType: { $in: ['organ', 'blood'] } }).lean();
+    return res.json({ success: true, data: items });
+  } catch (err) {
+    console.error('getPublicHospitalInventory error', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+}
+
 // Update multiple inventory items (upsert). Expects body.items = [{ organType, count }]
 export const updateHospitalInventory = async (req, res) => {
   try {
@@ -145,26 +164,47 @@ export const updateHospitalInventory = async (req, res) => {
     const results = [];
     for (const it of items) {
       const count = Number(it.count) || 0;
-      // Organ item
+      // Organ item (case-insensitive match, store canonical uppercase key)
       if (it.organType && String(it.organType).trim()) {
-        const organType = String(it.organType || '').trim();
-        const updated = await Inventory.findOneAndUpdate(
-          { hospitalId: hospital._id, itemType: 'organ', organType },
-          { $set: { count } },
-          { upsert: true, new: true }
-        ).lean();
-        results.push(updated);
+        const raw = String(it.organType || '').trim();
+        const canonical = raw.toUpperCase();
+        try {
+          const updated = await Inventory.findOneAndUpdate(
+            { hospitalId: hospital._id, itemType: 'organ', organType: { $regex: `^${raw}$`, $options: 'i' } },
+            { $set: { count, organType: canonical, bloodType: '' } },
+            { upsert: true, new: true }
+          ).lean();
+          results.push(updated);
+        } catch (e) {
+          // fallback to exact upsert
+          const updated = await Inventory.findOneAndUpdate(
+            { hospitalId: hospital._id, itemType: 'organ', organType: canonical },
+            { $set: { count, organType: canonical, bloodType: '' } },
+            { upsert: true, new: true }
+          ).lean();
+          results.push(updated);
+        }
         continue;
       }
-      // Blood item
+      // Blood item (case-insensitive match, store canonical uppercase key)
       if (it.bloodType && String(it.bloodType).trim()) {
-        const bloodType = String(it.bloodType || '').trim();
-        const updated = await Inventory.findOneAndUpdate(
-          { hospitalId: hospital._id, itemType: 'blood', bloodType },
-          { $set: { count } },
-          { upsert: true, new: true }
-        ).lean();
-        results.push(updated);
+        const raw = String(it.bloodType || '').trim();
+        const canonical = raw.toUpperCase();
+        try {
+          const updated = await Inventory.findOneAndUpdate(
+            { hospitalId: hospital._id, itemType: 'blood', bloodType: { $regex: `^${raw}$`, $options: 'i' } },
+            { $set: { count, bloodType: canonical, organType: '' } },
+            { upsert: true, new: true }
+          ).lean();
+          results.push(updated);
+        } catch (e) {
+          const updated = await Inventory.findOneAndUpdate(
+            { hospitalId: hospital._id, itemType: 'blood', bloodType: canonical },
+            { $set: { count, bloodType: canonical, organType: '' } },
+            { upsert: true, new: true }
+          ).lean();
+          results.push(updated);
+        }
         continue;
       }
       // ignore invalid entries

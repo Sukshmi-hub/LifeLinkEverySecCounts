@@ -118,6 +118,34 @@ export const approveRequest = async (req, res) => {
       }
     }
 
+    // If hospital approves a donor registration request, increment inventory immediately
+    if (request.requestType === 'donor_registration') {
+      try {
+        const Inventory = (await import('../models/Inventory.js')).default;
+        const hospitalId = hospital._id;
+        const inc = { $inc: { count: 1 } };
+
+        if (request.organType) {
+          // canonicalize organ type to uppercase to match normalized inventory keys
+          const organKey = String(request.organType).toUpperCase();
+          await Inventory.findOneAndUpdate(
+            { hospitalId, itemType: 'organ', organType: organKey },
+            inc,
+            { upsert: true, new: true }
+          );
+        } else if (request.bloodType) {
+          const bloodKey = String(request.bloodType).toUpperCase();
+          await Inventory.findOneAndUpdate(
+            { hospitalId, itemType: 'blood', bloodType: bloodKey },
+            inc,
+            { upsert: true, new: true }
+          );
+        }
+      } catch (invErr) {
+        console.error('Failed to increment inventory for approved donor registration:', invErr);
+      }
+    }
+
     return res.status(200).json({ success: true, message: 'Request approved successfully', data: request });
   } catch (error) {
     console.error('approveRequest error:', error);

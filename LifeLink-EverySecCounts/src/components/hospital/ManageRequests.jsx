@@ -286,18 +286,41 @@ const ManageRequests = () => {
     }
   };
 
-  const handleDonorRequestAction = (donorId, action) => {
-    setDonorRequests(prev => prev.map(d => 
-      d.id === donorId ? { ...d, status: action } : d
-    ));
-    const donor = donorRequests.find(d => d.id === donorId);
-    if (donor) {
+  const handleDonorRequestAction = async (requestId, action) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) throw new Error('Not authenticated');
+
+      const endpoint = action === 'approved' ? 'approve' : 'reject';
+      const url = `http://localhost:5000/api/hospital-requests/${requestId}/${endpoint}`;
+      const opts = {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      };
+      if (action === 'rejected') {
+        opts.body = JSON.stringify({ rejectionReason: 'Rejected by hospital' });
+      }
+
+      const resp = await fetch(url, opts);
+      const json = await resp.json();
+      if (!resp.ok) throw new Error(json.message || 'Failed to update donor request');
+
+      // Update local UI state
+      setDonorRequests(prev => prev.map(d => (d.id === requestId ? { ...d, status: action === 'approved' ? 'approved' : 'rejected' } : d)));
+
+      // Notify donor
+      const donor = donorRequests.find(d => d.id === requestId);
       addNotification({
         type: action === 'approved' ? 'success' : 'error',
         title: 'Donor Request Update',
-        message: `Your donation offer for ${donor.organOffered} has been ${action}.`,
+        message: `Your donation offer${donor && donor.organOffered ? ` for ${donor.organOffered}` : ''} has been ${action}.`,
         targetRole: 'donor',
       });
+
+      // Optionally: refresh hospital dashboard/inventory elsewhere. The backend increments inventory on approve.
+    } catch (err) {
+      addNotification({ type: 'error', title: 'Donor Action Failed', message: err.message || 'Could not update donor request' });
+      console.error('Donor request action failed', err);
     }
   };
 

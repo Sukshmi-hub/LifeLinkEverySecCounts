@@ -1,18 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import DashboardCard from '@/components/DashboardCard';
-import { FileText, AlertTriangle, Users, Activity, UserCheck, Clock, TrendingUp, Heart } from 'lucide-react';
+import { FileText, AlertTriangle, Users, Activity, UserCheck, Clock, Heart, Droplet } from 'lucide-react';
+import { GiKidneys, GiLiver, GiLungs, GiSkeleton } from 'react-icons/gi';
+import { FaEye, FaHeart } from 'react-icons/fa';
+import { MdBiotech } from 'react-icons/md';
 import { useNotifications } from '@/context/NotificationContext';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
 
 const HospitalDashboardOverview = ({
   userName,
   pendingVerifications,
   redAlertsCount,
 }) => {
-  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5001';
+  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
   const { organRequests, notifications } = useNotifications();
+  const { toast } = useToast();
 
   const pendingRequests = organRequests.filter(r => r.status === 'Pending – Hospital Review').length;
   const emergencies = organRequests.filter(r => r.urgency === 'High').length;
@@ -25,12 +30,23 @@ const HospitalDashboardOverview = ({
     { id: 4, action: 'Emergency case escalated', time: new Date(Date.now() - 14400000), type: 'error' },
   ];
 
-  const organs = ['Kidney','Liver','Heart','Lung','Pancreas','Cornea','Bone Marrow'];
+  const organOptions = [
+    { key: 'Kidney', name: 'Kidney', description: 'Most commonly transplanted organ', icon: GiKidneys },
+    { key: 'Blood', name: 'Blood', description: 'Donate blood to save lives', icon: Droplet },
+    { key: 'Liver', name: 'Liver', description: 'Can regenerate after partial donation', icon: GiLiver },
+    { key: 'Heart', name: 'Heart', description: 'Critical for cardiac patients', icon: FaHeart },
+    { key: 'Lung', name: 'Lung', description: 'For respiratory failure patients', icon: GiLungs },
+    { key: 'Pancreas', name: 'Pancreas', description: 'For diabetes treatment', icon: MdBiotech },
+    { key: 'Cornea', name: 'Cornea', description: 'Restore vision to the blind', icon: FaEye },
+    { key: 'Bone Marrow', name: 'Bone Marrow', description: 'For blood cancer patients', icon: GiSkeleton },
+  ];
   const [inventory, setInventory] = useState({});
   const [initialInventory, setInitialInventory] = useState({});
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState(false); // whether inventory has been saved before
   const bloodGroupsList = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
+  const [bloodInventory, setBloodInventory] = useState({});
+  const [initialBloodInventory, setInitialBloodInventory] = useState({});
   const [selectedBlood, setSelectedBlood] = useState([]);
   const [initialSelectedBlood, setInitialSelectedBlood] = useState([]);
 
@@ -43,16 +59,30 @@ const HospitalDashboardOverview = ({
         const json = await resp.json();
         if (resp.ok && Array.isArray(json.data)) {
           const map = {};
-          const selected = [];
+          const bloodMap = {};
+          // Build a lookup from known organ option names for case-insensitive matching
+          const organNameLookup = {};
+          organOptions.forEach(o => { if (o.name) organNameLookup[o.name.toUpperCase()] = o.name; });
           json.data.forEach(it => {
-            if (it.itemType === 'organ' && it.organType) map[it.organType] = it.count || 0;
-            if (it.itemType === 'blood' && it.bloodType) { selected.push(it.bloodType); }
+            if (it.itemType === 'organ' && it.organType) {
+              const keyUpper = String(it.organType).toUpperCase();
+              const nameKey = organNameLookup[keyUpper] || (it.organType && String(it.organType).charAt(0).toUpperCase() + String(it.organType).slice(1).toLowerCase());
+              map[nameKey] = it.count || 0;
+            }
+            if (it.itemType === 'blood' && it.bloodType) { bloodMap[String(it.bloodType).toUpperCase()] = it.count || 0; }
           });
           setInventory(map);
           setInitialInventory(map);
+          // normalize blood keys to canonical list keys
+          const normalizedBloodMap = {};
+          bloodGroupsList.forEach(b => { normalizedBloodMap[b] = bloodMap[b.toUpperCase()] || 0; });
+          setBloodInventory(normalizedBloodMap);
+          setInitialBloodInventory(bloodMap);
+          // mark selected blood groups where count > 0
+          const sel = Object.keys(normalizedBloodMap).filter(k => (normalizedBloodMap[k] || 0) > 0);
+          setSelectedBlood(sel);
+          setInitialSelectedBlood(sel);
           setSaved((json.data || []).length > 0);
-          setSelectedBlood(selected);
-          setInitialSelectedBlood(selected);
         }
       } catch (err) {
         console.error('Failed to load inventory', err);
@@ -62,12 +92,15 @@ const HospitalDashboardOverview = ({
   }, []);
 
   const handleChangeCount = (organ, value) => {
-    setInventory(prev => ({ ...prev, [organ]: Number(value) }));
+    setInventory(prev => ({ ...prev, [organ]: value }));
   };
 
   const toggleBlood = (bg) => {
     setSelectedBlood(prev => {
-      if (prev.includes(bg)) return prev.filter(x => x !== bg);
+      if (prev.includes(bg)) {
+        // deselect
+        return prev.filter(x => x !== bg);
+      }
       return [...prev, bg];
     });
   }
@@ -75,10 +108,14 @@ const HospitalDashboardOverview = ({
   const saveInventory = async () => {
     try {
       const token = localStorage.getItem('token');
-      if (!token) return;
-      const organItems = organs.map(o => ({ organType: o, count: Number(inventory[o] || 0) }));
-      // no per-blood counts UI — save selected blood groups with default count 0
-      const bloodItems = selectedBlood.map(b => ({ bloodType: b, count: 0 }));
+      if (!token) {
+        toast({ title: 'Not authenticated', description: 'Please sign in to save inventory', variant: 'destructive' });
+        return;
+      }
+      // Exclude the special 'Blood' option from organ items
+      const organItems = organOptions.filter(o => o.name !== 'Blood').map(o => ({ itemType: 'organ', organType: o.name, count: Number(inventory[o.name] || 0) }));
+      // Always save all blood groups (keeps DB in sync with inputs)
+      const bloodItems = bloodGroupsList.map(b => ({ itemType: 'blood', bloodType: b, count: Number(bloodInventory[b] || 0) }));
       const items = [...organItems, ...bloodItems];
       const resp = await fetch(`${API_BASE}/api/hospital/inventory`, {
         method: 'POST',
@@ -88,14 +125,20 @@ const HospitalDashboardOverview = ({
       const text = await resp.text();
       let json = {};
       try { json = text ? JSON.parse(text) : {}; } catch (e) { console.warn('Invalid JSON from save:', text); }
-      if (!resp.ok) throw new Error(json.message || resp.statusText || 'Failed to save');
+      if (!resp.ok) {
+        console.error('Inventory save failed', resp.status, text);
+        toast({ title: 'Save failed', description: json.message || resp.statusText || 'Failed to save inventory', variant: 'destructive' });
+        throw new Error(json.message || resp.statusText || 'Failed to save');
+      }
       setEditing(false);
       setSaved(true);
       setInitialInventory({ ...inventory });
+      setInitialBloodInventory({ ...bloodInventory });
       setInitialSelectedBlood([...selectedBlood]);
+      toast({ title: 'Inventory saved', description: 'Available organs and blood updated', variant: 'success' });
     } catch (err) {
       console.error('Failed to save inventory', err);
-      alert(err?.message || 'Failed to save inventory');
+      toast({ title: 'Save error', description: err?.message || 'Failed to save inventory', variant: 'destructive' });
     }
   };
 
@@ -134,8 +177,8 @@ const HospitalDashboardOverview = ({
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Recent Organ Requests */}
+      <div className="grid gap-6">
+        {/* Available Organs / Inventory */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between w-full">
@@ -172,95 +215,95 @@ const HospitalDashboardOverview = ({
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {organs.map(org => (
-                      <div key={org} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
-                        <div>
-                          <h4 className="font-medium">{org}</h4>
+              {/* When saved and not editing show compact highlighted entries */}
+              {saved && !editing ? (
+                <div>
+                  <div className="grid grid-cols-3 gap-0 border rounded-md overflow-hidden">
+                    {organOptions.filter(o => o.name !== 'Blood').map((org, idx) => {
+                      const Icon = org.icon;
+                      const count = inventory[org.name] ?? 0;
+                      return (
+                        <div key={org.key} className="p-4 flex flex-col items-start gap-2 border-b border-r last:border-r-0" style={{minHeight:120}}>
+                          <div className="flex items-center gap-2">
+                            <div className="text-xs uppercase text-muted-foreground mr-2">{org.name}</div>
+                            <div className="ml-auto text-muted-foreground text-sm">{count > 0 ? '' : ''}</div>
+                          </div>
+                          <div className="flex items-center gap-3 w-full">
+                            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                              <Icon className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1">
+                              {count > 0 ? (
+                                <div className="text-sm font-medium">{count} available</div>
+                              ) : (
+                                <div className="text-sm text-muted-foreground">Unavailable</div>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <input disabled={!editing} type="number" min={0} value={inventory[org] ?? 0} onChange={(e) => handleChangeCount(org, e.target.value)} className="w-24 px-2 py-1 border rounded bg-white" />
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-3 p-3 border rounded-md bg-muted/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="text-sm font-medium">BLOOD AVAILABILITY</div>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      {bloodGroupsList.map(bg => (
+                        <button key={bg} type="button" onClick={() => { if (editing) toggleBlood(bg); }} className={`px-3 py-1 rounded-full border flex items-center gap-2 ${selectedBlood.includes(bg) ? 'bg-red-600 text-white border-red-600' : 'bg-white text-muted-foreground'}`}>
+                          <span className="font-medium">{bg}</span>
+                          <span className="text-xs">{(bloodInventory[bg] || 0) > 0 ? `${bloodInventory[bg]} units` : 'None'}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
-
-                <div className="md:col-span-1 p-2 bg-muted/20 rounded-md md:row-start-4">
-                  <h4 className="font-medium mb-2">BLOOD</h4>
-                  <div className="flex gap-4 items-start">
-                    {/* If saved and not editing, hide the selectable list and show only chips */}
-                    {saved && !editing ? (
-                      <div className="w-full">
-                        <div className="flex flex-wrap gap-2">
-                          {selectedBlood.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">No blood groups selected</p>
-                          ) : selectedBlood.map(bg => (
-                            <div key={bg} className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-600 text-white">
-                              <span className="text-sm">{bg}</span>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {organOptions.map(org => {
+                    const Icon = org.icon;
+                    if (org.name === 'Blood') {
+                      return (
+                        <div key={org.key} className="p-4 bg-muted/30 rounded-lg">
+                          <div className="flex items-center gap-3 w-full mb-2">
+                            <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                              <Icon className="w-6 h-6" />
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex-1 max-h-28 w-56 overflow-auto border rounded bg-white">
-                          {bloodGroupsList.map(bg => (
-                            <button key={bg} type="button" disabled={!editing} onClick={() => toggleBlood(bg)} className={`w-full text-left px-3 py-2 ${selectedBlood.includes(bg) ? 'bg-red-600 text-white' : ''}`}>
-                              {bg}
-                            </button>
-                          ))}
-                        </div>
-                        <div className="min-w-[72px]">
-                          <div className="flex flex-col gap-2">
-                            {selectedBlood.length === 0 ? (
-                              <p className="text-sm text-muted-foreground">None</p>
-                            ) : selectedBlood.map(bg => (
-                              <div key={bg} className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-600 text-white">
-                                <span className="text-sm">{bg}</span>
+                            <div>
+                              <h4 className="font-medium">{org.name}</h4>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            {bloodGroupsList.map(bg => (
+                              <div key={bg} className="flex items-center gap-2">
+                                <label className="text-sm w-12">{bg}</label>
+                                <input disabled={!editing} type="number" min={0} value={bloodInventory[bg] ?? 0} onChange={(e) => setBloodInventory(prev => ({ ...prev, [bg]: Number(e.target.value || 0) }))} className="w-20 px-2 py-1 border rounded bg-white" />
                               </div>
                             ))}
                           </div>
                         </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+                      );
+                    }
 
-        {/* Recent Activity */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5" />
-              Recent Activity
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {recentActivities.map(activity => (
-                <div key={activity.id} className="flex items-center gap-3">
-                  <div className={cn(
-                    "w-2 h-2 rounded-full",
-                    activity.type === 'success' ? 'bg-success' :
-                    activity.type === 'warning' ? 'bg-warning' :
-                    activity.type === 'error' ? 'bg-destructive' :
-                    'bg-primary'
-                  )} />
-                  <div className="flex-1">
-                    <p className="text-sm">{activity.action}</p>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {formatDistanceToNow(activity.time, { addSuffix: true })}
-                    </p>
-                  </div>
+                    return (
+                      <div key={org.key} className="p-4 bg-muted/30 rounded-lg flex flex-col items-start gap-3">
+                        <div className="flex items-center gap-3 w-full">
+                          <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                            <Icon className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <h4 className="font-medium">{org.name}</h4>
+                          </div>
+                        </div>
+                        <div className="w-full">
+                          <input disabled={!editing} type="number" min={0} value={inventory[org.name] ?? 0} onChange={(e) => handleChangeCount(org.name, e.target.value)} className="w-32 px-2 py-1 border rounded bg-white mt-1" />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
+              )}
             </div>
           </CardContent>
         </Card>
