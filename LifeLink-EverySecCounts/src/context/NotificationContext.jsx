@@ -3,6 +3,20 @@ import { toast } from 'sonner';
 
 const NotificationContext = createContext(undefined);
 
+// Normalize various MongoDB id/reference shapes into a simple string id
+const extractId = (ref) => {
+  if (!ref) return null;
+  if (typeof ref === 'string') return ref;
+  if (typeof ref === 'object') {
+    if (ref.$oid) return ref.$oid;
+    if (ref._id && typeof ref._id === 'string') return ref._id;
+    if (ref._id && typeof ref._id === 'object' && ref._id.$oid) return ref._id.$oid;
+    if (ref.id && typeof ref.id === 'string') return ref.id;
+    if (ref.toString && typeof ref.toString === 'function') return String(ref);
+  }
+  return null;
+};
+
 export const NotificationProvider = ({ children }) => {
   const [notifications, setNotifications] = useState([]);
   const [organRequests, setOrganRequests] = useState([]);
@@ -63,8 +77,8 @@ export const NotificationProvider = ({ children }) => {
       if (json && json.success && Array.isArray(json.data)) {
         // map backend _id to id and normalize fields
         const mapped = json.data.map(r => ({
-          id: r._id,
-          patientId: r.patientId,
+          id: extractId(r._id) || r._id,
+          patientId: extractId(r.patientId) || r.patientId,
           patientName: r.patientName,
           organType: r.organType || r.organ || null,
           bloodType: r.bloodType || null,
@@ -79,11 +93,42 @@ export const NotificationProvider = ({ children }) => {
             return s
           })(r.status),
           createdAt: r.createdAt,
-          // backend stores hospital id in `hospitalId` field
-          hospitalId: r.hospitalId || r.hospital || null,
+          // backend stores hospital id in `hospitalId` field - normalize it
+          hospitalId: extractId(r.hospitalId) || extractId(r.hospital) || r.hospitalId || r.hospital || null,
+          // include hospital display fields when backend provides them
+          hospitalName: (r.hospitalId && (r.hospitalId.name || r.hospitalId.organizationName)) || r.hospitalName || null,
+          hospitalContact: (r.hospitalId && (r.hospitalId.phone || r.hospitalId.contact_phone)) || r.hospitalContact || null,
+          hospitalAddress: (r.hospitalId && (r.hospitalId.address || r.hospitalId.location?.full_address)) || r.hospitalAddress || null,
+          // donor fields (if backend returned a matched donor)
+          donorId: extractId(r.donorId) || r.donorId || null,
+          donorName: r.donorName || null,
           details: r.message || r.details || null,
         }))
         setOrganRequests(mapped)
+
+        // If loading for a specific patient, derive matched donor state from backend data
+        try {
+          const pidStr = String(patientId || '');
+          const matched = mapped.find(r => {
+            const rs = String(r.status || '').toLowerCase();
+            const isMatched = rs.includes('donor') || rs.includes('matched');
+            const rid = String(r.patientId || '');
+            return isMatched && rid === pidStr;
+          });
+          if (matched) {
+            setMatchedDonor({
+              id: matched.donorId || (`donor_${Date.now()}`),
+              name: matched.donorName || 'Anonymous Donor',
+              organType: matched.organType,
+              hospitalName: matched.hospitalName || matched.hospital || null,
+            });
+          } else {
+            // clear matched donor if none found
+            setMatchedDonor(null);
+          }
+        } catch (e) {
+          // ignore
+        }
       }
     } catch (err) {
       console.error('Failed to load organ requests:', err)
@@ -118,18 +163,18 @@ export const NotificationProvider = ({ children }) => {
       const json = await res.json()
       if (json && json.success && Array.isArray(json.data)) {
         const mapped = json.data.filter(r => r.requestType === 'fund_request').map(r => ({
-          id: r._id,
+          id: extractId(r._id) || r._id,
           amount: r.amount,
           status: r.status,
           createdAt: r.createdAt,
           ngoId: r.ngoId,
           ngoName: r.ngoName,
-          patientId: r.patientId,
+          patientId: extractId(r.patientId) || r.patientId,
           patientName: r.patientName,
           description: r.message || r.details || '' ,
           document: r.files?.medicalReports?.[0] || null,
-          // include hospital info if backend populated it
-          hospitalId: r.hospitalId || null,
+          // include hospital info if backend populated it (normalize id)
+          hospitalId: extractId(r.hospitalId) || null,
           hospitalName: (r.hospitalId && (r.hospitalId.name || r.hospitalId.organizationName)) || r.hospitalName || null,
           hospitalContact: (r.hospitalId && (r.hospitalId.phone || r.hospitalId.contact_phone)) || null,
           hospitalAddress: (r.hospitalId && (r.hospitalId.address || r.hospitalId.location?.full_address)) || r.hospitalAddress || null,
@@ -150,17 +195,17 @@ export const NotificationProvider = ({ children }) => {
       const json = await res.json()
       if (json && json.success && Array.isArray(json.data)) {
         const mapped = json.data.filter(r => r.requestType === 'fund_request').map(r => ({
-          id: r._id,
+          id: extractId(r._id) || r._id,
           amount: r.amount,
           status: r.status,
           createdAt: r.createdAt,
           ngoId: r.ngoId,
           ngoName: r.ngoName,
-          patientId: r.patientId,
+          patientId: extractId(r.patientId) || r.patientId,
           patientName: r.patientName,
           description: r.message || r.details || '' ,
           document: r.files?.medicalReports?.[0] || null,
-          hospitalId: r.hospitalId || null,
+          hospitalId: extractId(r.hospitalId) || null,
           hospitalName: (r.hospitalId && (r.hospitalId.name || r.hospitalId.organizationName)) || r.hospitalName || null,
           hospitalContact: (r.hospitalId && (r.hospitalId.phone || r.hospitalId.contact_phone)) || null,
           hospitalAddress: (r.hospitalId && (r.hospitalId.address || r.hospitalId.location?.full_address)) || r.hospitalAddress || null,
@@ -275,7 +320,7 @@ export const NotificationProvider = ({ children }) => {
           id: request.donorId || `donor_${Date.now()}`,
           name: donorName,
           organType: request.organType,
-          hospitalName: request.hospitalName || 'City General Hospital',
+          hospitalName: request.hospitalName || request.hospital || null,
         });
 
         // Notify patient

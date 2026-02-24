@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import PatientSidebar from '@/components/patient/PatientSidebar';
 import RazorpayModal from '@/components/patient/RazorpayModal';
 import { useAuth } from '@/context/AuthContext';
@@ -9,16 +9,42 @@ import { CreditCard, Clock, User, Heart, Building2 } from 'lucide-react';
 
 const PaymentPage = () => {
   const { user } = useAuth();
-  const { matchedDonor, organRequests } = useNotifications();
+  const { matchedDonor, organRequests, loadOrganRequests } = useNotifications();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
+  // Ensure we have the latest organ requests (so donor-match status is visible)
+  useEffect(() => {
+    if (user?.id && loadOrganRequests) {
+      loadOrganRequests(user.id);
+    }
+  }, [user?.id, loadOrganRequests]);
+
   // Find request where a donor is already matched for the logged-in user
-  const matchedRequest = organRequests.find(
-    (r) =>
-      r.status === 'Donor Matched' &&
-      (r.patientId === user?.id || r.patientName === user?.name)
-  );
+  const matchedRequest = organRequests.find((r) => {
+    if (!r) return false;
+    const rs = String(r.status || '').toLowerCase();
+    // Treat requests that are donor-matched OR accepted (hospital approved) as actionable for payment
+    const isMatched = rs.includes('donor') || rs.includes('matched') || rs.includes('accept');
+
+    // tolerant user matching: id, name or email may be present in different shapes
+    const uid = String(user?.id || user?._id || '');
+    const uname = String(user?.name || user?.fullName || '');
+    const uemail = String(user?.email || '');
+
+    const pid = String(r.patientId || r.patient || r.patientId?._id || '');
+    const pname = String(r.patientName || r.patient || r.patient?.name || '');
+    const pemail = String(r.patientEmail || r.email || '');
+
+    const matchesUser = (
+      (pid && uid && pid === uid) ||
+      (pid && uid && pid.includes(uid)) ||
+      (pname && uname && pname.toLowerCase().includes(uname.toLowerCase())) ||
+      (pemail && uemail && pemail.toLowerCase() === uemail.toLowerCase())
+    );
+
+    return isMatched && matchesUser;
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -71,7 +97,7 @@ const PaymentPage = () => {
                       <div>
                         <p className="text-xs text-muted-foreground">Donor Name</p>
                         <p className="font-medium">
-                          {matchedDonor?.name || matchedRequest?.donorName || 'Anonymous Donor'}
+                          {matchedDonor?.name || matchedRequest?.donorName || (matchedRequest?.patientName || '').trim() || 'Anonymous Donor'}
                         </p>
                       </div>
                     </div>
@@ -138,7 +164,7 @@ const PaymentPage = () => {
         <RazorpayModal
           isOpen={showPaymentModal}
           onClose={() => setShowPaymentModal(false)}
-          donorName={matchedDonor?.name || matchedRequest?.donorName || 'Anonymous Donor'}
+          donorName={matchedDonor?.name || matchedRequest?.donorName || (matchedRequest?.patientName || '').trim() || 'Anonymous Donor'}
           organType={matchedDonor?.organType || matchedRequest?.organType}
           hospitalName={matchedDonor?.hospitalName || matchedRequest?.hospitalName || 'City General Hospital'}
           amount={50000}
