@@ -148,6 +148,21 @@ export const getPublicHospitalInventory = async (req, res) => {
   }
 }
 
+// Public: get hospital details by id
+export const getHospitalById = async (req, res) => {
+  try {
+    const hospitalId = req.params.id;
+    if (!hospitalId) return res.status(400).json({ success: false, message: 'Hospital id is required' });
+    const HospitalModel = (await import('../models/Hospital.js')).default;
+    const hospital = await HospitalModel.findById(hospitalId).lean();
+    if (!hospital) return res.status(404).json({ success: false, message: 'Hospital not found' });
+    return res.json({ success: true, data: hospital });
+  } catch (err) {
+    console.error('getHospitalById error', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+}
+
 // Update multiple inventory items (upsert). Expects body.items = [{ organType, count }]
 export const updateHospitalInventory = async (req, res) => {
   try {

@@ -32,9 +32,9 @@ const NgoDashboard = () => {
 
   // Calculate stats
   const totalRequests = fundRequests.length;
-  const pendingRequests = fundRequests.filter(r => r.status === 'Pending').length;
-  const approvedRequests = fundRequests.filter(r => r.status === 'Approved').length;
-  const disbursedAmount = fundRequests.filter(r => r.status === 'Approved').reduce((sum, r) => sum + r.amount, 0);
+  const pendingRequests = fundRequests.filter(r => String(r.status || '').toLowerCase().startsWith('pending')).length;
+  const approvedRequests = fundRequests.filter(r => String(r.status || '').toLowerCase() === 'approved').length;
+  const disbursedAmount = fundRequests.filter(r => String(r.status || '').toLowerCase() === 'approved').reduce((sum, r) => sum + r.amount, 0);
 
   const handleViewDetails = (request) => {
     setSelectedRequest(request);
@@ -115,7 +115,7 @@ const NgoDashboard = () => {
                         className={cn(
                           "text-xs",
                           request.status === 'Approved' ? 'bg-success/20 text-success' :
-                          request.status === 'Rejected' ? 'bg-destructive/20 text-destructive' :
+                          (request.status === 'Rejected' || request.status === 'Dennied') ? 'bg-destructive/20 text-destructive' :
                           'bg-warning/20 text-warning-foreground'
                         )}
                       >
@@ -212,41 +212,84 @@ const NgoDashboard = () => {
                       <Badge
                         className={cn(
                           request.status === 'Approved' ? 'bg-success/20 text-success' :
-                          request.status === 'Rejected' ? 'bg-destructive/20 text-destructive' :
+                          (request.status === 'Rejected' || request.status === 'Dennied') ? 'bg-destructive/20 text-destructive' :
                           'bg-warning/20 text-warning-foreground'
                         )}
                       >
                         {request.status}
                       </Badge>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                       <div>
                         <p className="text-muted-foreground">Amount Requested</p>
                         <p className="font-semibold text-primary">₹{request.amount.toLocaleString()}</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Reason</p>
-                        <p className="font-medium">{request.reason}</p>
-                      </div>
-                      <div>
                         <p className="text-muted-foreground">Submitted On</p>
                         <p className="font-medium">{new Date(request.createdAt).toLocaleDateString()}</p>
                       </div>
-                      <div>
-                        <p className="text-muted-foreground">Case ID</p>
-                        <p className="font-medium">{request.id}</p>
+                      <div className="flex items-center justify-end gap-2">
+                        {((request.status && String(request.status).toLowerCase()) === 'pending') && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive"
+                          onClick={async () => {
+                            // Optimistic UI update: mark as Dennied immediately
+                            const prevStatus = request.status;
+                            try {
+                              updateFundRequestStatus(request.id, 'Dennied');
+                              const token = localStorage.getItem('token')
+                              const headers = { 'Content-Type': 'application/json' }
+                              if (token) headers.Authorization = `Bearer ${token}`
+                              const res = await fetch(`http://localhost:5000/api/requests/${request.id}/reject`, { method: 'PUT', headers, body: JSON.stringify({ rejectionReason: 'Rejected by NGO' }) })
+                              const json = await res.json()
+                              if (!res.ok) throw new Error(json.message || 'Failed to reject')
+                            } catch (err) {
+                              console.error('Reject fund request failed', err)
+                              // Revert optimistic update on failure
+                              updateFundRequestStatus(request.id, prevStatus || 'Pending')
+                            }
+                          }}
+                        >
+                          Deny
+                        </Button>
+                        )}
+                        {((request.status && String(request.status).toLowerCase()) === 'pending') && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-success"
+                          onClick={async () => {
+                            try {
+                              const token = localStorage.getItem('token')
+                              const headers = { 'Content-Type': 'application/json' }
+                              if (token) headers.Authorization = `Bearer ${token}`
+                              const res = await fetch(`http://localhost:5000/api/requests/${request.id}/approve`, { method: 'PUT', headers })
+                              const json = await res.json()
+                              if (!res.ok) throw new Error(json.message || 'Failed to approve')
+                              updateFundRequestStatus(request.id, 'Approved')
+                            } catch (err) {
+                              console.error('Approve fund request failed', err)
+                            }
+                          }}
+                        >
+                          Approve
+                        </Button>
+                        )}
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="gap-2 ml-4"
+                          onClick={() => handleViewDetails(request)}
+                        >
+                          <Eye className="w-4 h-4" />
+                          View Details
+                        </Button>
                       </div>
                     </div>
                   </div>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="gap-2 ml-4"
-                    onClick={() => handleViewDetails(request)}
-                  >
-                    <Eye className="w-4 h-4" />
-                    View Details
-                  </Button>
+                  
                 </div>
               </CardContent>
             </Card>
@@ -294,8 +337,34 @@ const NgoDashboard = () => {
         isOpen={showDetails}
         onClose={() => setShowDetails(false)}
         request={selectedRequest}
-        onApprove={(id) => updateFundRequestStatus(id, 'Approved')}
-        onReject={(id) => updateFundRequestStatus(id, 'Rejected')}
+        onApprove={async (id) => {
+          try {
+            const token = localStorage.getItem('token')
+            const headers = { 'Content-Type': 'application/json' }
+            if (token) headers.Authorization = `Bearer ${token}`
+            const res = await fetch(`http://localhost:5000/api/requests/${id}/approve`, { method: 'PUT', headers })
+            const json = await res.json()
+            if (!res.ok) throw new Error(json.message || 'Failed to approve')
+            updateFundRequestStatus(id, 'Approved')
+            setShowDetails(false)
+          } catch (err) {
+            console.error('Approve from modal failed', err)
+          }
+        }}
+        onReject={async (id) => {
+          try {
+            const token = localStorage.getItem('token')
+            const headers = { 'Content-Type': 'application/json' }
+            if (token) headers.Authorization = `Bearer ${token}`
+            const res = await fetch(`http://localhost:5000/api/requests/${id}/reject`, { method: 'PUT', headers, body: JSON.stringify({ rejectionReason: 'Rejected by NGO' }) })
+            const json = await res.json()
+            if (!res.ok) throw new Error(json.message || 'Failed to reject')
+            updateFundRequestStatus(id, 'Rejected')
+            setShowDetails(false)
+          } catch (err) {
+            console.error('Reject from modal failed', err)
+          }
+        }}
         onMessageHospital={handleMessageHospital}
       />
 

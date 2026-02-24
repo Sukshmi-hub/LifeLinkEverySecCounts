@@ -128,6 +128,11 @@ export const NotificationProvider = ({ children }) => {
           patientName: r.patientName,
           description: r.message || r.details || '' ,
           document: r.files?.medicalReports?.[0] || null,
+          // include hospital info if backend populated it
+          hospitalId: r.hospitalId || null,
+          hospitalName: (r.hospitalId && (r.hospitalId.name || r.hospitalId.organizationName)) || r.hospitalName || null,
+          hospitalContact: (r.hospitalId && (r.hospitalId.phone || r.hospitalId.contact_phone)) || null,
+          hospitalAddress: (r.hospitalId && (r.hospitalId.address || r.hospitalId.location?.full_address)) || r.hospitalAddress || null,
         }))
         setFundRequests(mapped)
       }
@@ -155,6 +160,10 @@ export const NotificationProvider = ({ children }) => {
           patientName: r.patientName,
           description: r.message || r.details || '' ,
           document: r.files?.medicalReports?.[0] || null,
+          hospitalId: r.hospitalId || null,
+          hospitalName: (r.hospitalId && (r.hospitalId.name || r.hospitalId.organizationName)) || r.hospitalName || null,
+          hospitalContact: (r.hospitalId && (r.hospitalId.phone || r.hospitalId.contact_phone)) || null,
+          hospitalAddress: (r.hospitalId && (r.hospitalId.address || r.hospitalId.location?.full_address)) || r.hospitalAddress || null,
         }))
         setFundRequests(mapped)
       }

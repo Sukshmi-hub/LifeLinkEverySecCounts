@@ -224,7 +224,11 @@ router.get('/', optionalAuth, async (req, res) => {
 
     // If hospitalId provided, return requests for that hospital
     if (queryHospitalId) {
-      const list = await Request.find({ hospitalId: queryHospitalId }).sort({ createdAt: -1 }).lean()
+      const list = await Request.find({ hospitalId: queryHospitalId })
+        .sort({ createdAt: -1 })
+        .populate('patientId', 'name email phone age blood_type aadhaar_no location emergency_contact')
+        .populate('hospitalId', 'name address phone contact_phone location')
+        .lean()
       return res.json({ success: true, data: list })
     }
 
@@ -235,7 +239,11 @@ router.get('/', optionalAuth, async (req, res) => {
       // Try to query by ngo._id first
       let aja = queryNgoId
       // If not found, attempt to resolve NGO by userId (frontend may pass NGO's account id)
-      let list = await Request.find({ ngoId: aja }).sort({ createdAt: -1 }).lean()
+      let list = await Request.find({ ngoId: aja })
+        .sort({ createdAt: -1 })
+        .populate('patientId', 'name email phone age blood_type aadhaar_no location emergency_contact')
+        .populate('hospitalId', 'name address phone contact_phone location')
+        .lean()
       if ((!list || list.length === 0)) {
         try {
           const ngoDoc = await NGO.findOne({ userId: queryNgoId })
@@ -262,13 +270,21 @@ router.get('/', optionalAuth, async (req, res) => {
     if (!patientIdToQuery) return res.status(400).json({ success: false, message: 'patientId required' })
 
     // First try to find requests directly by patientId (if it is a Patient._id)
-    let list = await Request.find({ patientId: patientIdToQuery }).sort({ createdAt: -1 }).lean()
+    let list = await Request.find({ patientId: patientIdToQuery })
+      .sort({ createdAt: -1 })
+      .populate('patientId', 'name email phone age blood_type aadhaar_no location emergency_contact')
+      .populate('hospitalId', 'name address phone contact_phone location')
+      .lean()
 
     // If no requests found and the provided id looks like an account/user id, try resolving Patient by userId
     if ((!list || list.length === 0) && queryPatientId) {
       const potentialPatient = await Patient.findOne({ userId: queryPatientId })
       if (potentialPatient) {
-        list = await Request.find({ patientId: potentialPatient._id }).sort({ createdAt: -1 }).lean()
+        list = await Request.find({ patientId: potentialPatient._id })
+          .sort({ createdAt: -1 })
+          .populate('patientId', 'name email phone age blood_type aadhaar_no location emergency_contact')
+          .populate('hospitalId', 'name address phone contact_phone location')
+          .lean()
       }
     }
 
@@ -278,6 +294,62 @@ router.get('/', optionalAuth, async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to fetch requests' })
   }
 })
+
+  // Approve a fund request (NGO action)
+  router.put('/:id/approve', authenticate, async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ success: false, message: 'Not authenticated' })
+      if (req.user.role !== 'ngo') return res.status(403).json({ success: false, message: 'Forbidden' })
+
+      const ngo = await NGO.findOne({ userId: req.user._id }) || await NGO.findById(req.user._id)
+      if (!ngo) return res.status(404).json({ success: false, message: 'NGO not found for user' })
+
+      const requestId = req.params.id
+      const reqDoc = await Request.findById(requestId)
+      if (!reqDoc) return res.status(404).json({ success: false, message: 'Request not found' })
+
+      if (String(reqDoc.ngoId) !== String(ngo._id)) return res.status(403).json({ success: false, message: 'Request does not belong to your NGO' })
+
+      reqDoc.status = 'Approved'
+      reqDoc.reviewedBy = req.user._id
+      reqDoc.reviewedAt = new Date()
+      await reqDoc.save()
+
+      return res.status(200).json({ success: true, message: 'Fund request approved', data: reqDoc })
+    } catch (err) {
+      console.error('Approve fund request failed:', err)
+      return res.status(500).json({ success: false, message: 'Server error' })
+    }
+  })
+
+  // Reject a fund request (NGO action)
+  router.put('/:id/reject', authenticate, async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ success: false, message: 'Not authenticated' })
+      if (req.user.role !== 'ngo') return res.status(403).json({ success: false, message: 'Forbidden' })
+
+      const ngo = await NGO.findOne({ userId: req.user._id }) || await NGO.findById(req.user._id)
+      if (!ngo) return res.status(404).json({ success: false, message: 'NGO not found for user' })
+
+      const requestId = req.params.id
+      const { rejectionReason } = req.body
+      const reqDoc = await Request.findById(requestId)
+      if (!reqDoc) return res.status(404).json({ success: false, message: 'Request not found' })
+
+      if (String(reqDoc.ngoId) !== String(ngo._id)) return res.status(403).json({ success: false, message: 'Request does not belong to your NGO' })
+
+      reqDoc.status = 'Rejected'
+      reqDoc.rejectionReason = rejectionReason || 'Rejected by NGO'
+      reqDoc.reviewedBy = req.user._id
+      reqDoc.reviewedAt = new Date()
+      await reqDoc.save()
+
+      return res.status(200).json({ success: true, message: 'Fund request rejected', data: reqDoc })
+    } catch (err) {
+      console.error('Reject fund request failed:', err)
+      return res.status(500).json({ success: false, message: 'Server error' })
+    }
+  })
 
 // Dashboard counts for patient (auth optional, can pass patientId)
 router.get('/dashboard', optionalAuth, async (req, res) => {
