@@ -12,12 +12,28 @@ const PaymentPage = () => {
   const { matchedDonor, organRequests, loadOrganRequests } = useNotifications();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentSummary, setPaymentSummary] = useState(null);
 
   // Ensure we have the latest organ requests (so donor-match status is visible)
   useEffect(() => {
     if (user?.id && loadOrganRequests) {
       loadOrganRequests(user.id);
     }
+    // load payment summary(s) for this patient
+    (async () => {
+      try {
+        if (!user?.id) return;
+        const resp = await fetch(`/api/payments/patient/${encodeURIComponent(user.id)}`);
+        const json = await resp.json().catch(() => ({}));
+        if (resp.ok && Array.isArray(json.data)) {
+          // pick first pending payment if present, else latest
+          const pending = json.data.find(p => String(p.status || '').toLowerCase() === 'pending');
+          setPaymentSummary(pending || (json.data[0] || null));
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
   }, [user?.id, loadOrganRequests]);
 
   // Find request where a donor is already matched for the logged-in user
@@ -60,7 +76,7 @@ const PaymentPage = () => {
         </header>
 
         <div className="p-6">
-          {!matchedDonor && !matchedRequest ? (
+          {!paymentSummary && !matchedDonor && !matchedRequest ? (
             /* No Donor Matched State */
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-16 text-center">
@@ -127,19 +143,19 @@ const PaymentPage = () => {
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Transplant Surgery Fee</span>
-                        <span>₹40,000</span>
+                        <span>₹{(paymentSummary?.transplantSurgeryFee || 0).toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Hospital Charges</span>
-                        <span>₹8,000</span>
+                        <span>₹{(paymentSummary?.hospitalCharges || 0).toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Processing Fee</span>
-                        <span>₹2,000</span>
+                        <span>₹{(paymentSummary?.processingFee || 0).toLocaleString()}</span>
                       </div>
                       <div className="border-t border-border pt-2 mt-2 flex justify-between">
                         <span className="font-semibold">Total Amount</span>
-                        <span className="font-bold text-lg">₹50,000</span>
+                        <span className="font-bold text-lg">₹{(paymentSummary?.totalAmount || 0).toLocaleString()}</span>
                       </div>
                     </div>
                   </div>
@@ -160,14 +176,14 @@ const PaymentPage = () => {
       </main>
 
       {/* Razorpay Integration Modal */}
-      {(matchedDonor || matchedRequest) && (
+      {(paymentSummary || matchedDonor || matchedRequest) && (
         <RazorpayModal
           isOpen={showPaymentModal}
           onClose={() => setShowPaymentModal(false)}
-          donorName={matchedDonor?.name || matchedRequest?.donorName || (matchedRequest?.patientName || '').trim() || 'Anonymous Donor'}
+          donorName={user?.name || matchedDonor?.name || matchedRequest?.donorName || (matchedRequest?.patientName || '').trim() || 'Anonymous Donor'}
           organType={matchedDonor?.organType || matchedRequest?.organType}
           hospitalName={matchedDonor?.hospitalName || matchedRequest?.hospitalName || 'City General Hospital'}
-          amount={50000}
+          amount={paymentSummary?.totalAmount || 50000}
         />
       )}
     </div>

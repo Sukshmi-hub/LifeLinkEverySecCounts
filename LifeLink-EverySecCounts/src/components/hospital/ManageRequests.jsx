@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Check, X, Play, User, Heart, Clock, Eye } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useNotifications } from '@/context/NotificationContext';
 import { formatDistanceToNow } from 'date-fns';
@@ -21,6 +23,10 @@ const ManageRequests = () => {
   const [pendingError, setPendingError] = useState(null);
 
   const [donorRequests, setDonorRequests] = useState([]);
+  const [showSendPaymentModal, setShowSendPaymentModal] = useState(false);
+  const [sendPaymentLoading, setSendPaymentLoading] = useState(false);
+  const [paymentForm, setPaymentForm] = useState({ surgeryFee: 0, hospitalCharges: 0, processingFee: 0 });
+  const [selectedForPayment, setSelectedForPayment] = useState(null);
 
   // Helper to robustly extract a person's name from possible backend shapes
   const getNameFromObject = (obj) => {
@@ -462,10 +468,19 @@ const ManageRequests = () => {
                             </Button>
                           </>
                         )}
-                        {req.status === 'Accepted' && (
-                          <Button size="sm" onClick={() => simulateDonorMatch(req.id, 'Rahul Sharma')}>
-                            <Play className="w-4 h-4 mr-1" /> Match Donor
-                          </Button>
+                        {/* Show Match Donor button for accepted/approved statuses (tolerant to variants/casing) */}
+                        {/(accepted|approved|accept)/i.test(String(req.status || '')) && (
+                          <>
+                            {!req.paymentSent ? (
+                              <Button size="sm" onClick={() => { setSelectedForPayment(req); setPaymentForm({ surgeryFee:0, hospitalCharges:0, processingFee:0 }); setShowSendPaymentModal(true); }}>
+                                <Play className="w-4 h-4 mr-1" /> Match Donor
+                              </Button>
+                            ) : (
+                              <Button size="sm" variant="outline" disabled>
+                                Sent
+                              </Button>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
@@ -646,6 +661,79 @@ const ManageRequests = () => {
             ) : (
               <p className="text-sm text-muted-foreground">No additional details available for this user.</p>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* Send Payment Summary Modal (opened by Match Donor) */}
+      <Dialog open={showSendPaymentModal} onOpenChange={setShowSendPaymentModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send Payment Summary</DialogTitle>
+            <DialogDescription>Enter fees to send payment summary to patient.</DialogDescription>
+          </DialogHeader>
+          <div className="mt-4 space-y-3">
+            <div>
+              <p className="text-xs text-muted-foreground">Patient</p>
+              <p className="font-medium">{selectedForPayment?.patientName || '—'}</p>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Transplant Surgery Fee</label>
+              <Input type="number" min="0" value={paymentForm.surgeryFee} onChange={(e) => setPaymentForm(prev => ({ ...prev, surgeryFee: Number(e.target.value || 0) }))} />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Hospital Charges</label>
+              <Input type="number" min="0" value={paymentForm.hospitalCharges} onChange={(e) => setPaymentForm(prev => ({ ...prev, hospitalCharges: Number(e.target.value || 0) }))} />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Processing Fee</label>
+              <Input type="number" min="0" value={paymentForm.processingFee} onChange={(e) => setPaymentForm(prev => ({ ...prev, processingFee: Number(e.target.value || 0) }))} />
+            </div>
+            <div className="pt-2 border-t border-border">
+              <div className="flex items-center justify-between">
+                <p className="font-semibold">Total Amount</p>
+                <p className="font-bold">₹{(Number(paymentForm.surgeryFee || 0) + Number(paymentForm.hospitalCharges || 0) + Number(paymentForm.processingFee || 0)).toLocaleString()}</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-3">
+              <Button variant="outline" onClick={() => setShowSendPaymentModal(false)}>Cancel</Button>
+              <Button onClick={async () => {
+                if (!selectedForPayment) return;
+                setSendPaymentLoading(true);
+                try {
+                  // construct payload; prefer raw fields if available
+                  const patientId = selectedForPayment.raw?.patientId || selectedForPayment.raw?.patient || selectedForPayment.id;
+                  const hospitalId = selectedForPayment.raw?.hospitalId || selectedForPayment.raw?.hospital || localStorage.getItem('hospitalId') || null;
+                  const body = {
+                    hospitalId,
+                    patientId,
+                    surgeryFee: Number(paymentForm.surgeryFee || 0),
+                    hospitalCharges: Number(paymentForm.hospitalCharges || 0),
+                    processingFee: Number(paymentForm.processingFee || 0),
+                  };
+                  const token = localStorage.getItem('token');
+                  const resp = await fetch('/api/payments/create-summary', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                    body: JSON.stringify(body),
+                  });
+                  const json = await resp.json().catch(() => ({}));
+                  if (!resp.ok) throw new Error(json.message || 'Failed to send payment summary');
+                  const saved = json.data;
+                  // mark locally: attach payment info to the request so UI shows 'Sent'
+                  setHospitalOrganRequests(prev => prev.map(r => r.id === selectedForPayment.id ? { ...r, paymentSent: true, paymentId: saved._id, paymentSummary: saved } : r));
+                  // mark matched locally & notify
+                  simulateDonorMatch(selectedForPayment.id, 'Matched Donor');
+                  addNotification({ type: 'success', title: 'Payment Summary Sent', message: 'Payment summary sent to patient.', targetRole: 'patient' });
+                  toast.success('Payment summary sent');
+                  setShowSendPaymentModal(false);
+                } catch (err) {
+                  console.error('Send payment error', err);
+                  toast.error(err.message || 'Failed to send summary');
+                } finally {
+                  setSendPaymentLoading(false);
+                }
+              }} className="bg-success hover:bg-success/90 text-success-foreground">Send to Patient</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
