@@ -25,6 +25,11 @@ export const getMyHospitalProfile = async (req, res) => {
       phone: hospital.phone || user.phone || null,
       hospitalType: hospital.hospital_type || '',
       hospitalContactPhone: hospital.hospitalContactPhone || '',
+      // Include payment config fields (server-only)
+      razorpayLinkedAccountId: hospital.razorpayLinkedAccountId || hospital.razorpayAccountId || '',
+      bankAccountHolderName: hospital.bankAccountHolderName || '',
+      bankName: hospital.bankName || '',
+      upiId: hospital.upiId || '',
       registration_number: hospital.registration_number || null,
       hospitalFullAddress: hospital.hospitalFullAddress || '',
       working_hours: hospital.working_hours || null,
@@ -51,6 +56,9 @@ export const updateMyHospitalProfile = async (req, res) => {
 
     const { organizationName, phone, hospitalType, hospitalContactPhone, hospitalFullAddress, registration_number, working_hours, location = {} } = req.body
 
+    // Payment config fields (optional)
+    const { razorpayLinkedAccountId, bankAccountHolderName, bankName, upiId } = req.body
+
     // Validation
     if (phone !== undefined && phone !== null && !isDigits(phone, 10)) return res.status(400).json({ success: false, message: 'Phone must be exactly 10 digits' })
     if (hospitalContactPhone !== undefined && hospitalContactPhone !== null && !isDigits(hospitalContactPhone, 10)) return res.status(400).json({ success: false, message: 'Hospital contact phone must be exactly 10 digits' })
@@ -73,6 +81,12 @@ export const updateMyHospitalProfile = async (req, res) => {
         if (location[key] !== undefined) update.location[key] = location[key]
       }
     }
+
+    // Save payment config fields if provided
+    if (razorpayLinkedAccountId !== undefined) update.razorpayLinkedAccountId = razorpayLinkedAccountId
+    if (bankAccountHolderName !== undefined) update.bankAccountHolderName = bankAccountHolderName
+    if (bankName !== undefined) update.bankName = bankName
+    if (upiId !== undefined) update.upiId = upiId
 
     await Hospital.findOneAndUpdate({ userId }, update, { new: true })
 

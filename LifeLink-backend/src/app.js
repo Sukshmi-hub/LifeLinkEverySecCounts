@@ -11,6 +11,7 @@ import donorRoutes from './routes/donorRoutes.js'
 import hospitalRoutes from './routes/hospitalRoutes.js'
 import requestRoutes from './routes/requestRoutes.js'
 import debugRoutes from './routes/debugRoutes.js'
+import debugEnvRoutes from './routes/debugEnv.js'
 import userRoutes from './routes/userRoutes.js'
 import profileRoutes from './routes/profile.js'
 import hospitalRequestRoutes from './routes/hospitalRequestRoutes.js';
@@ -108,6 +109,7 @@ app.use('/api/donors', donorRoutes)
 app.use('/api/hospitals', hospitalRoutes)
 app.use('/api/requests', requestRoutes)
 app.use('/api/user', userRoutes)
+app.use('/api/debug/env', debugEnvRoutes)
 
 // Debug routes (development only)
 if (process.env.NODE_ENV !== 'production') {

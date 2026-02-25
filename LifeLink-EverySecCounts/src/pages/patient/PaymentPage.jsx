@@ -184,6 +184,8 @@ const PaymentPage = () => {
           organType={matchedDonor?.organType || matchedRequest?.organType}
           hospitalName={matchedDonor?.hospitalName || matchedRequest?.hospitalName || 'City General Hospital'}
           amount={paymentSummary?.totalAmount || 50000}
+          hospitalId={matchedRequest?.hospitalId || paymentSummary?.hospitalId || null}
+          requestId={matchedRequest?.id || paymentSummary?.requestId || null}
         />
       )}
     </div>

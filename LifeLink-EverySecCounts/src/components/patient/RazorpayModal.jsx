@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,43 +19,89 @@ const RazorpayModal = ({
   donorName, 
   organType, 
   hospitalName,
-  amount = 50000 
+  amount = 50000,
+  hospitalId = null,
+  requestId = null,
 }) => {
-  const [paymentMethod, setPaymentMethod] = useState('upi');
-  const [upiId, setUpiId] = useState('');
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-  const [selectedBank, setSelectedBank] = useState('');
+  const { user } = useAuth();
+  // Force UPI-only flow; we don't collect bank details from hospital or patient
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  const banks = [
-    'State Bank of India',
-    'HDFC Bank',
-    'ICICI Bank',
-    'Axis Bank',
-    'Punjab National Bank',
-    'Bank of Baroda',
-  ];
+  // Load external Razorpay checkout script
+  const loadRazorpayScript = () => new Promise((resolve, reject) => {
+    if (window.Razorpay) return resolve(true)
+    const script = document.createElement('script')
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    script.onload = () => resolve(true)
+    script.onerror = () => reject(new Error('Razorpay SDK failed to load'))
+    document.body.appendChild(script)
+  })
 
   const handlePayment = async () => {
-    setIsProcessing(true);
+    // Create order on backend, then open Razorpay Checkout (UPI-only)
+    setIsProcessing(true)
+    try {
+      if (!hospitalId) throw new Error('Hospital information missing')
+      if (!user || !user.id) throw new Error('Patient not authenticated')
 
-    // Simulate payment processing
-    await new Promise(resolve => setTimeout(resolve, 2500));
+      const resp = await fetch('/api/payments/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, hospitalId, patientId: user.id, patientName: user.name || '', requestId })
+      })
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.message || 'Failed to create order')
+      const { orderId, amount: orderAmount, currency, key_id } = json.data
 
-    setIsProcessing(false);
-    setIsSuccess(true);
-  };
+      await loadRazorpayScript()
+
+      const options = {
+        key: key_id, // public key from server
+        amount: orderAmount, // in paise
+        currency: currency || 'INR',
+        name: 'LifeLink - Emergency Pay',
+        description: 'Hospital Payment',
+        order_id: orderId,
+        prefill: {
+          name: user.name || '',
+          email: user.email || '',
+          contact: user.phone || ''
+        },
+        // Force UPI only (disable other methods)
+        method: { upi: true, card: false, netbanking: false, wallet: false, emi: false },
+        // Theme and branding
+        theme: { color: '#2c3e50' },
+        modal: { escape: false },
+        handler: async function (response) {
+          // response contains razorpay_order_id, razorpay_payment_id, razorpay_signature
+          try {
+            const verifyResp = await fetch('/api/payments/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(response)
+            })
+            const verifyJson = await verifyResp.json()
+            if (!verifyResp.ok) throw new Error(verifyJson.message || 'Verification failed')
+            setIsSuccess(true)
+          } catch (vErr) {
+            console.error('Verification error', vErr)
+            alert('Payment verification failed. Please contact support.')
+          }
+        }
+      }
+
+      const rzp = new window.Razorpay(options)
+      rzp.open()
+    } catch (err) {
+      console.error('Payment initiation failed', err)
+      alert(err.message || 'Failed to start payment')
+    } finally {
+      setIsProcessing(false)
+    }
+  }
 
   const resetAndClose = () => {
-    setPaymentMethod('upi');
-    setUpiId('');
-    setCardNumber('');
-    setCardExpiry('');
-    setCardCvv('');
-    setSelectedBank('');
     setIsSuccess(false);
     onClose();
   };
@@ -76,7 +123,7 @@ const RazorpayModal = ({
               <p className="text-sm"><span className="text-muted-foreground">Donor:</span> <span className="font-medium">{donorName}</span></p>
               <p className="text-sm"><span className="text-muted-foreground">Organ:</span> <span className="font-medium">{organType}</span></p>
               <p className="text-sm"><span className="text-muted-foreground">Hospital:</span> <span className="font-medium">{hospitalName}</span></p>
-              <p className="text-sm"><span className="text-muted-foreground">Transaction ID:</span> <span className="font-medium">TXN{Date.now()}</span></p>
+                    <p className="text-sm"><span className="text-muted-foreground">Transaction recorded</span></p>
             </div>
             <Button onClick={resetAndClose} className="mt-6 w-full">
               Done
@@ -111,128 +158,6 @@ const RazorpayModal = ({
                 </div>
               </div>
 
-              {/* Payment Method Selection */}
-              <div className="space-y-3">
-                <Label>Select Payment Method</Label>
-                <div className="grid grid-cols-3 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('upi')}
-                    className={cn(
-                      "flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all",
-                      paymentMethod === 'upi' 
-                        ? "border-primary bg-primary/5" 
-                        : "border-border hover:border-muted-foreground"
-                    )}
-                  >
-                    <Smartphone className="w-6 h-6" />
-                    <span className="text-sm font-medium">UPI</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('card')}
-                    className={cn(
-                      "flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all",
-                      paymentMethod === 'card' 
-                        ? "border-primary bg-primary/5" 
-                        : "border-border hover:border-muted-foreground"
-                    )}
-                  >
-                    <CreditCard className="w-6 h-6" />
-                    <span className="text-sm font-medium">Card</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('netbanking')}
-                    className={cn(
-                      "flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all",
-                      paymentMethod === 'netbanking' 
-                        ? "border-primary bg-primary/5" 
-                        : "border-border hover:border-muted-foreground"
-                    )}
-                  >
-                    <Building2 className="w-6 h-6" />
-                    <span className="text-sm font-medium">Net Banking</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Payment Form */}
-              <div className="space-y-4">
-                {paymentMethod === 'upi' && (
-                  <div className="space-y-2">
-                    <Label htmlFor="upiId">UPI ID</Label>
-                    <Input
-                      id="upiId"
-                      placeholder="example@upi"
-                      value={upiId}
-                      onChange={(e) => setUpiId(e.target.value)}
-                    />
-                  </div>
-                )}
-
-                {paymentMethod === 'card' && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="cardNumber">Card Number</Label>
-                      <Input
-                        id="cardNumber"
-                        placeholder="1234 5678 9012 3456"
-                        value={cardNumber}
-                        onChange={(e) => setCardNumber(e.target.value)}
-                        maxLength={19}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="expiry">Expiry Date</Label>
-                        <Input
-                          id="expiry"
-                          placeholder="MM/YY"
-                          value={cardExpiry}
-                          onChange={(e) => setCardExpiry(e.target.value)}
-                          maxLength={5}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="cvv">CVV</Label>
-                        <Input
-                          id="cvv"
-                          type="password"
-                          placeholder="***"
-                          value={cardCvv}
-                          onChange={(e) => setCardCvv(e.target.value)}
-                          maxLength={3}
-                        />
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {paymentMethod === 'netbanking' && (
-                  <div className="space-y-2">
-                    <Label>Select Bank</Label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {banks.map(bank => (
-                        <button
-                          key={bank}
-                          type="button"
-                          onClick={() => setSelectedBank(bank)}
-                          className={cn(
-                            "p-3 text-sm rounded-lg border transition-all text-left",
-                            selectedBank === bank
-                              ? "border-primary bg-primary/5 font-medium"
-                              : "border-border hover:border-muted-foreground"
-                          )}
-                        >
-                          {bank}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
               <Button 
                 onClick={handlePayment} 
                 disabled={isProcessing}
@@ -249,7 +174,7 @@ const RazorpayModal = ({
               </Button>
 
               <p className="text-xs text-muted-foreground text-center">
-                🔒 Your payment is secure and encrypted
+                🔒 Payments handled securely by Razorpay. Hospital bank details are not shared with patients.
               </p>
             </div>
           </>

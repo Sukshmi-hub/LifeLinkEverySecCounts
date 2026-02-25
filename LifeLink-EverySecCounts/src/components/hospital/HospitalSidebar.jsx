@@ -6,6 +6,7 @@ import {
   AlertTriangle, 
   MessageCircle, 
   Bell, 
+  CreditCard,
   User, 
   LogOut,
   Settings
@@ -23,6 +24,7 @@ const HospitalSidebar = ({ activeTab, setActiveTab, hasRedAlerts }) => {
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'payments', label: 'Payments', icon: CreditCard },
     { id: 'requests', label: 'Manage Requests', icon: FileText },
     { id: 'red-alerts', label: 'Red Alerts', icon: AlertTriangle, hasAlert: hasRedAlerts },
     { id: 'messages', label: 'Messages', icon: MessageCircle },

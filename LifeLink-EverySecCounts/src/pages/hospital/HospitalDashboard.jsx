@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import HospitalSidebar from '@/components/hospital/HospitalSidebar';
 import HospitalDashboardOverview from '@/components/hospital/HospitalDashboardOverview';
+import HospitalPayments from '@/components/hospital/HospitalPayments';
 import ManageRequests from '@/components/hospital/ManageRequests';
 import RedAlerts from '@/components/hospital/RedAlerts';
 import HospitalMessages from '@/components/hospital/HospitalMessages';
@@ -51,6 +52,8 @@ const HospitalDashboard = () => {
 
   const renderContent = () => {
     switch (activeTab) {
+      case 'payments':
+        return <HospitalPayments />;
       case 'dashboard':
         return (
           <HospitalDashboardOverview 

@@ -36,6 +36,13 @@ const hospitalSchema = new mongoose.Schema(
       type: String,
       default: ''
     },
+    // Razorpay linked account id for transfers (store only the linked account id, not bank details)
+    razorpayAccountId: { type: String, default: '' },
+    // New payment-related contact fields (stored on server only)
+    razorpayLinkedAccountId: { type: String, default: '' },
+    bankAccountHolderName: { type: String, default: '' },
+    bankName: { type: String, default: '' },
+    upiId: { type: String, default: '' },
     address: {
       type: String,
       default: ''
