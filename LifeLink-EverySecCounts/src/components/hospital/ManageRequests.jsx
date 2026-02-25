@@ -142,6 +142,9 @@ const ManageRequests = () => {
             status: r.status,
             createdAt: r.createdAt,
             details: r.message || r.details || '',
+            // include persisted payment info so UI shows 'Sent' after refresh
+            paymentSent: Boolean(r.paymentSent),
+            paymentId: r.paymentId || null,
             raw: r,
           })));
         }
@@ -706,6 +709,7 @@ const ManageRequests = () => {
                   const body = {
                     hospitalId,
                     patientId,
+                    requestId: selectedForPayment?.id || selectedForPayment?._id || null,
                     surgeryFee: Number(paymentForm.surgeryFee || 0),
                     hospitalCharges: Number(paymentForm.hospitalCharges || 0),
                     processingFee: Number(paymentForm.processingFee || 0),

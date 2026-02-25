@@ -143,7 +143,7 @@ const PaymentPage = () => {
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Transplant Surgery Fee</span>
-                        <span>₹{(paymentSummary?.transplantSurgeryFee || 0).toLocaleString()}</span>
+                        <span>₹{(paymentSummary?.surgeryFee || 0).toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Hospital Charges</span>

@@ -68,6 +68,9 @@ const RequestSchema = new Schema({
   amount: { type: Number, default: 0 },
   ngoId: { type: Schema.Types.ObjectId, ref: 'NGO', default: null },
   ngoName: { type: String, default: '' },
+  // Payment-related fields
+  paymentSent: { type: Boolean, default: false },
+  paymentId: { type: Schema.Types.ObjectId, ref: 'Payment', required: false, default: null },
 }, { timestamps: true });
 
 export default mongoose.models.Request || mongoose.model('Request', RequestSchema);
