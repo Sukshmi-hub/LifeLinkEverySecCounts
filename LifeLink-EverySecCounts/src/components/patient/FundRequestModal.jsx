@@ -37,9 +37,16 @@ const FundRequestModal = ({ isOpen, onClose }) => {
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [description, setDescription] = useState('');
+  const [transplantFee, setTransplantFee] = useState('');
+  const [hospitalChargesFee, setHospitalChargesFee] = useState('');
+  const [processingFee, setProcessingFee] = useState('');
   const [document, setDocument] = useState(null);
+  const [prescription, setPrescription] = useState(null);
+  const [rationCard, setRationCard] = useState(null);
   const [ngos, setNgos] = useState([]);
   const [selectedNgo, setSelectedNgo] = useState('');
+  const [hospitals, setHospitals] = useState([]);
+  const [selectedHospital, setSelectedHospital] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
@@ -49,6 +56,18 @@ const FundRequestModal = ({ isOpen, onClose }) => {
     }
   };
 
+  const handlePrescriptionChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setPrescription(e.target.files[0]);
+    }
+  }
+
+  const handleRationChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setRationCard(e.target.files[0]);
+    }
+  }
+
   useEffect(() => {
     // load NGOs from backend
     (async () => {
@@ -57,15 +76,31 @@ const FundRequestModal = ({ isOpen, onClose }) => {
         const json = await res.json();
         if (res.ok && Array.isArray(json.data)) {
           // accept items in shape { id, name } or { _id, name }
-          const mapped = json.data.map(x => ({ id: String(x.id || x._id || x._id), name: x.name || x.organizationName || x.name }));
-          setNgos(mapped);
-          return;
+              const mapped = json.data.map(x => ({ id: String(x.id || x._id || x._id), name: x.name || x.organizationName || x.name }));
+              setNgos(mapped);
+              return;
         }
         // no NGOs returned -> set empty list so UI shows "No NGOs available"
         setNgos([]);
       } catch (err) {
         console.error('Failed to load NGOs', err);
         setNgos([]);
+      }
+    })();
+    // load hospitals for patient to choose from
+    (async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/hospitals')
+        const json = await res.json()
+        if (res.ok && Array.isArray(json.data)) {
+          const mapped = json.data.map(x => ({ id: String(x.id || x._id || x._id), name: x.name || x.hospitalName || x.name, address: x.address || '' }))
+          setHospitals(mapped)
+          return
+        }
+        setHospitals([])
+      } catch (e) {
+        console.error('Failed to load hospitals', e)
+        setHospitals([])
       }
     })();
   }, []);
@@ -101,6 +136,10 @@ const FundRequestModal = ({ isOpen, onClose }) => {
       toast.error('Please select an NGO to send this request to');
       return;
     }
+    if (!selectedHospital || selectedHospital === '__no_hospitals__') {
+      toast.error('Please select your hospital');
+      return;
+    }
 
     if (!document) {
       toast.error('Please upload your medical report (PDF/JPG/PNG)');
@@ -113,6 +152,7 @@ const FundRequestModal = ({ isOpen, onClose }) => {
     await new Promise(resolve => setTimeout(resolve, 800));
 
     const ngoObj = ngos.find(n => String(n.id) === String(selectedNgo));
+    const hospObj = hospitals.find(h => String(h.id) === String(selectedHospital));
 
     addFundRequest({
       patientId: user?.id || 'patient_1',
@@ -122,7 +162,15 @@ const FundRequestModal = ({ isOpen, onClose }) => {
       description,
       ngoId: ngoObj?.id || selectedNgo,
       ngoName: ngoObj?.name || 'Selected NGO',
+      hospitalId: hospObj?.id || selectedHospital,
+      hospitalName: hospObj?.name || hospObj?.name || 'Selected Hospital',
+      hospitalAddress: hospObj?.address || '',
       document,
+      prescription,
+      rationCard,
+      transplantFee: transplantFee ? Number(transplantFee) : 0,
+      hospitalCharges: hospitalChargesFee ? Number(hospitalChargesFee) : 0,
+      processingFee: processingFee ? Number(processingFee) : 0,
     });
 
     setIsSubmitting(false);
@@ -134,6 +182,8 @@ const FundRequestModal = ({ isOpen, onClose }) => {
       setReason('');
       setDescription('');
       setDocument(null);
+      setPrescription(null);
+      setRationCard(null);
       setIsSuccess(false);
       onClose();
     }, 2000);
@@ -143,7 +193,7 @@ const FundRequestModal = ({ isOpen, onClose }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-w-lg sm:max-w-lg md:max-w-xl lg:max-w-2xl max-h-[90vh] overflow-y-auto">
         {isSuccess ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <div className="w-16 h-16 rounded-full bg-success/20 flex items-center justify-center mb-4">
@@ -187,6 +237,37 @@ const FundRequestModal = ({ isOpen, onClose }) => {
                       <SelectItem key={r} value={r}>
                         {r}
                       </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="transplantFee">Transplant Surgery Fee</Label>
+                  <Input id="transplantFee" type="number" min="0" placeholder="0" value={transplantFee} onChange={e => setTransplantFee(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="hospitalCharges">Hospital Charges</Label>
+                  <Input id="hospitalCharges" type="number" min="0" placeholder="0" value={hospitalChargesFee} onChange={e => setHospitalChargesFee(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="processingFee">Processing Fee</Label>
+                  <Input id="processingFee" type="number" min="0" placeholder="0" value={processingFee} onChange={e => setProcessingFee(e.target.value)} />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="hospital">Select Hospital *</Label>
+                <Select value={selectedHospital} onValueChange={setSelectedHospital}>
+                  <SelectTrigger id="hospital" className="bg-background">
+                    <SelectValue placeholder="Choose hospital" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover">
+                    {hospitals.length === 0 ? (
+                      <SelectItem value="__no_hospitals__" disabled>No hospitals available</SelectItem>
+                    ) : hospitals.map(h => (
+                      <SelectItem key={h.id} value={String(h.id)}>{h.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -252,8 +333,70 @@ const FundRequestModal = ({ isOpen, onClose }) => {
                   </div>
                 </div>
               </div>
+              
+                <div className="space-y-2">
+                  <Label>Prescription (Optional)</Label>
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={handlePrescriptionChange}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                    />
+                    <div className="flex items-center gap-3 p-4 border-2 border-dashed border-border rounded-lg hover:border-primary/50 transition-colors">
+                      {prescription ? (
+                        <>
+                          <FileText className="w-8 h-8 text-primary" />
+                          <div>
+                            <p className="font-medium text-foreground">{prescription.name}</p>
+                            <p className="text-sm text-muted-foreground">{(prescription.size / 1024).toFixed(1)} KB</p>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-8 h-8 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium text-foreground">Click to upload prescription</p>
+                            <p className="text-sm text-muted-foreground">PDF, JPG, PNG accepted</p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
 
-              <div className="flex gap-3 pt-4">
+                <div className="space-y-2">
+                  <Label>Ration Card (Optional)</Label>
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={handleRationChange}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                    />
+                    <div className="flex items-center gap-3 p-4 border-2 border-dashed border-border rounded-lg hover:border-primary/50 transition-colors">
+                      {rationCard ? (
+                        <>
+                          <FileText className="w-8 h-8 text-primary" />
+                          <div>
+                            <p className="font-medium text-foreground">{rationCard.name}</p>
+                            <p className="text-sm text-muted-foreground">{(rationCard.size / 1024).toFixed(1)} KB</p>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-8 h-8 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium text-foreground">Click to upload ration card</p>
+                            <p className="text-sm text-muted-foreground">PDF, JPG, PNG accepted</p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-4">
                 <Button type="button" variant="outline" onClick={onClose} className="flex-1">
                   Cancel
                 </Button>

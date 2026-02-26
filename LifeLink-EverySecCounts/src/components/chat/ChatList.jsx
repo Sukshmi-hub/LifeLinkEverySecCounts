@@ -24,7 +24,7 @@ export default function ChatList({ rooms = [], activeRoomId, onSelect, messages 
       {rooms.length === 0 && <div className="text-sm text-muted-foreground">No conversations</div>}
       <ul>
         {rooms.map(r => (
-          <li key={r.roomId} className={`p-3 border-b hover:bg-gray-50 cursor-pointer ${activeRoomId === r.roomId ? 'bg-gray-100' : ''}`} onClick={() => onSelect(r.roomId)}>
+          <li key={r.roomId} className={`p-3 border-b cursor-pointer transition-colors ${activeRoomId === r.roomId ? 'bg-destructive/10' : 'hover:bg-destructive/5'}`} onClick={() => onSelect(r.roomId)}>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                 {/* show person icon for hospital users (they chat with patients) */}
@@ -37,9 +37,9 @@ export default function ChatList({ rooms = [], activeRoomId, onSelect, messages 
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                {/* For hospital users show patient name as primary */}
-                <div className="font-medium truncate">{user?.role === 'hospital' ? (r.subtitle || r.title || r.roomId) : (r.title || r.roomId)}</div>
-                {user?.role === 'hospital' ? (
+                {/* For hospital and ngo users show patient name (subtitle) as primary */}
+                <div className="font-medium truncate">{(user?.role === 'hospital' || user?.role === 'ngo') ? (r.subtitle || r.title || r.roomId) : (r.title || r.roomId)}</div>
+                {(user?.role === 'hospital' || user?.role === 'ngo') ? (
                   <div className="text-xs text-muted-foreground truncate">{r.title || ''}</div>
                 ) : (
                   r.subtitle && <div className="text-xs text-muted-foreground truncate">{r.subtitle}</div>
@@ -50,7 +50,7 @@ export default function ChatList({ rooms = [], activeRoomId, onSelect, messages 
                 const unreadFromProp = typeof r.unreadCount === 'number' ? r.unreadCount : null
                 const computedUnread = messages ? messages.filter(m => m && String(m.roomId) === String(r.roomId) && !m.isRead && !isMineMessage(m)).length : 0
                 const unread = unreadFromProp !== null ? unreadFromProp : computedUnread
-                return unread > 0 ? <div className="text-xs bg-red-600 text-white px-2 rounded-full">{unread}</div> : null
+                return unread > 0 ? <div className="text-xs bg-destructive text-destructive-foreground px-2 rounded-full">{unread}</div> : null
               })()}
             </div>
           </li>

@@ -29,7 +29,7 @@ export default function NgoMessages() {
 
   return (
     <div className="flex h-full">
-      <ChatList rooms={rooms} activeRoomId={state.activeRoomId} onSelect={handleSelect} />
+      <ChatList rooms={rooms} activeRoomId={state.activeRoomId} onSelect={handleSelect} messages={state.messages} />
       <ChatWindow roomId={state.activeRoomId} chat={state} onSend={sendMessage} />
     </div>
   )

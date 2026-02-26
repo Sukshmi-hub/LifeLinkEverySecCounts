@@ -326,10 +326,11 @@ function ChatSystem({ className = "" }) {
                   placeholder="Type a message..."
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  className="flex-1"
+                  className="flex-1 rounded-full bg-white px-4 py-3 h-11 placeholder:text-muted-foreground outline-none border-2 border-destructive/60"
                 />
-                <Button type="submit" size="icon">
+                <Button type="submit" className="ml-3 flex items-center gap-2 bg-destructive text-white px-4 py-2 rounded-md shadow-sm">
                   <Send className="h-4 w-4" />
+                  <span>Send</span>
                 </Button>
               </form>
             </div>

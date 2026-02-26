@@ -268,8 +268,22 @@ const FundRequestDetails = ({
       address: (h && (h.address || h.location?.full_address)) || request.hospitalAddress || '—',
     };
   }, [request, fetchedHospital]);
-  const amountBreakup = getAmountBreakup(request.amount, request.reason || request.description || request.message || '');
-  const totalAmount = amountBreakup.reduce((sum, item) => sum + item.amount, 0);
+  // Prefer server-provided breakdown when available
+  const amountBreakup = useMemo(() => {
+    try {
+      if (request.breakdown) {
+        const b = request.breakdown;
+        // normalize into table rows
+        return [
+          { category: 'Transplant Surgery Fee', amount: Number(b.transplantFee || 0) },
+          { category: 'Hospital Charges', amount: Number(b.hospitalCharges || 0) },
+          { category: 'Processing Fee', amount: Number(b.processingFee || 0) },
+        ];
+      }
+    } catch (e) {}
+    return getAmountBreakup(request.amount, request.reason || request.description || request.message || '');
+  }, [request]);
+  const totalAmount = amountBreakup.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const [isRzpOpen, setIsRzpOpen] = useState(false);
 
   const hospitalDbId = useMemo(() => {
@@ -381,33 +395,47 @@ const FundRequestDetails = ({
               </CardTitle>
             </CardHeader>
             <CardContent>
-                    <div className="bg-muted/50 rounded-lg p-4 border border-border">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                      <FileText className="w-6 h-6 text-primary" />
-                    </div>
-                    <div>
-                      {(() => {
-                        // prefer explicit document path from mapped request, else inspect files tree
-                        const doc = request.document || request.files?.medicalReports?.[0] || (Array.isArray(request.medicalReports) && request.medicalReports[0]) || null;
-                        const displayName = doc ? (doc.split('/').pop() || doc) : (request.documentName || (`Medical_Report_${(patient.name || 'report').replace(/\s+/g, '_')}.pdf`));
-                        const uploadedOn = request.createdAt ? new Date(request.createdAt).toLocaleDateString() : '—';
-                        const href = doc ? (doc.startsWith('/') ? `http://localhost:5000${doc}` : doc) : null;
-                        return (
-                          <>
-                            {href ? (
-                              <a href={href} target="_blank" rel="noreferrer" className="font-medium text-primary">{displayName}</a>
-                            ) : (
-                              <p className="font-medium">{displayName}</p>
-                            )}
-                            <p className="text-xs text-muted-foreground">Uploaded on {uploadedOn}</p>
-                          </>
-                        )
-                      })()}
-                    </div>
-                  </div>
-                </div>
+              <div className="space-y-3">
+                {(() => {
+                  const files = [];
+                  // collect medical report(s)
+                  if (request.document) files.push({ key: 'Medical Report', path: request.document });
+                  if (request.files?.medicalReports && Array.isArray(request.files.medicalReports)) {
+                    request.files.medicalReports.forEach(p => files.push({ key: 'Medical Report', path: p }));
+                  }
+                  // prescription
+                  if (request.prescription) files.push({ key: 'Prescription', path: request.prescription });
+                  if (request.files?.prescription) files.push({ key: 'Prescription', path: request.files.prescription });
+                  // ration card
+                  if (request.rationCard) files.push({ key: 'Ration Card', path: request.rationCard });
+                  if (request.files?.rationCard) files.push({ key: 'Ration Card', path: request.files.rationCard });
+
+                  if (files.length === 0) {
+                    return <p className="text-sm text-muted-foreground">No documents uploaded.</p>
+                  }
+
+                  return files.map((f, i) => {
+                    const doc = f.path;
+                    const displayName = typeof doc === 'string' ? (doc.split('/').pop() || doc) : (doc.name || String(doc));
+                    const uploadedOn = request.createdAt ? new Date(request.createdAt).toLocaleDateString() : '—';
+                    const href = typeof doc === 'string' ? (doc.startsWith('/') ? `http://localhost:5000${doc}` : doc) : null;
+                    return (
+                      <div key={`${f.key}_${i}`} className="bg-muted/50 rounded-lg p-3 border border-border flex items-center gap-3">
+                        <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                          <FileText className="w-5 h-5 text-primary" />
+                        </div>
+                        <div className="flex-1">
+                          {href ? (
+                            <a href={href} target="_blank" rel="noreferrer" className="font-medium text-primary">{f.key}: {displayName}</a>
+                          ) : (
+                            <p className="font-medium">{f.key}: {displayName}</p>
+                          )}
+                          <p className="text-xs text-muted-foreground">Uploaded on {uploadedOn}</p>
+                        </div>
+                      </div>
+                    )
+                  })
+                })()}
               </div>
             </CardContent>
           </Card>
@@ -464,37 +492,30 @@ const FundRequestDetails = ({
           </Card>
         </div>
 
-        {/* Debug panel — visible in modal to inspect runtime shapes */}
-        <div className="mt-4">
-          <Card className="border-l-4 border-l-muted">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2">Debug: request / patient / hospital</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-xs text-muted-foreground mb-2">Copy this JSON and paste into the chat if hospital fields remain empty.</div>
-              <div className="w-full overflow-auto bg-black/5 p-3 rounded text-xs">
-                <pre style={{whiteSpace: 'pre-wrap', wordBreak: 'break-word'}}>
-{JSON.stringify({ requestSample: request, fetchedPatient, fetchedHospital }, null, 2)}
-                </pre>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {/* Debug panel removed in production UI - patient/hospital info shown above */}
 
         <Separator className="my-4" />
 
         {/* Section 6: Action Buttons */}
         <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
-          {(request.status && String(request.status).toLowerCase().startsWith('pending')) ? (
+              {(request.status && String(request.status).toLowerCase().startsWith('pending')) ? (
             <>
-              <Button
-                variant="outline"
-                onClick={() => onMessageHospital(request)}
-                className="gap-2"
-              >
-                <MessageCircle className="w-4 h-4" />
-                Message Hospital
-              </Button>
+              {/* Verify by hospital action: sends request to hospital payment queue */}
+              {request.status === 'SentToHospital' ? (
+                <Button variant="outline" disabled className="gap-2">
+                  <MessageCircle className="w-4 h-4" />
+                  Sent to Hos
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  onClick={() => onMessageHospital(request)}
+                  className="gap-2"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Verify by Hos
+                </Button>
+              )}
               <Button
                 variant="destructive"
                 onClick={() => {
@@ -506,16 +527,7 @@ const FundRequestDetails = ({
                 <XCircle className="w-4 h-4" />
                 Reject Request
               </Button>
-              <Button
-                onClick={() => {
-                  onApprove(request.id);
-                  onClose();
-                }}
-                className="gap-2 bg-success hover:bg-success/90 text-success-foreground"
-              >
-                <CheckCircle className="w-4 h-4" />
-                Approve Funding
-              </Button>
+              {/* Approve button removed from modal per NGO UX - approval remains available from requests list */}
                 {/* Allow patient to pay hospital from this modal when hospital id is known */}
                 {hospitalDbId && (
                   <Button

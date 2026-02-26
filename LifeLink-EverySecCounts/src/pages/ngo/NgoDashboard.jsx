@@ -37,14 +37,34 @@ const NgoDashboard = () => {
   const disbursedAmount = fundRequests.filter(r => String(r.status || '').toLowerCase() === 'approved').reduce((sum, r) => sum + r.amount, 0);
 
   const handleViewDetails = (request) => {
-    setSelectedRequest(request);
+    // If the mapped request includes the original server response as `raw`, prefer that for detail view
+    setSelectedRequest(request.raw || request);
     setShowDetails(true);
   };
 
-  const handleMessageHospital = (request) => {
-    setSelectedRequest(request);
-    setShowDetails(false);
-    setShowHospitalChat(true);
+  const handleMessageHospital = async (request) => {
+    // Try to mark the request as sent to hospital so it appears in hospital payment section,
+    // then open the hospital chat. If API fails, still open chat as fallback.
+    try {
+      const id = request.id || request._id;
+      const token = localStorage.getItem('token');
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(`http://localhost:5000/api/requests/${id}/send-to-hospital`, { method: 'PUT', headers });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || 'Failed to send to hospital');
+      // update local state
+      updateFundRequestStatus(id, 'SentToHospital');
+      setSelectedRequest({ ...(request || {}), status: 'SentToHospital' });
+      setShowDetails(false);
+      setShowHospitalChat(true);
+    } catch (err) {
+      console.error('Send to hospital failed', err);
+      // fallback: still open chat so NGO can message hospital
+      setSelectedRequest(request);
+      setShowDetails(false);
+      setShowHospitalChat(true);
+    }
   };
 
   useEffect(() => {

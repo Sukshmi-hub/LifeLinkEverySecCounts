@@ -21,6 +21,33 @@ const storage = multer.diskStorage({
     cb(null, safe)
   }
 })
+
+// Send request to hospital payment queue (NGO action)
+router.put('/:id/send-to-hospital', authenticate, async (req, res) => {
+  try {
+    if (!req.user) return res.status(401).json({ success: false, message: 'Not authenticated' })
+    if (req.user.role !== 'ngo') return res.status(403).json({ success: false, message: 'Forbidden' })
+
+    const ngo = await NGO.findOne({ userId: req.user._id }) || await NGO.findById(req.user._id)
+    if (!ngo) return res.status(404).json({ success: false, message: 'NGO not found for user' })
+
+    const requestId = req.params.id
+    const reqDoc = await Request.findById(requestId)
+    if (!reqDoc) return res.status(404).json({ success: false, message: 'Request not found' })
+
+    if (String(reqDoc.ngoId) !== String(ngo._id)) return res.status(403).json({ success: false, message: 'Request does not belong to your NGO' })
+
+    // Mark as sent to hospital for payment processing
+    reqDoc.status = 'SentToHospital'
+    reqDoc.sentToHospitalAt = new Date()
+    await reqDoc.save()
+
+    return res.status(200).json({ success: true, message: 'Request sent to hospital', data: reqDoc })
+  } catch (err) {
+    console.error('Send to hospital failed:', err)
+    return res.status(500).json({ success: false, message: 'Server error' })
+  }
+})
 const upload = multer({ storage })
 
 // Create a new organ request (must be authenticated as patient)
@@ -95,10 +122,14 @@ router.post('/', authenticate, upload.fields([
 })
 
 // Create a new fund request (financial assistance sent to an NGO)
-router.post('/fund', authenticate, upload.single('document'), async (req, res) => {
+router.post('/fund', authenticate, upload.fields([
+  { name: 'medicalReports', maxCount: 10 },
+  { name: 'prescription', maxCount: 1 },
+  { name: 'rationCard', maxCount: 1 },
+]), async (req, res) => {
   try {
     const user = req.user
-    console.log('POST /api/requests/fund - incoming', { user: user?._id, headers: req.headers && { authorization: req.headers.authorization }, body: req.body, file: req.file && { originalname: req.file.originalname, filename: req.file.filename } })
+    console.log('POST /api/requests/fund - incoming', { user: user?._id, headers: req.headers && { authorization: req.headers.authorization }, body: req.body, files: req.files })
     const body = req.body || {}
     const amount = parseFloat(body.amount || '0')
     const ngoId = body.ngoId || body.ngo_id || null
@@ -125,12 +156,31 @@ router.post('/fund', authenticate, upload.single('document'), async (req, res) =
       ngoId: ngoId || null,
       ngoName: ngoName || ''
     })
-
-    if (req.file) {
+    // If client provided a JSON breakdown, store it on the document for later display
+    try {
+      if (body.breakdown) {
+        const parsed = typeof body.breakdown === 'string' ? JSON.parse(body.breakdown) : body.breakdown
+        reqDoc.breakdown = {
+          transplantFee: parsed.transplantFee ? Number(parsed.transplantFee) : 0,
+          hospitalCharges: parsed.hospitalCharges ? Number(parsed.hospitalCharges) : 0,
+          processingFee: parsed.processingFee ? Number(parsed.processingFee) : 0,
+        }
+      }
+    } catch (e) {
+      // ignore parse errors
+    }
+    if (req.files) {
       const baseUrl = '/uploads/requests'
       reqDoc.files = reqDoc.files || {}
-      reqDoc.files.medicalReports = reqDoc.files.medicalReports || []
-      reqDoc.files.medicalReports.push(`${baseUrl}/${req.file.filename}`)
+      if (req.files.medicalReports) {
+        reqDoc.files.medicalReports = req.files.medicalReports.map(f => `${baseUrl}/${f.filename}`)
+      }
+      if (req.files.prescription && req.files.prescription[0]) {
+        reqDoc.files.prescription = `${baseUrl}/${req.files.prescription[0].filename}`
+      }
+      if (req.files.rationCard && req.files.rationCard[0]) {
+        reqDoc.files.rationCard = `${baseUrl}/${req.files.rationCard[0].filename}`
+      }
     }
 
     await reqDoc.save()

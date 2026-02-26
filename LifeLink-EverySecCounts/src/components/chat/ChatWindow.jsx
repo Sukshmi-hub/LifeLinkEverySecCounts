@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useAuth } from '@/context/AuthContext'
+import { Send } from 'lucide-react'
 
 export default function ChatWindow({ roomId, chat = { messages: [] }, onSend }) {
   const { user } = useAuth() || {}
@@ -68,11 +69,11 @@ export default function ChatWindow({ roomId, chat = { messages: [] }, onSend }) 
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6 bg-background">
+      <div className="flex-1 overflow-auto p-6 bg-white">
         <div className="max-w-4xl mx-auto">
           {(chat.messages || []).map((m) => (
             <div key={m._id || m.id || Math.random()} className={`mb-4 flex ${isMine(m) ? 'justify-end' : 'justify-start'}`}>
-              <div className={`${isMine(m) ? 'bg-red-600 text-white' : 'bg-white text-foreground'} p-3 rounded-xl shadow-sm max-w-[70%]`}>
+              <div className={`max-w-[70%] rounded-2xl px-4 py-2 shadow-sm ${isMine(m) ? 'bg-primary text-primary-foreground rounded-br-md' : 'bg-muted text-foreground rounded-bl-md'}`}>
                 <div className="text-sm mb-1">{m.content}</div>
                 <div className="text-xs text-muted-foreground mt-1">{m.timestamp ? new Date(m.timestamp).toLocaleString() : ''}</div>
               </div>
@@ -84,11 +85,12 @@ export default function ChatWindow({ roomId, chat = { messages: [] }, onSend }) 
 
       <div className="p-4 border-t bg-white">
         <div className="max-w-4xl mx-auto flex items-center gap-3">
-          <textarea
-            className="flex-1 border rounded-full px-4 py-3 resize-none h-12"
+          <input
+            type="text"
+            className="flex-1 rounded-full bg-white px-4 py-3 h-11 placeholder:text-muted-foreground outline-none border-2 border-destructive/60"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Type a message to the hospital/NGO..."
+            placeholder="Type a message..."
             onKeyDown={async (e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
@@ -100,14 +102,18 @@ export default function ChatWindow({ roomId, chat = { messages: [] }, onSend }) 
             }}
           />
           <button
-            className="px-4 py-2 rounded-full bg-pink-600 text-white"
+            className="ml-3 flex items-center gap-2 bg-destructive text-white px-4 py-2 rounded-md shadow-sm"
             onClick={async () => {
               const t = text.trim()
               if (!t) return
               await handleSend(t)
               setText('')
             }}
-          >Send</button>
+            aria-label="Send message"
+          >
+            <Send className="h-4 w-4" />
+            <span>Send</span>
+          </button>
         </div>
       </div>
     </div>

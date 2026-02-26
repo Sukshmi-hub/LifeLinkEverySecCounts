@@ -209,6 +209,8 @@ export const NotificationProvider = ({ children }) => {
           hospitalName: (r.hospitalId && (r.hospitalId.name || r.hospitalId.organizationName)) || r.hospitalName || null,
           hospitalContact: (r.hospitalId && (r.hospitalId.phone || r.hospitalId.contact_phone)) || null,
           hospitalAddress: (r.hospitalId && (r.hospitalId.address || r.hospitalId.location?.full_address)) || r.hospitalAddress || null,
+          // include original server response so callers can access populated patient/hospital objects
+          raw: r,
         }))
         setFundRequests(mapped)
       }
@@ -225,10 +227,30 @@ export const NotificationProvider = ({ children }) => {
         form.append('amount', String(request.amount || 0))
         form.append('ngoId', request.ngoId || '')
         form.append('ngoName', request.ngoName || '')
+        // include hospital information when provided
+        if (request.hospitalId) form.append('hospitalId', request.hospitalId)
+        if (request.hospitalName) form.append('hospitalName', request.hospitalName)
+        if (request.hospitalAddress) form.append('hospitalAddress', request.hospitalAddress)
         form.append('message', request.description || request.message || '')
+        // attach breakdown as JSON when provided
+        if (request.transplantFee || request.hospitalCharges || request.processingFee) {
+          const breakdown = {
+            transplantFee: Number(request.transplantFee || 0),
+            hospitalCharges: Number(request.hospitalCharges || 0),
+            processingFee: Number(request.processingFee || 0),
+          }
+          form.append('breakdown', JSON.stringify(breakdown))
+        }
         // attach document file if present
+        // attach files if present: medical report, prescription, ration card
         if (request.document && request.document instanceof File) {
-          form.append('document', request.document)
+          form.append('medicalReports', request.document)
+        }
+        if (request.prescription && request.prescription instanceof File) {
+          form.append('prescription', request.prescription)
+        }
+        if (request.rationCard && request.rationCard instanceof File) {
+          form.append('rationCard', request.rationCard)
         }
 
         const res = await fetch('http://localhost:5000/api/requests/fund', {
@@ -248,7 +270,12 @@ export const NotificationProvider = ({ children }) => {
             ngoId: saved.ngoId,
             ngoName: saved.ngoName,
             document: saved.files?.medicalReports?.[0] || null,
+            prescription: saved.files?.prescription || null,
+            rationCard: saved.files?.rationCard || null,
             patientName: saved.patientName
+          ,
+            // include raw server response to enable immediate detail view with populated fields
+            raw: saved,
           }
           setFundRequests(prev => [mapped, ...prev])
 
