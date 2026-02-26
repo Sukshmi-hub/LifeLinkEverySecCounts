@@ -27,6 +27,7 @@ const RazorpayModal = ({
   // Force UPI-only flow; we don't collect bank details from hospital or patient
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [receipt, setReceipt] = useState(null);
 
   // Load external Razorpay checkout script
   const loadRazorpayScript = () => new Promise((resolve, reject) => {
@@ -51,8 +52,19 @@ const RazorpayModal = ({
         body: JSON.stringify({ amount, hospitalId, patientId: user.id, patientName: user.name || '', requestId })
       })
       const json = await resp.json()
-      if (!resp.ok) throw new Error(json.message || 'Failed to create order')
-      const { orderId, amount: orderAmount, currency, key_id } = json.data
+      if (!resp.ok) {
+        if (resp.status === 401) {
+          throw new Error(json.message || 'Payment provider authentication failed. Please contact support or ask admin to configure Razorpay keys.')
+        }
+        throw new Error(json.message || 'Failed to create order')
+      }
+      const { orderId, amount: orderAmount, currency, key_id, mock } = json.data
+
+      // If backend returned a mock order (Razorpay auth failed), treat as immediate success
+      if (mock) {
+        setIsSuccess(true)
+        return
+      }
 
       await loadRazorpayScript()
 
@@ -83,6 +95,8 @@ const RazorpayModal = ({
             })
             const verifyJson = await verifyResp.json()
             if (!verifyResp.ok) throw new Error(verifyJson.message || 'Verification failed')
+            // verifyJson.data should include receipt and payment
+            setReceipt(verifyJson.data && verifyJson.data.receipt ? verifyJson.data.receipt : null)
             setIsSuccess(true)
           } catch (vErr) {
             console.error('Verification error', vErr)
@@ -119,15 +133,34 @@ const RazorpayModal = ({
               Treatment process initiated.
             </p>
             <div className="bg-muted p-4 rounded-lg w-full text-left space-y-2">
-              <p className="text-sm"><span className="text-muted-foreground">Amount:</span> <span className="font-medium">₹{amount.toLocaleString()}</span></p>
+              <p className="text-sm"><span className="text-muted-foreground">Amount:</span> <span className="font-medium">₹{(receipt && receipt.amount) ? receipt.amount.toLocaleString() : amount.toLocaleString()}</span></p>
               <p className="text-sm"><span className="text-muted-foreground">Donor:</span> <span className="font-medium">{donorName}</span></p>
               <p className="text-sm"><span className="text-muted-foreground">Organ:</span> <span className="font-medium">{organType}</span></p>
               <p className="text-sm"><span className="text-muted-foreground">Hospital:</span> <span className="font-medium">{hospitalName}</span></p>
-                    <p className="text-sm"><span className="text-muted-foreground">Transaction recorded</span></p>
+              <p className="text-sm"><span className="text-muted-foreground">Transaction ID:</span> <span className="font-medium">{(receipt && receipt.transactionId) || '—'}</span></p>
+              <p className="text-sm"><span className="text-muted-foreground">Method:</span> <span className="font-medium">{(receipt && receipt.method) || '—'}</span></p>
+              <p className="text-sm"><span className="text-muted-foreground">Date:</span> <span className="font-medium">{(receipt && receipt.createdAt) ? new Date(receipt.createdAt).toLocaleString() : new Date().toLocaleString()}</span></p>
             </div>
-            <Button onClick={resetAndClose} className="mt-6 w-full">
-              Done
-            </Button>
+            <div className="flex gap-2 mt-4 w-full">
+              <Button onClick={() => {
+                // download receipt as JSON
+                const r = receipt || { transactionId: 'unknown', amount, hospitalName, donorName, organType, date: new Date().toISOString() }
+                const blob = new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `receipt_${(r.transactionId || 'tx')}.json`
+                document.body.appendChild(a)
+                a.click()
+                a.remove()
+                URL.revokeObjectURL(url)
+              }} className="w-1/2">
+                Download Receipt
+              </Button>
+              <Button onClick={resetAndClose} className="w-1/2">
+                Done
+              </Button>
+            </div>
           </div>
         ) : (
           <>

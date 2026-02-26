@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import RazorpayModal from '@/components/patient/RazorpayModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -269,6 +270,15 @@ const FundRequestDetails = ({
   }, [request, fetchedHospital]);
   const amountBreakup = getAmountBreakup(request.amount, request.reason || request.description || request.message || '');
   const totalAmount = amountBreakup.reduce((sum, item) => sum + item.amount, 0);
+  const [isRzpOpen, setIsRzpOpen] = useState(false);
+
+  const hospitalDbId = useMemo(() => {
+    // Try several common shapes to derive the hospital _id that backend expects
+    const fh = fetchedHospital || request.hospital || request.hospitalId || request.hospitalInfo || null;
+    if (!fh) return null;
+    const candidate = (fh && (fh._id || fh.id || fh.userId || fh.user_id)) || null;
+    return extractId(candidate) || extractId(request.hospitalId) || null;
+  }, [fetchedHospital, request]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -506,6 +516,16 @@ const FundRequestDetails = ({
                 <CheckCircle className="w-4 h-4" />
                 Approve Funding
               </Button>
+                {/* Allow patient to pay hospital from this modal when hospital id is known */}
+                {hospitalDbId && (
+                  <Button
+                    onClick={() => setIsRzpOpen(true)}
+                    className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    Pay Hospital
+                  </Button>
+                )}
             </>
           ) : (
             <div className="flex items-center gap-3">
@@ -522,6 +542,17 @@ const FundRequestDetails = ({
             </div>
           )}
         </div>
+        {/* Razorpay modal for patient payment */}
+        <RazorpayModal
+          isOpen={isRzpOpen}
+          onClose={() => setIsRzpOpen(false)}
+          donorName={patient.name}
+          organType={request.reason || request.description}
+          hospitalName={hospital.name}
+          amount={request.amount || totalAmount}
+          hospitalId={hospitalDbId}
+          requestId={request.id || request._id || ''}
+        />
       </DialogContent>
     </Dialog>
   );

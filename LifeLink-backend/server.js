@@ -6,6 +6,27 @@ import { connectDB } from './src/config/mongodb.js'
 // Load environment variables
 dotenv.config()
 
+// Initialize Razorpay SDK (attach to app.locals for use elsewhere)
+import { createRequire } from 'module'
+const require = createRequire(import.meta.url)
+let Razorpay
+try {
+  Razorpay = require('razorpay')
+  if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+    try {
+      const razor = new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID, key_secret: process.env.RAZORPAY_KEY_SECRET })
+      app.locals.razorpay = razor
+      console.log('Razorpay initialized')
+    } catch (e) {
+      console.warn('Razorpay SDK present but failed to initialize', e && e.message)
+    }
+  } else {
+    console.warn('Razorpay keys not set in environment; create-order will return 500 until configured')
+  }
+} catch (e) {
+  console.warn('Razorpay SDK not installed. Install `razorpay` package to enable payments')
+}
+
 const PORT = process.env.PORT || 5000
 
 // Ensure DB is connected before starting the server

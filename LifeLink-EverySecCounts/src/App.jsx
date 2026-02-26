@@ -28,6 +28,7 @@ import PaymentPage from "./pages/patient/PaymentPage";
 import PatientProfilePage from "./pages/patient/PatientProfilePage";
 import PatientMessagesPage from "./pages/patient/PatientMessagesPage";
 import PatientSettingsPage from "./pages/patient/PatientSettingsPage";
+import PatientPaymentDemo from "./components/patient/PatientPaymentDemo";
 import DonorDashboard from "./pages/donor/DonorDashboard";
 import DonorRegister from "./pages/donor/DonorRegister";
 import DonorAlerts from "./pages/donor/DonorAlerts";
@@ -108,6 +109,7 @@ const App = () => (
                     <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
 
                     {/* 404 - Not Found */}
+                    <Route path="/demo/payment" element={<PatientPaymentDemo />} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </BrowserRouter>

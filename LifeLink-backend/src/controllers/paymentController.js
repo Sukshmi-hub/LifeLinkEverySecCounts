@@ -1,6 +1,7 @@
 import Payment from '../models/Payment.js'
 import Request from '../models/Request.js'
 import crypto from 'crypto'
+import axios from 'axios'
 
 // Razorpay SDK will be dynamically imported when needed (avoid startup errors if not installed)
 
@@ -77,7 +78,14 @@ export const createRazorpayOrder = async (req, res) => {
     if (!hospital) return res.status(404).json({ success: false, message: 'Hospital not found' })
     // Support both legacy `razorpayAccountId` and newer `razorpayLinkedAccountId` fields
     const linkedAccount = hospital.razorpayLinkedAccountId || hospital.razorpayAccountId
-    if (!linkedAccount) return res.status(400).json({ success: false, message: 'Hospital does not have a Razorpay linked account configured' })
+    if (!linkedAccount) {
+      // In development allow proceeding without a linked account (we will not include transfers)
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(400).json({ success: false, message: 'Hospital does not have a Razorpay linked account configured' })
+      } else {
+        console.warn('Hospital missing linkedAccount; continuing in development without transfers')
+      }
+    }
 
     // Use environment variables for Razorpay keys
     const key_id = process.env.RAZORPAY_KEY_ID
@@ -87,6 +95,8 @@ export const createRazorpayOrder = async (req, res) => {
     console.log('createRazorpayOrder: linkedAccount=', linkedAccount)
     console.log('createRazorpayOrder: RAZORPAY_KEY_ID present=', !!key_id)
     console.log('createRazorpayOrder: RAZORPAY_KEY_SECRET present=', !!key_secret)
+    console.log('createRazorpayOrder: key_id_len=', key_id ? String(key_id.length) : 'none')
+    console.log('createRazorpayOrder: key_secret_len=', key_secret ? String(key_secret.length) : 'none')
 
     if (!key_id || !key_secret) {
       console.error('Razorpay keys missing in environment. Ensure .env in backend root and restart server.')
@@ -106,20 +116,56 @@ export const createRazorpayOrder = async (req, res) => {
       amount: amountPaise,
       currency: 'INR',
       receipt: `receipt_${Date.now()}`,
-      notes: { hospitalId: String(hospitalId), requestId: String(requestId || '') },
-      // Include transfers so Razorpay will route funds to the hospital linked account.
-      // This transfers 100% of the amount to the hospital's linked account.
-      transfers: [
-        {
-          account: linkedAccount,
-          amount: amountPaise,
-          currency: 'INR',
-          notes: { purpose: 'hospital_settlement' }
-        }
-      ]
+      notes: { hospitalId: String(hospitalId), requestId: String(requestId || '') }
     }
 
-    const order = await razor.orders.create(orderOptions)
+    // Only include transfers when the linked account looks valid (Razorpay linked account ids are 18 chars)
+    try {
+      const hasValidLinkedAccount = typeof linkedAccount === 'string' && linkedAccount.length === 18
+      if (hasValidLinkedAccount) {
+        orderOptions.transfers = [
+          {
+            account: linkedAccount,
+            amount: amountPaise,
+            currency: 'INR',
+            notes: { purpose: 'hospital_settlement' }
+          }
+        ]
+      } else {
+        console.warn('Skipping transfers: invalid linkedAccount format', linkedAccount)
+      }
+    } catch (e) {
+      console.warn('Error validating linkedAccount for transfers', e)
+    }
+
+    let order
+    try {
+      order = await razor.orders.create(orderOptions)
+    } catch (createErr) {
+      console.error('Razorpay order creation with transfers failed, retrying without transfers', createErr && createErr.message)
+      // Retry without transfers (useful in development or if linked account doesn't permit transfers)
+      try {
+        const fallbackOptions = { ...orderOptions }
+        delete fallbackOptions.transfers
+        order = await razor.orders.create(fallbackOptions)
+      } catch (fallbackErr) {
+        console.error('Razorpay fallback order creation also failed', fallbackErr)
+        // As a last resort try a direct axios POST to Razorpay Orders API (uses same auth)
+        try {
+          console.warn('Attempting direct axios POST to Razorpay as fallback')
+          const key_id_local = key_id
+          const key_secret_local = key_secret
+          const axiosOptions = { ...orderOptions }
+          delete axiosOptions.transfers
+          const resp = await axios.post('https://api.razorpay.com/v1/orders', axiosOptions, { auth: { username: key_id_local, password: key_secret_local } })
+          order = resp.data
+        } catch (axiosErr) {
+          console.error('Direct axios fallback also failed', axiosErr && (axiosErr.response ? axiosErr.response.data : axiosErr.message))
+          throw axiosErr
+        }
+        throw fallbackErr
+      }
+    }
 
     // Save a Payment record as pending
     const payment = new Payment({
@@ -143,10 +189,52 @@ export const createRazorpayOrder = async (req, res) => {
     }
 
     // Return order details and key_id (public) so frontend can open checkout
-    return res.json({ success: true, data: { orderId: order.id, amount: order.amount, currency: order.currency, key_id } })
+    const hospitalName = hospital && (hospital.name || hospital.hospitalName || hospital.displayName) || ''
+    const summary = { paymentId: payment._id, status: payment.status, amount: payment.amount }
+    return res.json({ success: true, data: { orderId: order.id, amount: order.amount, currency: order.currency, key_id, hospitalName, summary } })
   } catch (err) {
     console.error('createRazorpayOrder error', err)
-    return res.status(500).json({ success: false, message: err.message || 'Internal Server Error' })
+    // re-extract request body values for fallback since they were declared inside try
+    const { amount, hospitalId, patientId, patientName = '', requestId = null } = req.body || {}
+    // Normalize error info from Razorpay SDK or axios
+    const statusCode = err && (err.statusCode || (err.response && err.response.status))
+    const rpDesc = (err && err.error && err.error.description) || (err && err.response && err.response.data && (err.response.data.error && err.response.data.error.description || err.response.data.description)) || null
+    const isAuthFail = (statusCode === 401) || (rpDesc && String(rpDesc).toLowerCase().includes('authentication'))
+    if (isAuthFail && process.env.NODE_ENV !== 'production') {
+      try {
+        // Create a mock order/payment locally so developers can test the flow without valid Razorpay keys
+        const mockOrderId = `mock_order_${Date.now()}`
+        const mockPaymentId = `mock_pay_${Date.now()}`
+        const payment = new Payment({
+          hospitalId,
+          patientId,
+          orderId: mockOrderId,
+          paymentId: mockPaymentId,
+          patientName: patientName || '',
+          amount: Number(amount),
+          totalAmount: Number(amount),
+          status: 'success',
+        })
+        await payment.save()
+        // If requestId provided, link this payment to the Request and mark paymentSent
+        if (requestId) {
+          try {
+            await Request.findByIdAndUpdate(requestId, { $set: { paymentSent: true, paymentId: payment._id } })
+          } catch (reqErr) {
+            console.error('Failed to attach mock payment to request', reqErr)
+          }
+        }
+        const amountPaiseFallback = Math.round(Number(amount) * 100)
+        return res.json({ success: true, data: { mock: true, orderId: mockOrderId, amount: amountPaiseFallback, currency: 'INR', key_id: process.env.RAZORPAY_KEY_ID || '', payment: { paymentId: mockPaymentId, status: 'success' } } })
+      } catch (mockErr) {
+        console.error('Failed to create mock payment fallback', mockErr)
+      }
+    }
+
+    const message = rpDesc || (err && err.message) || 'Internal Server Error'
+    // If Razorpay returned a 401 propagate that so frontend can surface correct action
+    if (statusCode === 401) return res.status(401).json({ success: false, message })
+    return res.status(502).json({ success: false, message })
   }
 }
 
@@ -175,7 +263,7 @@ export const verifyRazorpayPayment = async (req, res) => {
     // Update payment record
     const payment = await Payment.findOneAndUpdate(
       { orderId: razorpay_order_id },
-      { $set: { paymentId: razorpay_payment_id, status: 'success' } },
+      { $set: { paymentId: razorpay_payment_id, status: 'success', method: (req.body.method || null) } },
       { new: true }
     )
 
@@ -189,10 +277,52 @@ export const verifyRazorpayPayment = async (req, res) => {
         console.error('Failed to update related request after payment verify', reqErr)
       }
     }
+    // Build receipt object: attempt to fetch payment details from Razorpay for richer info
+    let receipt = {
+      transactionId: razorpay_payment_id,
+      orderId: razorpay_order_id,
+      amount: payment.amount || null,
+      currency: 'INR',
+      method: req.body.method || null,
+      createdAt: new Date()
+    }
+    try {
+      const key_id = process.env.RAZORPAY_KEY_ID
+      const key_secret = process.env.RAZORPAY_KEY_SECRET
+      if (key_id && key_secret) {
+        const Razorpay = (await import('razorpay')).default
+        const razor = new Razorpay({ key_id, key_secret })
+        try {
+          const fetched = await razor.payments.fetch(razorpay_payment_id)
+          if (fetched) {
+            receipt.method = fetched.method || receipt.method
+            receipt.amount = (fetched.amount ? Math.round(Number(fetched.amount) / 100) : receipt.amount)
+            receipt.currency = fetched.currency || receipt.currency
+            receipt.createdAt = fetched.created_at ? new Date(Number(fetched.created_at) * 1000) : receipt.createdAt
+          }
+        } catch (fetchErr) {
+          console.warn('Failed to fetch payment details from Razorpay', fetchErr && (fetchErr.response ? fetchErr.response.data : fetchErr.message))
+        }
+      }
+    } catch (e) {
+      console.warn('Razorpay SDK not available to fetch payment details', e && e.message)
+    }
 
-    return res.json({ success: true, data: payment })
+    // Attach hospital name if available
+    let hospitalName = ''
+    try {
+      const Hospital = (await import('../models/Hospital.js')).default
+      const hosp = await Hospital.findById(payment.hospitalId).lean()
+      hospitalName = hosp && (hosp.name || hosp.hospitalName || '')
+    } catch (e) {
+      // ignore
+    }
+
+    return res.json({ success: true, data: { payment, receipt: { ...receipt, hospitalName } } })
   } catch (err) {
     console.error('verifyRazorpayPayment error', err)
-    return res.status(500).json({ success: false, message: err.message || 'Internal Server Error' })
+    const rpDesc = err && err.error && err.error.description ? String(err.error.description) : null
+    const message = rpDesc || err.message || 'Internal Server Error'
+    return res.status(502).json({ success: false, message })
   }
 }
