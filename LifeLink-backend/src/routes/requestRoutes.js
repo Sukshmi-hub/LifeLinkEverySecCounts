@@ -387,6 +387,35 @@ router.get('/', optionalAuth, async (req, res) => {
     }
   })
 
+  // Hospital verifies a fund request that was sent by NGO
+  router.put('/:id/verify-by-hospital', authenticate, async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ success: false, message: 'Not authenticated' })
+      // Only hospital role may verify
+      if (req.user.role !== 'hospital') return res.status(403).json({ success: false, message: 'Forbidden' })
+
+      const hospital = await (await import('../models/Hospital.js')).default.findOne({ userId: req.user._id }) || await (await import('../models/Hospital.js')).default.findById(req.user._id)
+      if (!hospital) return res.status(404).json({ success: false, message: 'Hospital not found for user' })
+
+      const requestId = req.params.id
+      const reqDoc = await Request.findById(requestId)
+      if (!reqDoc) return res.status(404).json({ success: false, message: 'Request not found' })
+
+      // ensure the request belongs to this hospital if hospitalId present
+      if (reqDoc.hospitalId && String(reqDoc.hospitalId) !== String(hospital._id)) return res.status(403).json({ success: false, message: 'Request not for your hospital' })
+
+      reqDoc.status = 'VerifiedByHospital'
+      reqDoc.verifiedByHospitalAt = new Date()
+      reqDoc.verifiedByHospitalId = hospital._id
+      await reqDoc.save()
+
+      return res.status(200).json({ success: true, message: 'Request verified by hospital', data: reqDoc })
+    } catch (err) {
+      console.error('Hospital verify request failed:', err)
+      return res.status(500).json({ success: false, message: 'Server error' })
+    }
+  })
+
   // Reject a fund request (NGO action)
   router.put('/:id/reject', authenticate, async (req, res) => {
     try {

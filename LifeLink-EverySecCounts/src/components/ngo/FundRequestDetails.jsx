@@ -557,16 +557,34 @@ const FundRequestDetails = ({
             </>
           ) : (
             <div className="flex items-center gap-3">
-              <Badge className={cn("text-sm py-1 px-3", request.status === 'Approved' ? 'bg-success/20 text-success' : (request.status === 'Dennied' ? 'bg-destructive/20 text-destructive' : 'bg-destructive/20 text-destructive'))}>
-                {request.status === 'Approved' ? (
-                  <><CheckCircle className="w-4 h-4 mr-1" /> Approved</>
-                ) : request.status === 'Dennied' ? (
-                  <><XCircle className="w-4 h-4 mr-1" /> Dennied</>
-                ) : (
-                  <><XCircle className="w-4 h-4 mr-1" /> Rejected</>
-                )}
-              </Badge>
-              <Button variant="outline" onClick={onClose}>Close</Button>
+              {String(request.status) === 'VerifiedByHospital' ? (
+                // Show Pay button to NGO when hospital has verified the request
+                <>
+                  {hospitalDbId && (
+                    <Button
+                      onClick={() => setIsRzpOpen(true)}
+                      className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
+                    >
+                      <CreditCard className="w-4 h-4" />
+                      Pay Hospital
+                    </Button>
+                  )}
+                  <Button variant="outline" onClick={onClose}>Close</Button>
+                </>
+              ) : (
+                <>
+                  <Badge className={cn("text-sm py-1 px-3", request.status === 'Approved' ? 'bg-success/20 text-success' : (request.status === 'Dennied' ? 'bg-destructive/20 text-destructive' : 'bg-destructive/20 text-destructive'))}>
+                    {request.status === 'Approved' ? (
+                      <><CheckCircle className="w-4 h-4 mr-1" /> Approved</>
+                    ) : request.status === 'Dennied' ? (
+                      <><XCircle className="w-4 h-4 mr-1" /> Dennied</>
+                    ) : (
+                      <><XCircle className="w-4 h-4 mr-1" /> Rejected</>
+                    )}
+                  </Badge>
+                  <Button variant="outline" onClick={onClose}>Close</Button>
+                </>
+              )}
             </div>
           )}
         </div>

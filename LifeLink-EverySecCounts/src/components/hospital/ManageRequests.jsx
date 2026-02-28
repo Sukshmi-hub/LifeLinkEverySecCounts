@@ -562,12 +562,51 @@ const ManageRequests = () => {
                         <p className="text-xs text-muted-foreground mt-1">{new Date(req.createdAt).toLocaleDateString()}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className={cn("px-3 py-1 rounded-full text-xs font-medium", req.status === 'Approved' ? 'bg-success/20 text-success' : (req.status === 'SentToHospital' ? 'bg-warning/20 text-warning' : 'bg-muted text-muted-foreground'))}>
-                          {req.status || 'pending'}
-                        </span>
-                        <Button size="sm" variant="outline" onClick={() => { setSelectedNgoRequest(req.raw || req); setShowNgoDetails(true); }}>
-                          <Eye className="w-4 h-4 mr-1" /> Details
-                        </Button>
+                        {req.status === 'SentToHospital' ? (
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" onClick={async () => {
+                              try {
+                                const token = localStorage.getItem('token')
+                                const resp = await fetch(`http://localhost:5000/api/requests/${req.id}/verify-by-hospital`, {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+                                })
+                                const json = await resp.json().catch(() => ({}))
+                                if (!resp.ok) throw new Error(json.message || 'Failed to verify')
+                                // remove from hospital list so NGO sees the VerifiedByHospital status
+                                setHospitalNgoFundRequests(prev => prev.filter(p => p.id !== req.id))
+                                toast.success('Request marked for hospital verification')
+                              } catch (err) {
+                                console.error('Verify by hospital failed', err)
+                                toast.error(err.message || 'Failed to verify request')
+                              }
+                            }} className="bg-success/10 hover:bg-success/20 text-success">
+                              <Check className="w-4 h-4" />
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => { 
+                              const raw = req.raw || req;
+                              const details = raw.patientId || raw.requestedBy || raw.patient || raw.patientDetails || null;
+                              setDetailsUser({ name: req.patientName || extractName(raw) || 'Unknown', details, raw, amount: req.amount || 0 });
+                              setShowDetailsOpen(true);
+                            }}>
+                              <Eye className="w-4 h-4 mr-1" /> Details
+                            </Button>
+                          </div>
+                        ) : (
+                          <>
+                            <span className={cn("px-3 py-1 rounded-full text-xs font-medium", req.status === 'Approved' ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground')}>
+                              {req.status || 'pending'}
+                            </span>
+                            <Button size="sm" variant="outline" onClick={() => { 
+                              const raw = req.raw || req;
+                              const details = raw.patientId || raw.requestedBy || raw.patient || raw.patientDetails || null;
+                              setDetailsUser({ name: req.patientName || extractName(raw) || 'Unknown', details, raw, amount: req.amount || 0 });
+                              setShowDetailsOpen(true);
+                            }}>
+                              <Eye className="w-4 h-4 mr-1" /> Details
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -696,7 +735,12 @@ const ManageRequests = () => {
                     <p><strong>Phone:</strong> {phone}</p>
                     <p><strong>Aadhaar:</strong> {aadhaar}</p>
                     <p><strong>Age/DOB:</strong> {age}</p>
-                    <p><strong>Blood Type:</strong> {blood}</p>
+                    {/* If this dialog was opened for a fund_request, show Amount instead of Blood Type */}
+                    {detailsUser && detailsUser.raw && (detailsUser.raw.requestType === 'fund_request' || detailsUser.raw.requestType === 'fund') ? (
+                      <p><strong>Amount:</strong> ₹{(detailsUser.amount || detailsUser.raw?.amount || detailsUser.details?.amount || 0).toLocaleString()}</p>
+                    ) : (
+                      <p><strong>Blood Type:</strong> {blood}</p>
+                    )}
                     <p className="truncate"><strong>Address:</strong> {address}</p>
 
                     <div className="pt-2">
