@@ -11,7 +11,7 @@ const RequestSchema = new Schema({
   status: {
     type: String,
     default: 'pending',
-    enum: ['pending', 'approved', 'rejected'],
+    enum: ['pending', 'approved', 'rejected', 'SentToHospital'],
   },
   patientId: {
     type: Schema.Types.ObjectId,

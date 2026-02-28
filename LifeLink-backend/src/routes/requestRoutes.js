@@ -307,6 +307,21 @@ router.get('/', optionalAuth, async (req, res) => {
       return res.json({ success: true, data: list })
     }
 
+    // Support filtering by requestType or status directly (useful for admin/hospital UIs)
+    const queryRequestType = req.query.requestType || req.body.requestType
+    const queryStatus = req.query.status || req.body.status
+    if (queryRequestType || queryStatus) {
+      const q = {}
+      if (queryRequestType) q.requestType = queryRequestType
+      if (queryStatus) q.status = queryStatus
+      const list = await Request.find(q)
+        .sort({ createdAt: -1 })
+        .populate('patientId', 'name email phone age blood_type aadhaar_no location emergency_contact')
+        .populate('hospitalId', 'name address phone contact_phone location')
+        .lean()
+      return res.json({ success: true, data: list })
+    }
+
     // When authenticated, find the patient's document id and query by that _id
     let patientIdToQuery = null
     if (user) {

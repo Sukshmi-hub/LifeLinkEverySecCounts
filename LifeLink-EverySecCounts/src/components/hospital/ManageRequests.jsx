@@ -240,13 +240,20 @@ const ManageRequests = () => {
       try {
         const token = localStorage.getItem('token');
         if (!token) return;
-        const resp = await fetch('http://localhost:5000/api/requests?hospitalId=' + encodeURIComponent(localStorage.getItem('hospitalId') || ''), {
+        const hospitalId = localStorage.getItem('hospitalId') || null;
+        // If we have a hospitalId, prefer querying by it. Otherwise, fetch fund requests and
+        // filter for items with status 'SentToHospital' so NGO-sent requests still appear.
+        const baseUrl = hospitalId ? ('http://localhost:5000/api/requests?hospitalId=' + encodeURIComponent(hospitalId)) : 'http://localhost:5000/api/requests?requestType=fund_request';
+        const resp = await fetch(baseUrl, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const json = await resp.json();
         console.debug('hospital NGO fund-requests response:', json);
-            if (resp.ok && Array.isArray(json.data)) {
-              const mapped = json.data.filter(r => r.requestType === 'fund_request').map(r => {
+        if (resp.ok && Array.isArray(json.data)) {
+          // if hospitalId is present, use backend filtering; otherwise filter SentToHospital locally
+          const rawList = Array.isArray(json.data) ? json.data : [];
+          const candidates = hospitalId ? rawList : rawList.filter(r => String(r.status).toLowerCase() === 'senttohospital' || String(r.status).toLowerCase() === 'senttohos' || String(r.status).toLowerCase() === 'senttohospital');
+          const mapped = candidates.filter(r => r.requestType === 'fund_request').map(r => {
                 // derive patient name from common locations
                 const pName = r.patientName || (r.patientId && (r.patientId.name || r.patientId.fullName || r.patientId.displayName)) || (r.raw && (r.raw.patientName || r.raw.patientId && (r.raw.patientId.name))) || 'Unknown';
                 // derive amount: prefer r.amount, then payment breakdown total, then sum of top-level fields

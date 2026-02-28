@@ -52,9 +52,15 @@ const NgoDashboard = () => {
       if (token) headers.Authorization = `Bearer ${token}`;
       // include hospitalId so backend can attach the request to the correct hospital
       const payload = { hospitalId: request.hospitalId || request.hospital || request.raw?.hospitalId || null };
+      // fallback to hospitalId from current hospital session (hospital portal) when available
+      if (!payload.hospitalId) payload.hospitalId = localStorage.getItem('hospitalId') || null;
       const res = await fetch(`/api/requests/${id}/send-to-hospital`, { method: 'PUT', headers, body: JSON.stringify(payload) });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.message || 'Failed to send to hospital');
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // surface server error body for debugging
+        console.error('send-to-hospital response', res.status, json);
+        throw new Error(json.message || 'Failed to send to hospital' || 'Server error');
+      }
       // update local state
       updateFundRequestStatus(id, 'SentToHospital');
       setSelectedRequest({ ...(request || {}), status: 'SentToHospital' });
