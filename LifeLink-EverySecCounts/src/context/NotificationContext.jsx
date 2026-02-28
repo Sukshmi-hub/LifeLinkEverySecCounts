@@ -178,6 +178,12 @@ export const NotificationProvider = ({ children }) => {
           hospitalName: (r.hospitalId && (r.hospitalId.name || r.hospitalId.organizationName)) || r.hospitalName || null,
           hospitalContact: (r.hospitalId && (r.hospitalId.phone || r.hospitalId.contact_phone)) || null,
           hospitalAddress: (r.hospitalId && (r.hospitalId.address || r.hospitalId.location?.full_address)) || r.hospitalAddress || null,
+          // include breakdown if backend provided it (used by NGO UI)
+          breakdown: r.breakdown || {
+            transplantFee: r.transplantFee || 0,
+            hospitalCharges: r.hospitalCharges || 0,
+            processingFee: r.processingFee || 0,
+          },
         }))
         setFundRequests(mapped)
       }
@@ -211,6 +217,12 @@ export const NotificationProvider = ({ children }) => {
           hospitalAddress: (r.hospitalId && (r.hospitalId.address || r.hospitalId.location?.full_address)) || r.hospitalAddress || null,
           // include original server response so callers can access populated patient/hospital objects
           raw: r,
+          // include breakdown fields so NGO UI can render exact amounts
+          breakdown: r.breakdown || {
+            transplantFee: r.transplantFee || 0,
+            hospitalCharges: r.hospitalCharges || 0,
+            processingFee: r.processingFee || 0,
+          },
         }))
         setFundRequests(mapped)
       }

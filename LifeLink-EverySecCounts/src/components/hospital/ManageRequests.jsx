@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Check, X, Play, User, Heart, Clock, Eye } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import FundRequestDetails from '@/components/ngo/FundRequestDetails';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -23,10 +24,13 @@ const ManageRequests = () => {
   const [pendingError, setPendingError] = useState(null);
 
   const [donorRequests, setDonorRequests] = useState([]);
+  const [hospitalNgoFundRequests, setHospitalNgoFundRequests] = useState([]);
   const [showSendPaymentModal, setShowSendPaymentModal] = useState(false);
   const [sendPaymentLoading, setSendPaymentLoading] = useState(false);
   const [paymentForm, setPaymentForm] = useState({ surgeryFee: 0, hospitalCharges: 0, processingFee: 0 });
   const [selectedForPayment, setSelectedForPayment] = useState(null);
+  const [showNgoDetails, setShowNgoDetails] = useState(false);
+  const [selectedNgoRequest, setSelectedNgoRequest] = useState(null);
 
   // Helper to robustly extract a person's name from possible backend shapes
   const getNameFromObject = (obj) => {
@@ -230,6 +234,41 @@ const ManageRequests = () => {
       }
     };
     loadDonorRequests();
+
+    // Load fund requests that target NGOs but belong to this hospital (for hospital staff review)
+    const loadHospitalNgoFundRequests = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const resp = await fetch('http://localhost:5000/api/requests?hospitalId=' + encodeURIComponent(localStorage.getItem('hospitalId') || ''), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = await resp.json();
+        console.debug('hospital NGO fund-requests response:', json);
+            if (resp.ok && Array.isArray(json.data)) {
+              const mapped = json.data.filter(r => r.requestType === 'fund_request').map(r => {
+                // derive patient name from common locations
+                const pName = r.patientName || (r.patientId && (r.patientId.name || r.patientId.fullName || r.patientId.displayName)) || (r.raw && (r.raw.patientName || r.raw.patientId && (r.raw.patientId.name))) || 'Unknown';
+                // derive amount: prefer r.amount, then payment breakdown total, then sum of top-level fields
+                const breakdown = r.breakdown || { transplantFee: r.transplantFee || 0, hospitalCharges: r.hospitalCharges || 0, processingFee: r.processingFee || 0 };
+                const amt = Number(r.amount || 0) || Number(breakdown.transplantFee || 0) + Number(breakdown.hospitalCharges || 0) + Number(breakdown.processingFee || 0) || 0;
+                return {
+                  id: r._id,
+                  patientName: pName,
+                  amount: amt,
+                  status: r.status || 'pending',
+                  createdAt: r.createdAt,
+                  breakdown,
+                  raw: r,
+                };
+              });
+              setHospitalNgoFundRequests(mapped);
+        }
+      } catch (e) {
+        console.error('Failed to load hospital NGO fund requests', e);
+      }
+    };
+    loadHospitalNgoFundRequests();
   }, []);
 
   // Approve/Reject organ request (calls backend then updates local state + notifies patient)
@@ -350,9 +389,10 @@ const ManageRequests = () => {
       </div>
 
       <Tabs defaultValue="patients" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="verification">User Verification</TabsTrigger>
           <TabsTrigger value="patients">Patient Requests</TabsTrigger>
+          <TabsTrigger value="ngo">NGO Pay Verify</TabsTrigger>
           <TabsTrigger value="donors">Donor Requests</TabsTrigger>
         </TabsList>
 
@@ -485,6 +525,42 @@ const ManageRequests = () => {
                             )}
                           </>
                         )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="ngo" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="w-5 h-5 text-primary" />
+                Patients of Your Hospital Requested for Fund in NGO
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {hospitalNgoFundRequests.length === 0 ? (
+                <p className="text-center py-8 text-muted-foreground">No fund requests for your hospital found</p>
+              ) : (
+                <div className="space-y-4">
+                  {hospitalNgoFundRequests.map(req => (
+                    <div key={req.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border border-border">
+                      <div>
+                        <h4 className="font-medium">{req.patientName}</h4>
+                        <p className="text-sm text-muted-foreground">Amount: ₹{(req.amount || 0).toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{new Date(req.createdAt).toLocaleDateString()}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={cn("px-3 py-1 rounded-full text-xs font-medium", req.status === 'Approved' ? 'bg-success/20 text-success' : (req.status === 'SentToHospital' ? 'bg-warning/20 text-warning' : 'bg-muted text-muted-foreground'))}>
+                          {req.status || 'pending'}
+                        </span>
+                        <Button size="sm" variant="outline" onClick={() => { setSelectedNgoRequest(req.raw || req); setShowNgoDetails(true); }}>
+                          <Eye className="w-4 h-4 mr-1" /> Details
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -805,6 +881,17 @@ const ManageRequests = () => {
           </div>
         </DialogContent>
       </Dialog>
+      {/* NGO Fund Request Details Modal */}
+      <FundRequestDetails
+        isOpen={showNgoDetails && Boolean(selectedNgoRequest)}
+        onClose={() => { setShowNgoDetails(false); setSelectedNgoRequest(null); }}
+        request={selectedNgoRequest}
+        onReject={(id) => {
+          // local optimistic update: mark as rejected if id present
+          setHospitalNgoFundRequests(prev => prev.map(r => (String(r.id) === String(id) ? { ...r, status: 'Rejected' } : r)));
+          setShowNgoDetails(false);
+        }}
+      />
     </div>
   );
 };

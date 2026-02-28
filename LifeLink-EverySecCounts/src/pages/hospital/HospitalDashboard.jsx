@@ -75,7 +75,13 @@ const HospitalDashboard = () => {
       case 'settings':
         return <HospitalSettings />;
       default:
-        return null;
+          return (
+            <HospitalDashboardOverview 
+              userName={user?.name || 'City General Hospital'} 
+              pendingVerifications={pendingVerifications}
+              redAlertsCount={redAlerts.filter(a => a.status === 'active').length}
+            />
+          );
     }
   };
 

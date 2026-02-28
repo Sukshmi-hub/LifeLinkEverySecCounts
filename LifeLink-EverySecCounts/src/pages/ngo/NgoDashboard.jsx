@@ -43,28 +43,29 @@ const NgoDashboard = () => {
   };
 
   const handleMessageHospital = async (request) => {
-    // Try to mark the request as sent to hospital so it appears in hospital payment section,
-    // then open the hospital chat. If API fails, still open chat as fallback.
+    // Try to mark the request as sent to hospital so it appears in hospital payment section.
+    // Do NOT open chat — the hospital will review the request in their dashboard.
     try {
       const id = request.id || request._id;
       const token = localStorage.getItem('token');
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers.Authorization = `Bearer ${token}`;
-      const res = await fetch(`http://localhost:5000/api/requests/${id}/send-to-hospital`, { method: 'PUT', headers });
+      // include hospitalId so backend can attach the request to the correct hospital
+      const payload = { hospitalId: request.hospitalId || request.hospital || request.raw?.hospitalId || null };
+      const res = await fetch(`/api/requests/${id}/send-to-hospital`, { method: 'PUT', headers, body: JSON.stringify(payload) });
       const json = await res.json();
       if (!res.ok) throw new Error(json.message || 'Failed to send to hospital');
       // update local state
       updateFundRequestStatus(id, 'SentToHospital');
       setSelectedRequest({ ...(request || {}), status: 'SentToHospital' });
       setShowDetails(false);
-      setShowHospitalChat(true);
     } catch (err) {
       console.error('Send to hospital failed', err);
-      // fallback: still open chat so NGO can message hospital
-      setSelectedRequest(request);
-      setShowDetails(false);
-      setShowHospitalChat(true);
+      // on failure leave the modal open so NGO can retry or view details
+      // (no chat fallback)
+      return false;
     }
+    return true;
   };
 
   useEffect(() => {
@@ -353,11 +354,12 @@ const NgoDashboard = () => {
         </main>
       </div>
 
-      <FundRequestDetails
-        isOpen={showDetails}
-        onClose={() => setShowDetails(false)}
-        request={selectedRequest}
-        onApprove={async (id) => {
+      {showDetails && (
+        <FundRequestDetails
+          isOpen={showDetails}
+          onClose={() => setShowDetails(false)}
+          request={selectedRequest}
+          onApprove={async (id) => {
           try {
             const token = localStorage.getItem('token')
             const headers = { 'Content-Type': 'application/json' }
@@ -387,12 +389,15 @@ const NgoDashboard = () => {
         }}
         onMessageHospital={handleMessageHospital}
       />
+      )}
 
-      <NgoHospitalChat
-        isOpen={showHospitalChat}
-        onClose={() => setShowHospitalChat(false)}
-        request={selectedRequest}
-      />
+      {showHospitalChat && (
+        <NgoHospitalChat
+          isOpen={showHospitalChat}
+          onClose={() => setShowHospitalChat(false)}
+          request={selectedRequest}
+        />
+      )}
     </div>
   );
 };

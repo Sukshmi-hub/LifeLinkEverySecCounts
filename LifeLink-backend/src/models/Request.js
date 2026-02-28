@@ -68,6 +68,16 @@ const RequestSchema = new Schema({
   amount: { type: Number, default: 0 },
   ngoId: { type: Schema.Types.ObjectId, ref: 'NGO', default: null },
   ngoName: { type: String, default: '' },
+  // Optional breakdown stored for fund requests (patient-entered fees)
+  breakdown: {
+    transplantFee: { type: Number, default: 0 },
+    hospitalCharges: { type: Number, default: 0 },
+    processingFee: { type: Number, default: 0 },
+  },
+  // Also store top-level numeric fields for backwards compatibility
+  transplantFee: { type: Number, default: 0 },
+  hospitalCharges: { type: Number, default: 0 },
+  processingFee: { type: Number, default: 0 },
   // Payment-related fields
   paymentSent: { type: Boolean, default: false },
   paymentId: { type: Schema.Types.ObjectId, ref: 'Payment', required: false, default: null },

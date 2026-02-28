@@ -51,6 +51,9 @@ const FundRequestDetails = ({
   onReject,
   onMessageHospital,
 }) => {
+
+  const [sendingToHos, setSendingToHos] = useState(false);
+  const [sentToHos, setSentToHos] = useState(false);
   if (!request) return null;
 
   const [fetchedPatient, setFetchedPatient] = useState(null);
@@ -501,7 +504,7 @@ const FundRequestDetails = ({
               {(request.status && String(request.status).toLowerCase().startsWith('pending')) ? (
             <>
               {/* Verify by hospital action: sends request to hospital payment queue */}
-              {request.status === 'SentToHospital' ? (
+              {(sentToHos || request.status === 'SentToHospital') ? (
                 <Button variant="outline" disabled className="gap-2">
                   <MessageCircle className="w-4 h-4" />
                   Sent to Hos
@@ -509,11 +512,24 @@ const FundRequestDetails = ({
               ) : (
                 <Button
                   variant="outline"
-                  onClick={() => onMessageHospital(request)}
+                  onClick={async () => {
+                    try {
+                      setSendingToHos(true);
+                      // prefer passing the raw server response when available
+                      const reqToSend = request.raw || request || {};
+                      const ok = await onMessageHospital(reqToSend);
+                      if (ok) setSentToHos(true);
+                    } catch (e) {
+                      // ignore - onMessageHospital logs
+                    } finally {
+                      setSendingToHos(false);
+                    }
+                  }}
                   className="gap-2"
+                  disabled={sendingToHos}
                 >
                   <MessageCircle className="w-4 h-4" />
-                  Verify by Hos
+                  {sendingToHos ? 'Sending...' : 'Verify by Hos'}
                 </Button>
               )}
               <Button
