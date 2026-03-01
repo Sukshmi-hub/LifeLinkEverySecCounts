@@ -70,6 +70,15 @@ const patientSchema = new mongoose.Schema(
       enum: ['active', 'inactive', 'deceased'],
       default: 'active',
     },
+    // Keep a small history of matched donors for quick lookup in patient UI
+    matchedDonors: {
+      type: [{
+        requestId: { type: mongoose.Schema.Types.ObjectId, ref: 'Request' },
+        donor: { type: mongoose.Schema.Types.Mixed },
+        matchedAt: { type: Date }
+      }],
+      default: []
+    },
   },
   { timestamps: true }
 );

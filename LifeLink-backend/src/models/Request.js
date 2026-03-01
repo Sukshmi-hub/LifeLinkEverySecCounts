@@ -83,5 +83,13 @@ const RequestSchema = new Schema({
   paymentId: { type: Schema.Types.ObjectId, ref: 'Payment', required: false, default: null },
 }, { timestamps: true });
 
+// Fields added for donor-matching flow
+RequestSchema.add({
+  matchedDonor: { type: Schema.Types.Mixed, default: null },
+  matchedAt: { type: Date },
+  detailsSentToPatientHospital: { type: Boolean, default: false },
+  sentToPatientHospitalAt: { type: Date }
+});
+
 export default mongoose.models.Request || mongoose.model('Request', RequestSchema);
 

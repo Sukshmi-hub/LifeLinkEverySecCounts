@@ -19,6 +19,7 @@ export const getMyHospitalProfile = async (req, res) => {
 
     const payload = {
       id: user._id,
+      hospitalId: hospital._id,
       organizationName: hospital.organizationName || user.name,
       email: user.email,
       role: user.role,
@@ -95,6 +96,7 @@ export const updateMyHospitalProfile = async (req, res) => {
 
     const result = {
       id: user._id,
+      hospitalId: refreshed._id,
       organizationName: refreshed.organizationName || user.name,
       email: user.email,
       role: user.role,

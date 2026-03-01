@@ -121,6 +121,13 @@ export function initSocket(server) {
     })
   })
 
+  // expose io for other modules (safe for dev/local use)
+  try {
+    global.__LIFELINK_IO = io
+  } catch (e) {
+    // ignore
+  }
+
   return io
 }
 

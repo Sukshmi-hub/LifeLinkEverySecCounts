@@ -55,6 +55,15 @@ const hospitalSchema = new mongoose.Schema(
       full_address: { type: String, default: '' },
       country: { type: String, default: '' },
     },
+    // Store recent matched donor snapshots for hospital staff reference
+    matchedDonors: {
+      type: [{
+        requestId: { type: mongoose.Schema.Types.ObjectId, ref: 'Request' },
+        donor: { type: mongoose.Schema.Types.Mixed },
+        matchedAt: { type: Date }
+      }],
+      default: []
+    },
   },
   { timestamps: true }
 );

@@ -5,28 +5,27 @@ import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CreditCard, Clock, User, Heart, Building2 } from 'lucide-react';
+import { CreditCard, Clock, User, Heart, Building2, Eye } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 const PaymentPage = () => {
   const { user } = useAuth();
-  const { matchedDonor, organRequests, loadOrganRequests } = useNotifications();
+  const { matchedDonor, organRequests = [], loadOrganRequests } = useNotifications() || {};
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentSummary, setPaymentSummary] = useState(null);
+  
 
-  // Ensure we have the latest organ requests (so donor-match status is visible)
   useEffect(() => {
-    if (user?.id && loadOrganRequests) {
-      loadOrganRequests(user.id);
-    }
-    // load payment summary(s) for this patient
+    if (user?.id && loadOrganRequests) loadOrganRequests(user.id);
+
     (async () => {
       try {
         if (!user?.id) return;
         const resp = await fetch(`/api/payments/patient/${encodeURIComponent(user.id)}`);
         const json = await resp.json().catch(() => ({}));
         if (resp.ok && Array.isArray(json.data)) {
-          // pick first pending payment if present, else latest
           const pending = json.data.find(p => String(p.status || '').toLowerCase() === 'pending');
           setPaymentSummary(pending || (json.data[0] || null));
         }
@@ -36,14 +35,11 @@ const PaymentPage = () => {
     })();
   }, [user?.id, loadOrganRequests]);
 
-  // Find request where a donor is already matched for the logged-in user
-  const matchedRequest = organRequests.find((r) => {
+  const matchedRequest = (organRequests || []).find((r) => {
     if (!r) return false;
     const rs = String(r.status || '').toLowerCase();
-    // Treat requests that are donor-matched OR accepted (hospital approved) as actionable for payment
     const isMatched = rs.includes('donor') || rs.includes('matched') || rs.includes('accept');
 
-    // tolerant user matching: id, name or email may be present in different shapes
     const uid = String(user?.id || user?._id || '');
     const uname = String(user?.name || user?.fullName || '');
     const uemail = String(user?.email || '');
@@ -65,9 +61,8 @@ const PaymentPage = () => {
   return (
     <div className="min-h-screen bg-background">
       <PatientSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
-      
+
       <main className="lg:ml-64 min-h-screen">
-        {/* Header */}
         <header className="sticky top-0 z-20 bg-card border-b border-border px-6 py-4">
           <div className="ml-12 lg:ml-0">
             <h1 className="text-2xl font-bold text-foreground">Payments</h1>
@@ -77,7 +72,6 @@ const PaymentPage = () => {
 
         <div className="p-6">
           {!paymentSummary && !matchedDonor && !matchedRequest ? (
-            /* No Donor Matched State */
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-16 text-center">
                 <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mb-6">
@@ -90,7 +84,6 @@ const PaymentPage = () => {
               </CardContent>
             </Card>
           ) : (
-            /* Donor Matched State */
             <div className="max-w-2xl mx-auto">
               <Card className="overflow-hidden">
                 <div className="bg-success/10 p-6 border-b border-success/20">
@@ -106,7 +99,6 @@ const PaymentPage = () => {
                 </div>
 
                 <CardContent className="p-6 space-y-6">
-                  {/* Donor Details */}
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg">
                       <User className="w-5 h-5 text-muted-foreground" />
@@ -121,23 +113,18 @@ const PaymentPage = () => {
                       <Heart className="w-5 h-5 text-muted-foreground" />
                       <div>
                         <p className="text-xs text-muted-foreground">Organ Type</p>
-                        <p className="font-medium">
-                          {matchedDonor?.organType || matchedRequest?.organType}
-                        </p>
+                        <p className="font-medium">{matchedDonor?.organType || matchedRequest?.organType}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg sm:col-span-2">
                       <Building2 className="w-5 h-5 text-muted-foreground" />
                       <div>
                         <p className="text-xs text-muted-foreground">Hospital</p>
-                        <p className="font-medium">
-                          {matchedDonor?.hospitalName || matchedRequest?.hospitalName || 'City General Hospital'}
-                        </p>
+                        <p className="font-medium">{matchedDonor?.hospitalName || matchedRequest?.hospitalName || 'City General Hospital'}</p>
                       </div>
                     </div>
                   </div>
 
-                  {/* Payment Summary */}
                   <div className="border-t border-border pt-6">
                     <h4 className="font-semibold mb-4">Payment Summary</h4>
                     <div className="space-y-2">
@@ -160,14 +147,12 @@ const PaymentPage = () => {
                     </div>
                   </div>
 
-                  {/* Payment Button */}
-                  <Button 
-                    onClick={() => setShowPaymentModal(true)} 
-                    className="w-full h-12 text-base"
-                  >
-                    <CreditCard className="w-5 h-5 mr-2" />
-                    Proceed to Payment
-                  </Button>
+                  <div className="flex gap-3">
+                    <Button onClick={() => setShowPaymentModal(true)} className="flex-1 h-12 text-base">
+                      <CreditCard className="w-5 h-5 mr-2" />
+                      Proceed to Payment
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -175,7 +160,6 @@ const PaymentPage = () => {
         </div>
       </main>
 
-      {/* Razorpay Integration Modal */}
       {(paymentSummary || matchedDonor || matchedRequest) && (
         <RazorpayModal
           isOpen={showPaymentModal}
@@ -188,6 +172,8 @@ const PaymentPage = () => {
           requestId={matchedRequest?.id || paymentSummary?.requestId || null}
         />
       )}
+
+      
     </div>
   );
 };

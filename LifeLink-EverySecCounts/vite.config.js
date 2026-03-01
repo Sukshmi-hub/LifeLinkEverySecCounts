@@ -10,6 +10,7 @@ export default defineConfig({
     proxy: {
       // forward any /api requests to the backend running on port 5000
       '/api': {
+        // Frontend expects backend on port 5000 in development
         target: 'http://localhost:5000',
         changeOrigin: true,
         secure: false,

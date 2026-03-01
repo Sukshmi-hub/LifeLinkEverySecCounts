@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
+import { useSocket } from '@/hooks/useSocket';
+import { useAuth } from '@/context/AuthContext';
 
 const NotificationContext = createContext(undefined);
 
@@ -23,6 +25,67 @@ export const NotificationProvider = ({ children }) => {
   const [fundRequests, setFundRequests] = useState([]);
   const [selectedHospital, setSelectedHospital] = useState(null);
   const [matchedDonor, setMatchedDonor] = useState(null);
+  const { socket } = useSocket();
+  const { user } = useAuth() || {};
+  const [myHospital, setMyHospital] = useState(null);
+
+  // If user is hospital, load hospital account (so we can filter notifications)
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!user || user.role !== 'hospital') return;
+        const token = localStorage.getItem('token');
+        const resp = await fetch('/api/hospital/me', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        const j = await resp.json().catch(() => ({}));
+        if (resp.ok && j.data) setMyHospital(j.data);
+      } catch (e) {
+        // ignore
+      }
+    })()
+  }, [user]);
+
+  // Listen for server-sent notifications via socket and add locally
+  useEffect(() => {
+    if (!socket) return;
+    const handler = (payload) => {
+      try {
+        if (!payload) return;
+        // Only handle notifications targeted to this user's role
+        if (payload.targetRole && payload.targetRole !== (user && user.role)) return;
+        // If notification is hospital-scoped, ensure it matches this hospital account
+        if (payload.hospitalId && myHospital && String(payload.hospitalId) !== String(myHospital._id)) return;
+        addNotification({
+          type: payload.type || 'info',
+          title: payload.title || 'Notification',
+          message: payload.message || '',
+          targetRole: payload.targetRole || 'hospital',
+        })
+      } catch (e) {
+        console.error('Failed to handle socket notification', e)
+      }
+    }
+    socket.on('new_notification', handler)
+    return () => socket.off('new_notification', handler)
+  }, [socket, user, myHospital])
+
+  // Load persisted notifications from server for this user/hospital
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!user) return
+        const token = localStorage.getItem('token')
+        const resp = await fetch('/api/notifications', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+        const json = await resp.json().catch(() => ({}))
+        if (resp.ok && Array.isArray(json.data)) {
+          // normalize ids to string id for UI
+          const mapped = json.data.map(n => ({ ...n, id: n._id || n.id }))
+          setNotifications(mapped)
+        }
+      } catch (e) {
+        console.error('Failed to load persisted notifications', e)
+      }
+    })()
+  }, [user])
 
   const addNotification = (notification) => {
     const newNotification = {
@@ -35,9 +98,20 @@ export const NotificationProvider = ({ children }) => {
   };
 
   const markAsRead = (id) => {
-    setNotifications(prev =>
-      prev.map(n => (n.id === id ? { ...n, read: true } : n))
-    );
+    (async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const resp = await fetch(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'PUT', headers: token ? { Authorization: `Bearer ${token}` } : {} })
+        if (resp.ok) {
+          setNotifications(prev => prev.map(n => (String(n.id) === String(id) ? { ...n, read: true } : n)))
+        } else {
+          setNotifications(prev => prev.map(n => (String(n.id) === String(id) ? { ...n, read: true } : n)))
+        }
+      } catch (e) {
+        console.error('Failed to mark notification read', e)
+        setNotifications(prev => prev.map(n => (String(n.id) === String(id) ? { ...n, read: true } : n)))
+      }
+    })()
   };
 
   const markAllAsRead = (role) => {
@@ -69,9 +143,18 @@ export const NotificationProvider = ({ children }) => {
   };
 
   // Load organ requests from backend for a given patientId
-  const loadOrganRequests = async (patientId) => {
+  const loadOrganRequests = useCallback(async (patientId) => {
     if (!patientId) return;
     try {
+      // simple rate-limit / dedupe: if same patientId was requested in the last 1500ms, skip
+      const now = Date.now()
+      const last = lastRequestsRef.current["organ:" + patientId]
+      if (last && (now - last) < 1500) {
+        console.debug('[NotificationContext] skipping loadOrganRequests due to recent fetch', patientId)
+        return
+      }
+      lastRequestsRef.current["organ:" + patientId] = now
+      console.debug('[NotificationContext] loadOrganRequests called for', patientId, new Date().toISOString())
       const res = await fetch(`http://localhost:5000/api/requests?patientId=${encodeURIComponent(patientId)}`)
       const json = await res.json()
       if (json && json.success && Array.isArray(json.data)) {
@@ -133,7 +216,7 @@ export const NotificationProvider = ({ children }) => {
     } catch (err) {
       console.error('Failed to load organ requests:', err)
     }
-  }
+  }, [])
 
   const updateOrganRequestStatus = (id, status) => {
     setOrganRequests(prev => {
@@ -155,7 +238,7 @@ export const NotificationProvider = ({ children }) => {
   };
 
   // Load fund requests for a given patientId from backend
-  const loadFundRequests = async (patientId) => {
+  const loadFundRequests = useCallback(async (patientId) => {
     if (!patientId) return
     try {
       const token = localStorage.getItem('token')
@@ -190,10 +273,10 @@ export const NotificationProvider = ({ children }) => {
     } catch (err) {
       console.error('Failed to load fund requests', err)
     }
-  }
+  }, [])
 
   // Load fund requests for a given ngoId (for NGO dashboard)
-  const loadNgoFundRequests = async (ngoId) => {
+  const loadNgoFundRequests = useCallback(async (ngoId) => {
     if (!ngoId) return
     try {
       const token = localStorage.getItem('token')
@@ -229,7 +312,7 @@ export const NotificationProvider = ({ children }) => {
     } catch (err) {
       console.error('Failed to load NGO fund requests', err)
     }
-  }
+  }, [])
 
   const addFundRequest = (request) => {
     (async () => {

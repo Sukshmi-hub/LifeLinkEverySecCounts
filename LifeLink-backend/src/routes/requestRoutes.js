@@ -4,10 +4,13 @@ import fs from 'fs'
 import multer from 'multer'
 import { authenticate, optionalAuth, requireRole } from '../middleware/auth.js'
 import Request from '../models/Request.js'
+import mongoose from 'mongoose'
 import Patient from '../models/Patient.js'
 import NGO from '../models/NGO.js'
+import Notification from '../models/Notification.js'
 import Donor from '../models/Donor.js'
 import Message from '../models/Message.js'
+import Hospital from '../models/Hospital.js'
 const router = express.Router()
 
 // Ensure uploads folder exists
@@ -32,6 +35,11 @@ router.put('/:id/send-to-hospital', authenticate, async (req, res) => {
     if (!ngo) return res.status(404).json({ success: false, message: 'NGO not found for user' })
 
     const requestId = req.params.id
+    // Validate ObjectId early to avoid Mongoose CastError
+    if (!mongoose.Types.ObjectId.isValid(requestId)) {
+      console.debug('Invalid request id provided to send-matched-details', { requestId })
+      return res.status(400).json({ success: false, message: 'Invalid request id' })
+    }
     const reqDoc = await Request.findById(requestId)
     if (!reqDoc) return res.status(404).json({ success: false, message: 'Request not found' })
 
@@ -45,6 +53,133 @@ router.put('/:id/send-to-hospital', authenticate, async (req, res) => {
     return res.status(200).json({ success: true, message: 'Request sent to hospital', data: reqDoc })
   } catch (err) {
     console.error('Send to hospital failed:', err)
+    return res.status(500).json({ success: false, message: 'Server error' })
+  }
+})
+
+// Hospital sends matched donor details to the hospital where the patient is admitted
+router.put('/:id/send-matched-details', authenticate, async (req, res) => {
+  try {
+    console.debug('PUT /api/requests/:id/send-matched-details called', { user: req.user && { id: req.user._id, role: req.user.role }, params: req.params })
+    if (!req.user) return res.status(401).json({ success: false, message: 'Not authenticated' })
+    if (String(req.user.role).toLowerCase() !== 'hospital') return res.status(403).json({ success: false, message: 'Forbidden' })
+
+    const hospital = await Hospital.findOne({ userId: req.user._id }) || await Hospital.findById(req.user._id)
+    if (!hospital) {
+      console.debug('Hospital not found for user', { userId: req.user._id })
+      return res.status(404).json({ success: false, message: 'Hospital account not found for user' })
+    }
+
+    const requestId = req.params.id
+    // validate id to avoid Mongoose CastError
+    if (!mongoose.Types.ObjectId.isValid(requestId)) {
+      console.debug('Invalid request id provided to send-matched-details', { requestId })
+      return res.status(400).json({ success: false, message: 'Invalid request id' })
+    }
+    const reqDoc = await Request.findById(requestId)
+    if (!reqDoc) return res.status(404).json({ success: false, message: 'Request not found' })
+
+    // Expect donor details in body
+    const donorDetails = req.body?.donor || req.body?.donorDetails || req.body
+    console.debug('Donor details payload keys:', { keys: donorDetails ? Object.keys(donorDetails) : null, user: req.user && { id: req.user._id, role: req.user.role }, requestId })
+    if (!donorDetails || Object.keys(donorDetails).length === 0) {
+      console.debug('Missing donor details in request body')
+      return res.status(400).json({ success: false, message: 'Donor details required' })
+    }
+
+    // Attach matched donor details to the request and mark as matched
+    // Store a sanitized subset of donor details to avoid storing large circular objects
+    // compute a small JSON-safe snapshot of incoming donor details
+    let rawSnapshot = null
+    try {
+      rawSnapshot = JSON.parse(JSON.stringify(donorDetails))
+    } catch (e) {
+      rawSnapshot = { note: 'snapshot_failed' }
+    }
+
+    const sanitizedDonor = {
+      name: donorDetails.name || donorDetails.fullName || donorDetails.user?.name || donorDetails.requestedBy?.name || donorDetails.donorName || null,
+      phone: donorDetails.phone || donorDetails.mobile || donorDetails.contact || donorDetails.user?.phone || null,
+      bloodType: donorDetails.blood_type || donorDetails.bloodGroup || donorDetails.blood || null,
+      organOffered: donorDetails.organType || donorDetails.organOffered || donorDetails.organ || null,
+      hospitalName: donorDetails.hospitalName || donorDetails.hospital || null,
+      // compact JSON-safe snapshot
+      raw: rawSnapshot,
+    }
+    // Include sender hospital info on the sanitized donor snapshot so recipients can see who sent it
+    try {
+      sanitizedDonor.senderHospitalId = hospital && hospital._id ? hospital._id : null
+      sanitizedDonor.senderHospitalName = hospital && hospital.name ? hospital.name : null
+    } catch (e) {
+      // ignore
+    }
+    reqDoc.matchedDonor = sanitizedDonor
+    // Use an allowed enum value for `status` to avoid validation errors
+    // The schema currently permits: 'pending', 'approved', 'rejected'
+    reqDoc.status = 'approved'
+    reqDoc.matchedAt = new Date()
+    reqDoc.detailsSentToPatientHospital = true
+    reqDoc.sentToPatientHospitalAt = new Date()
+    await reqDoc.save()
+
+    // Persist a compact snapshot of the matched donor to Patient and Hospital records
+    try {
+      const snapshot = { requestId: reqDoc._id, donor: sanitizedDonor, matchedAt: reqDoc.matchedAt }
+      if (reqDoc.patientId) {
+        await Patient.findByIdAndUpdate(reqDoc.patientId, { $push: { matchedDonors: snapshot } }, { upsert: false })
+      }
+      if (reqDoc.hospitalId) {
+        await Hospital.findByIdAndUpdate(reqDoc.hospitalId, { $push: { matchedDonors: snapshot } }, { upsert: false })
+      }
+    } catch (e) {
+      console.error('Failed to persist matched donor snapshot to patient/hospital', e && e.stack ? e.stack : e)
+    }
+
+    // Persist notification to DB and emit event so hospital dashboards show a new incoming-match notification
+    try {
+      const notif = new Notification({
+        title: 'New match request received',
+        message: `New match request received from ${hospital && hospital.name ? hospital.name : 'another hospital'}`,
+        type: 'info',
+        targetRole: 'hospital',
+        recipientHospitalId: reqDoc.hospitalId || null,
+        requestId: reqDoc._id,
+        senderHospitalId: hospital && hospital._id ? hospital._id : null,
+        senderHospitalName: hospital && hospital.name ? hospital.name : ''
+      })
+      await notif.save()
+
+      const io = global.__LIFELINK_IO
+      const payload = {
+        id: notif._id,
+        type: notif.type,
+        title: notif.title,
+        message: notif.message,
+        targetRole: notif.targetRole,
+        hospitalId: String(notif.recipientHospitalId || ''),
+        requestId: String(notif.requestId || ''),
+        senderHospitalId: notif.senderHospitalId ? String(notif.senderHospitalId) : null,
+        senderHospitalName: notif.senderHospitalName || null,
+        timestamp: notif.timestamp
+      }
+      if (io && typeof io.emit === 'function') io.emit('new_notification', payload)
+    } catch (e) {
+      console.error('Failed to emit notification event', e && e.stack ? e.stack : e)
+    }
+
+    // Create a lightweight message/notification so patient-hospital staff can see it in their chat/feeds
+    try {
+      const MessageMod = (await import('../models/Message.js')).default
+      const roomId = `room_hospital_${reqDoc.hospitalId}_patient_${reqDoc.patientId || 'unknown'}`
+      const msg = new MessageMod({ senderId: req.user._id, senderRole: 'hospital', roomId, content: `Matched donor details sent for request ${requestId}`, timestamp: new Date() })
+      await msg.save()
+    } catch (e) {
+      console.error('Failed to create notification message for matched details', e)
+    }
+
+    return res.status(200).json({ success: true, message: "Details sent to patient's hospital successfully", data: reqDoc })
+  } catch (err) {
+    console.error('Send matched details failed:', err && err.stack ? err.stack : err, { body: req.body, user: req.user && { id: req.user._id, role: req.user.role } })
     return res.status(500).json({ success: false, message: 'Server error' })
   }
 })
