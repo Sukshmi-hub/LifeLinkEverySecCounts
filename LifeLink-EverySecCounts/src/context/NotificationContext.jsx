@@ -28,6 +28,7 @@ export const NotificationProvider = ({ children }) => {
   const { socket } = useSocket();
   const { user } = useAuth() || {};
   const [myHospital, setMyHospital] = useState(null);
+  const lastRequestsRef = useRef({})
 
   // If user is hospital, load hospital account (so we can filter notifications)
   useEffect(() => {
@@ -241,6 +242,13 @@ export const NotificationProvider = ({ children }) => {
   const loadFundRequests = useCallback(async (patientId) => {
     if (!patientId) return
     try {
+      const now = Date.now()
+      const last = lastRequestsRef.current["fund:" + patientId]
+      if (last && (now - last) < 1500) {
+        console.debug('[NotificationContext] skipping loadFundRequests due to recent fetch', patientId)
+        return
+      }
+      lastRequestsRef.current["fund:" + patientId] = now
       const token = localStorage.getItem('token')
       const res = await fetch(`http://localhost:5000/api/requests?patientId=${encodeURIComponent(patientId)}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
       const json = await res.json()
@@ -279,6 +287,13 @@ export const NotificationProvider = ({ children }) => {
   const loadNgoFundRequests = useCallback(async (ngoId) => {
     if (!ngoId) return
     try {
+      const now = Date.now()
+      const last = lastRequestsRef.current["ngoFund:" + ngoId]
+      if (last && (now - last) < 1500) {
+        console.debug('[NotificationContext] skipping loadNgoFundRequests due to recent fetch', ngoId)
+        return
+      }
+      lastRequestsRef.current["ngoFund:" + ngoId] = now
       const token = localStorage.getItem('token')
       const res = await fetch(`http://localhost:5000/api/requests?ngoId=${encodeURIComponent(ngoId)}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
       const json = await res.json()
