@@ -29,6 +29,8 @@ const RequestSchema = new Schema({
     ref: 'Hospital',
     required: false,
   },
+  // Human-friendly name of the hospital patient was admitted in (denormalized for UI)
+  patientHospitalName: { type: String, default: '' },
   requestedBy: {
     type: Schema.Types.ObjectId,
     ref: 'User',

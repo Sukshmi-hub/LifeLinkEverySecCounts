@@ -122,14 +122,35 @@ router.put('/:id/send-matched-details', authenticate, async (req, res) => {
     reqDoc.sentToPatientHospitalAt = new Date()
     await reqDoc.save()
 
-    // Persist a compact snapshot of the matched donor to Patient and Hospital records
+    // Resolve the hospital where the patient is admitted (targetHospitalId).
+    // Prefer reqDoc.hospitalId, fallback to Patient.hospital or Patient by requestedBy
+    let targetHospitalId = reqDoc.hospitalId || null
+    try {
+      if (!targetHospitalId && reqDoc.patientId) {
+        const p = await Patient.findById(reqDoc.patientId)
+        if (p && p.hospital) targetHospitalId = p.hospital
+      }
+      if (!targetHospitalId && reqDoc.requestedBy) {
+        const p2 = await Patient.findOne({ userId: reqDoc.requestedBy })
+        if (p2 && p2.hospital) targetHospitalId = p2.hospital
+      }
+      // If we found a target hospital and request didn't have it, persist it for future clarity
+      if (targetHospitalId && (!reqDoc.hospitalId || String(reqDoc.hospitalId) !== String(targetHospitalId))) {
+        reqDoc.hospitalId = targetHospitalId
+        await reqDoc.save()
+      }
+    } catch (e) {
+      console.error('Failed to resolve target hospital for matched details', e)
+    }
+
+    // Persist a compact snapshot of the matched donor to Patient and the target Hospital records
     try {
       const snapshot = { requestId: reqDoc._id, donor: sanitizedDonor, matchedAt: reqDoc.matchedAt }
       if (reqDoc.patientId) {
         await Patient.findByIdAndUpdate(reqDoc.patientId, { $push: { matchedDonors: snapshot } }, { upsert: false })
       }
-      if (reqDoc.hospitalId) {
-        await Hospital.findByIdAndUpdate(reqDoc.hospitalId, { $push: { matchedDonors: snapshot } }, { upsert: false })
+      if (targetHospitalId) {
+        await Hospital.findByIdAndUpdate(targetHospitalId, { $push: { matchedDonors: snapshot } }, { upsert: false })
       }
     } catch (e) {
       console.error('Failed to persist matched donor snapshot to patient/hospital', e && e.stack ? e.stack : e)
@@ -142,7 +163,7 @@ router.put('/:id/send-matched-details', authenticate, async (req, res) => {
         message: `New match request received from ${hospital && hospital.name ? hospital.name : 'another hospital'}`,
         type: 'info',
         targetRole: 'hospital',
-        recipientHospitalId: reqDoc.hospitalId || null,
+        recipientHospitalId: targetHospitalId || null,
         requestId: reqDoc._id,
         senderHospitalId: hospital && hospital._id ? hospital._id : null,
         senderHospitalName: hospital && hospital.name ? hospital.name : ''
@@ -170,11 +191,33 @@ router.put('/:id/send-matched-details', authenticate, async (req, res) => {
     // Create a lightweight message/notification so patient-hospital staff can see it in their chat/feeds
     try {
       const MessageMod = (await import('../models/Message.js')).default
-      const roomId = `room_hospital_${reqDoc.hospitalId}_patient_${reqDoc.patientId || 'unknown'}`
+      const roomId = `room_hospital_${targetHospitalId || reqDoc.hospitalId}_patient_${reqDoc.patientId || 'unknown'}`
       const msg = new MessageMod({ senderId: req.user._id, senderRole: 'hospital', roomId, content: `Matched donor details sent for request ${requestId}`, timestamp: new Date() })
       await msg.save()
     } catch (e) {
       console.error('Failed to create notification message for matched details', e)
+    }
+
+    // Create canonical chat message entries for donor<->hospital and donor<->patient rooms so chat lists surface correctly
+    try {
+      const donorIdCandidate = donorDetails && (donorDetails._id || donorDetails.donorId || donorDetails.userId || donorDetails.id || (donorDetails.user && donorDetails.user._id))
+      const donorId = donorIdCandidate ? String(donorIdCandidate) : null
+      const patientIdForRoom = reqDoc.patientId || null
+      const MessageMod = (await import('../models/Message.js')).default
+
+      if (donorId && targetHospitalId) {
+        const roomHospitalDonor = `room_hospital_${targetHospitalId}_donor_${donorId}`
+        const m1 = new MessageMod({ senderId: req.user._id, senderRole: 'hospital', roomId: roomHospitalDonor, content: `Donor matched for request ${requestId}`, timestamp: new Date() })
+        await m1.save()
+
+        if (patientIdForRoom) {
+          const roomDonorPatient = `room_donor_${donorId}_patient_${patientIdForRoom}_hospital_${targetHospitalId}`
+          const m2 = new MessageMod({ senderId: req.user._id, senderRole: 'hospital', roomId: roomDonorPatient, content: `Donor matched for patient ${patientIdForRoom}`, timestamp: new Date() })
+          await m2.save()
+        }
+      }
+    } catch (e) {
+      console.error('Failed to create chat messages for donor/hospital rooms', e)
     }
 
     return res.status(200).json({ success: true, message: "Details sent to patient's hospital successfully", data: reqDoc })

@@ -47,6 +47,11 @@ const patientSchema = new mongoose.Schema(
       ref: 'Hospital',
       default: null,
     },
+    // Human-friendly hospital name (denormalized) for quick display in UIs
+    hospitalName: {
+      type: String,
+      default: ''
+    },
     // medical_id field removed to allow multiple entries
     health_conditions: {
       type: [String],

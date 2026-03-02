@@ -83,7 +83,44 @@ const PaymentPage = () => {
                 </p>
               </CardContent>
             </Card>
+          ) : paymentSummary ? (
+            // If a payment summary exists for the patient, show only the summary (no donor details or buttons)
+            <div className="max-w-2xl mx-auto">
+              <Card className="overflow-hidden">
+                <CardContent className="p-6 space-y-6">
+                  <div className="border-t border-border pt-0">
+                    <h4 className="font-semibold mb-4">Payment Summary</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Transplant Surgery Fee</span>
+                        <span>₹{(paymentSummary?.surgeryFee || 0).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Hospital Charges</span>
+                        <span>₹{(paymentSummary?.hospitalCharges || 0).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Processing Fee</span>
+                        <span>₹{(paymentSummary?.processingFee || 0).toLocaleString()}</span>
+                      </div>
+                      <div className="border-t border-border pt-2 mt-2 flex justify-between">
+                        <span className="font-semibold">Total Amount</span>
+                        <span className="font-bold text-lg">₹{(paymentSummary?.totalAmount || 0).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button onClick={() => setShowPaymentModal(true)} className="flex-1 h-12 text-base">
+                      <CreditCard className="w-5 h-5 mr-2" />
+                      Proceed to Payment
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           ) : (
+            // No paymentSummary but matched donor/request exists -> show donor matched UI
             <div className="max-w-2xl mx-auto">
               <Card className="overflow-hidden">
                 <div className="bg-success/10 p-6 border-b border-success/20">

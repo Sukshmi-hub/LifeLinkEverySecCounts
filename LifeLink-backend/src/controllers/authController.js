@@ -309,8 +309,21 @@ export const register = async (req, res) => {
               update.$set[`location.${lk}`] = roleData.location[lk];
             });
           }
-          // Set hospital reference if provided
-          if (roleData.hospital) update.$set.hospital = roleData.hospital;
+          // Set hospital reference if provided and denormalize hospital name if resolvable
+          if (roleData.hospital) {
+            update.$set.hospital = roleData.hospital;
+            try {
+              // attempt to resolve hospital name when frontend provided an id or name
+              const hospCandidate = roleData.hospital;
+              let hospDoc = null;
+              const isObjectIdLike = typeof hospCandidate === 'string' && hospCandidate.length === 24 && /^[0-9a-fA-F]+$/.test(hospCandidate);
+              if (isObjectIdLike) hospDoc = await Hospital.findById(hospCandidate).lean();
+              if (!hospDoc) hospDoc = await Hospital.findOne({ $or: [{ name: hospCandidate }, { legacyId: hospCandidate }, { externalId: hospCandidate }] }).lean();
+              if (hospDoc && hospDoc.name) update.$set.hospitalName = hospDoc.name;
+            } catch (e) {
+              console.warn('Failed to resolve hospital name during registration update', e && e.message ? e.message : e);
+            }
+          }
         // Donor additional fields
         if (role === 'donor') {
           update.$set.address = roleData.address;
@@ -380,7 +393,25 @@ export const register = async (req, res) => {
       // If registering a patient or donor and a hospital was selected, create a verification request
       if (role === 'patient' || role === 'donor') {
         try {
-          const selectedHospitalId = req.body.hospital || req.body.hospital_id || req.body.hospitalId;
+          let selectedHospitalId = req.body.hospital || req.body.hospital_id || req.body.hospitalId;
+          // Normalize hospital id: if frontend sent a non-ObjectId (e.g., a custom id or name), try to resolve
+          try {
+            if (selectedHospitalId) {
+              // If it's already a 24-char hex string, try to load that hospital
+              let hospDoc = null;
+              const isObjectIdLike = typeof selectedHospitalId === 'string' && selectedHospitalId.length === 24 && /^[0-9a-fA-F]+$/.test(selectedHospitalId);
+              if (isObjectIdLike) {
+                hospDoc = await Hospital.findById(selectedHospitalId).exec();
+              }
+              // If not found yet, try matching by name or by a string id stored in `legacyId` or similar
+              if (!hospDoc) {
+                hospDoc = await Hospital.findOne({ $or: [ { name: selectedHospitalId }, { legacyId: selectedHospitalId }, { externalId: selectedHospitalId } ] }).exec();
+              }
+              if (hospDoc && hospDoc._id) selectedHospitalId = String(hospDoc._id);
+            }
+          } catch (e) {
+            console.warn('Failed to normalize selectedHospitalId during registration', e && e.message ? e.message : e);
+          }
           if (selectedHospitalId) {
             const Request = (await import('../models/Request.js')).default;
 
@@ -392,10 +423,21 @@ export const register = async (req, res) => {
               // ignore
             }
 
+            // Try to resolve hospital name for denormalized display on the verification request
+            let hospDocForRequest = null;
+            try {
+              const isObjectIdLike = typeof selectedHospitalId === 'string' && selectedHospitalId.length === 24 && /^[0-9a-fA-F]+$/.test(selectedHospitalId);
+              if (isObjectIdLike) hospDocForRequest = await Hospital.findById(selectedHospitalId).lean();
+              if (!hospDocForRequest) hospDocForRequest = await Hospital.findOne({ $or: [{ name: selectedHospitalId }, { legacyId: selectedHospitalId }, { externalId: selectedHospitalId }] }).lean();
+            } catch (e) {
+              // ignore resolution errors
+            }
+
             const verificationRequest = new Request({
               requestType: 'user_verification',
               status: 'pending',
               hospitalId: selectedHospitalId,
+              patientHospitalName: hospDocForRequest && hospDocForRequest.name ? hospDocForRequest.name : undefined,
               requestedBy: newUser._id,
               // Prefer role document id (Patient/Donor) when available, otherwise fall back to user id
               patientId: role === 'patient' ? (roleDoc?._id || newUser._id) : undefined,

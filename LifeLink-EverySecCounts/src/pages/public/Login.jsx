@@ -109,24 +109,15 @@ const Login = () => {
     full_address: ''
   });
 
-  // ✅ ADDED: donor age error state
   const [donorAgeError, setDonorAgeError] = useState('');
-  
-  // ✅ ADDED: patient age error state
   const [patientAgeError, setPatientAgeError] = useState('');
-
-  // ✅ ADDED: hospitals list state
   const [hospitals, setHospitals] = useState([]);
-
-  // ✅ ADDED: Geolocation hook
   const { state: geoState, getLocation } = useGeolocation();
 
-  // ✅ ADDED: Handle geolocation
   const handleUseLocation = async () => {
     try {
       const res = await getLocation();
       const { coords, address } = res;
-      // Fill appropriate fields based on selected role
       if (commonData.role === 'patient') {
         setPatientData((p) => ({ 
           ...p, 
@@ -186,7 +177,6 @@ const Login = () => {
     }
   }, [isAuthenticated, user, navigate]);
 
-  // ✅ ADDED: Fetch hospitals from database
   useEffect(() => {
     const fetchHospitals = async () => {
       try {
@@ -194,6 +184,9 @@ const Login = () => {
         const result = await response.json();
         if (result.success) {
           setHospitals(result.data);
+          if (!patientData.hospital && Array.isArray(result.data) && result.data.length > 0) {
+            setPatientData(p => ({ ...p, hospital: String(result.data[0].id) }));
+          }
         }
       } catch (err) {
         console.error('Failed to fetch hospitals:', err);
@@ -202,67 +195,53 @@ const Login = () => {
     fetchHospitals();
   }, []);
 
-  // ✅ ADDED: donor age validation (18 - 70)
   useEffect(() => {
     if (commonData.role !== 'donor') {
       setDonorAgeError('');
       return;
     }
-
     if (donorData.age === '') {
       setDonorAgeError('');
       return;
     }
-
     const ageNum = Number(donorData.age);
-
     if (Number.isNaN(ageNum)) {
       setDonorAgeError('Please enter a valid age');
       return;
     }
-
     if (ageNum < 18) {
       setDonorAgeError('Donor must be at least 18 years old');
       return;
     }
-
     if (ageNum > 70) {
       setDonorAgeError('Donor age must be 70 or below');
       return;
     }
-
     setDonorAgeError('');
   }, [donorData.age, commonData.role]);
 
-  // ✅ ADDED: patient age validation (0 - 110)
   useEffect(() => {
     if (commonData.role !== 'patient') {
       setPatientAgeError('');
       return;
     }
-
     if (patientData.age === '') {
       setPatientAgeError('');
       return;
     }
-
     const ageNum = Number(patientData.age);
-
     if (Number.isNaN(ageNum)) {
       setPatientAgeError('Please enter a valid age');
       return;
     }
-
     if (ageNum < 0) {
       setPatientAgeError('Patient age cannot be negative');
       return;
     }
-
     if (ageNum > 110) {
       setPatientAgeError('Patient age must be 110 or below');
       return;
     }
-
     setPatientAgeError('');
   }, [patientData.age, commonData.role]);
 
@@ -279,17 +258,14 @@ const Login = () => {
       });
       return false;
     }
-
     if (commonData.password !== commonData.confirmPassword) {
       toast({ title: 'Error', description: 'Passwords do not match', variant: 'destructive' });
       return false;
     }
-
     if (!phoneRegex.test(commonData.phone)) {
       toast({ title: 'Invalid Primary Phone', description: 'Phone number must be exactly 10 numeric digits.', variant: 'destructive' });
       return false;
     }
-
     if (!emailRegex.test(commonData.email)) {
       toast({ 
         title: 'Invalid Email Domain', 
@@ -298,7 +274,6 @@ const Login = () => {
       });
       return false;
     }
-
     if (commonData.role === 'ngo') {
       if (!phoneRegex.test(ngoData.ngoPhone)) {
         toast({ title: 'Invalid NGO Phone', description: 'NGO phone must be 10 digits.', variant: 'destructive' });
@@ -309,49 +284,38 @@ const Login = () => {
         return false;
       }
     }
-
     if (commonData.role === 'hospital') {
       if (!hospitalData.type) {
         toast({ title: 'Type Required', description: 'Please select Hospital Type (Government/Private).', variant: 'destructive' });
         return false;
       }
     }
-
-    // ✅ ADDED: patient age validation
     if (commonData.role === 'patient') {
       const ageNum = Number(patientData.age);
-
       if (!patientData.age) {
         toast({ title: 'Age Required', description: 'Please enter patient age.', variant: 'destructive' });
         return false;
       }
-
       if (Number.isNaN(ageNum) || ageNum < 0 || ageNum > 110) {
         toast({ title: 'Invalid Patient Age', description: 'Patient age must be between 0 and 110.', variant: 'destructive' });
         return false;
       }
     }
-
-    // ✅ UPDATED: donor validation (added age constraint)
     if (commonData.role === 'donor') {
       const ageNum = Number(donorData.age);
-
       if (!donorData.age) {
         toast({ title: 'Age Required', description: 'Please enter donor age.', variant: 'destructive' });
         return false;
       }
-
       if (Number.isNaN(ageNum) || ageNum < 18 || ageNum > 70) {
         toast({ title: 'Invalid Donor Age', description: 'Donor age must be between 18 and 70.', variant: 'destructive' });
         return false;
       }
-
       if (!phoneRegex.test(donorData.emergencyPhone)) {
         toast({ title: 'Invalid Emergency Phone', description: 'Emergency contact must be 10 digits.', variant: 'destructive' });
         return false;
       }
     }
-
     return true;
   };
 
@@ -368,7 +332,6 @@ const Login = () => {
       if (result.success) {
         localStorage.setItem('token', result.data.token);
         localStorage.setItem('user', JSON.stringify(result.data.user));
-        // Notify SPA that a server login occurred so AuthProvider can refresh profile
         try {
           window.dispatchEvent(new CustomEvent('server-login', { detail: { user: result.data.user, token: result.data.token } }));
         } catch (e) {}
@@ -387,7 +350,6 @@ const Login = () => {
   const handleRegister = async (e) => {
     e.preventDefault();
     if (!validateRegistration()) return;
-
     setIsLoading(true);
     try {
       const payload = {
@@ -495,7 +457,6 @@ const Login = () => {
     { value: 'ngo', label: 'NGO', icon: Users },
   ];
 
-  // Logic to determine name field label based on selected role
   const isOrganization = commonData.role === 'ngo' || commonData.role === 'hospital';
 
   if (showSuccess) {
@@ -553,7 +514,6 @@ const Login = () => {
                 ))}
               </div>
 
-              {/* Common Fields */}
               <div className="space-y-4 border-t pt-4">
                 <Label>{isOrganization ? 'Organization Name' : 'Full Name'}</Label>
                 <Input 
@@ -584,7 +544,6 @@ const Login = () => {
                 </div>
               </div>
 
-              {/* ROLE SPECIFIC: PATIENT */}
               {commonData.role === 'patient' && (
                 <div className="space-y-4 border-t pt-4">
                   <h3 className="text-md font-semibold flex items-center gap-2"><Stethoscope className="h-4 w-4 text-primary" /> Patient Details</h3>
@@ -613,27 +572,30 @@ const Login = () => {
                     <Input placeholder="City, State" value={patientData.location} onChange={(e) => setPatientData({ ...patientData, location: e.target.value })} required />
                     <Button type="button" variant="secondary" onClick={handleUseLocation}>Use My Location</Button>
                   </div>
-                  <Select onValueChange={(v) => setPatientData({ ...patientData, hospital: v })}>
-                    <SelectTrigger><SelectValue placeholder="Hospital (Patient Admitted In)" /></SelectTrigger>
-                    <SelectContent className="bg-white">
-                      {hospitals.map((hospital) => (
-                        <SelectItem key={hospital.id} value={hospital.id.toString()}>
-                          {hospital.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  
+                  {/* ADDED: ADMITTED HOSPITAL HEADING */}
+                  <div className="space-y-2">
+                    <Label>Admitted Hospital</Label>
+                    <Select value={patientData.hospital || ''} onValueChange={(v) => setPatientData({ ...patientData, hospital: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select Hospital" /></SelectTrigger>
+                      <SelectContent className="bg-white">
+                        {hospitals.map((hospital) => (
+                          <SelectItem key={hospital.id} value={hospital.id.toString()}>
+                            {hospital.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   <Input placeholder="12 Digit Aadhaar" maxLength={12} value={patientData.aadhaarNumber} onChange={(e) => setPatientData({...patientData, aadhaarNumber: e.target.value.replace(/\D/g, '')})} />
                 </div>
               )}
 
-              {/* ROLE SPECIFIC: DONOR */}
               {commonData.role === 'donor' && (
                 <div className="space-y-4 border-t pt-4">
                   <h3 className="text-md font-semibold flex items-center gap-2"><HeartHandshake className="h-4 w-4 text-primary" /> Donor Details</h3>
                   <div className="grid grid-cols-2 gap-4">
-
-                    {/* ✅ UPDATED: Donor Age Constraint */}
                     <div>
                       <Input
                         placeholder="Age (18 - 70)"
@@ -643,12 +605,10 @@ const Login = () => {
                         value={donorData.age}
                         onChange={(e) => setDonorData({ ...donorData, age: e.target.value })}
                       />
-
                       {donorAgeError && (
                         <p className="text-sm text-red-500 mt-1">{donorAgeError}</p>
                       )}
                     </div>
-
                     <Select onValueChange={(v) => setDonorData({...donorData, bloodGroup: v})}>
                       <SelectTrigger><SelectValue placeholder="Blood Group" /></SelectTrigger>
                       <SelectContent className="bg-white">
@@ -668,7 +628,6 @@ const Login = () => {
                 </div>
               )}
 
-              {/* ROLE SPECIFIC: HOSPITAL */}
               {commonData.role === 'hospital' && (
                 <div className="space-y-4 border-t pt-4">
                   <h3 className="text-md font-semibold flex items-center gap-2"><Building2 className="h-4 w-4 text-primary" /> Hospital Registration</h3>
@@ -693,7 +652,6 @@ const Login = () => {
                 </div>
               )}
 
-              {/* ROLE SPECIFIC: NGO */}
               {commonData.role === 'ngo' && (
                 <div className="space-y-4 border-t pt-4">
                   <h3 className="text-md font-semibold flex items-center gap-2"><Users className="h-4 w-4 text-primary" /> NGO Registration</h3>
