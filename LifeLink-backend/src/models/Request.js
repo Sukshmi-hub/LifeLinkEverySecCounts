@@ -31,6 +31,8 @@ const RequestSchema = new Schema({
   },
   // Human-friendly name of the hospital patient was admitted in (denormalized for UI)
   patientHospitalName: { type: String, default: '' },
+  // Human-friendly patient location snapshot at time of request
+  patientLocation: { type: String, default: '' },
   requestedBy: {
     type: Schema.Types.ObjectId,
     ref: 'User',
@@ -83,6 +85,9 @@ const RequestSchema = new Schema({
   // Payment-related fields
   paymentSent: { type: Boolean, default: false },
   paymentId: { type: Schema.Types.ObjectId, ref: 'Payment', required: false, default: null },
+  // Red alert flags
+  isRedAlert: { type: Boolean, default: false },
+  isResolved: { type: Boolean, default: false },
 }, { timestamps: true });
 
 // Fields added for donor-matching flow

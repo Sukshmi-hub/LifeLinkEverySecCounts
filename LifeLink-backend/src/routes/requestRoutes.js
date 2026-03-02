@@ -259,6 +259,12 @@ router.post('/', authenticate, upload.fields([
       patientName: patientNameToStore,
       organType: organType || '',
       urgency: (urgency || 'Medium').toLowerCase(),
+      // mark as red alert when urgency explicitly high
+      isRedAlert: ((urgency || 'Medium').toLowerCase() === 'high'),
+      // persist patient's blood group and location snapshot if available
+      bloodType: patientDoc?.blood_type || (body.bloodType || body.blood_type || ''),
+      patientHospitalName: patientDoc?.hospitalName || body.patientHospitalName || '',
+      patientLocation: (patientDoc && (patientDoc.location?.full_address || (patientDoc.location?.city ? `${patientDoc.location.city}${patientDoc.location?.state ? ', ' + patientDoc.location.state : ''}` : ''))) || (body.patientLocation || ''),
       hospitalId: hospital,
       requestedBy: user._id,
       message: details || '',
@@ -296,6 +302,92 @@ router.post('/', authenticate, upload.fields([
   } catch (err) {
     console.error('Create request failed:', err)
     return res.status(500).json({ success: false, message: 'Failed to create request' })
+  }
+})
+
+// Fetch unresolved High-urgency (red) alerts for a hospital
+// If caller is a hospital user, their hospital is used. Admins may pass ?hospitalId=
+router.get('/red-alerts', authenticate, async (req, res) => {
+  try {
+    if (!req.user) return res.status(401).json({ success: false, message: 'Not authenticated' })
+
+    let hospitalId = req.query.hospitalId || null
+    if (String(req.user.role).toLowerCase() === 'hospital') {
+      const hospital = await Hospital.findOne({ userId: req.user._id }) || await Hospital.findById(req.user._id)
+      if (!hospital) return res.status(404).json({ success: false, message: 'Hospital account not found for user' })
+      hospitalId = hospital._id
+    } else {
+      // only allow non-hospital callers if they are admin
+      if (!hospitalId) return res.status(400).json({ success: false, message: 'hospitalId required' })
+      if (String(req.user.role).toLowerCase() !== 'admin') return res.status(403).json({ success: false, message: 'Forbidden' })
+    }
+
+    const alerts = await Request.find({ hospitalId, isRedAlert: true, isResolved: false }).sort({ createdAt: -1 }).lean()
+
+    // enrich with patient phone and normalized fields for frontend
+    const result = await Promise.all(alerts.map(async (a) => {
+      let phone = null
+      let blood = a.bloodType || a.blood || ''
+      let location = a.patientLocation || ''
+      try {
+        if (a.patientId) {
+          const p = await Patient.findById(a.patientId).lean()
+          if (p) {
+            phone = phone || p.phone || p.emergency_contact?.phone || null
+            blood = blood || p.blood_type || ''
+            if (!location) location = p.location?.full_address || (p.location?.city ? `${p.location.city}${p.location?.state ? ', ' + p.location.state : ''}` : '') || ''
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+      return {
+        id: String(a._id),
+        patientName: a.patientName || '',
+        organNeeded: a.organType || '',
+        bloodGroup: blood,
+        hospital: a.patientHospitalName || '',
+        location: location,
+        contactNumber: phone || '',
+        timeLogged: a.createdAt,
+        criticality: (a.urgency || 'high').charAt(0).toUpperCase() + (a.urgency || 'high').slice(1),
+        status: a.isResolved ? 'resolved' : 'active'
+      }
+    }))
+
+    return res.status(200).json({ success: true, data: result })
+  } catch (err) {
+    console.error('Fetch red-alerts failed:', err)
+    return res.status(500).json({ success: false, message: 'Server error' })
+  }
+})
+
+// Mark a red alert request as resolved
+router.put('/:id/resolve', authenticate, async (req, res) => {
+  try {
+    if (!req.user) return res.status(401).json({ success: false, message: 'Not authenticated' })
+    // only hospital users for the hospital of the request (or admins) can resolve
+    const requestId = req.params.id
+    if (!mongoose.Types.ObjectId.isValid(requestId)) return res.status(400).json({ success: false, message: 'Invalid request id' })
+    const reqDoc = await Request.findById(requestId)
+    if (!reqDoc) return res.status(404).json({ success: false, message: 'Request not found' })
+
+    if (String(req.user.role).toLowerCase() === 'hospital') {
+      const hospital = await Hospital.findOne({ userId: req.user._id }) || await Hospital.findById(req.user._id)
+      if (!hospital) return res.status(404).json({ success: false, message: 'Hospital account not found for user' })
+      if (!reqDoc.hospitalId || String(reqDoc.hospitalId) !== String(hospital._id)) return res.status(403).json({ success: false, message: 'Request does not belong to your hospital' })
+    } else if (String(req.user.role).toLowerCase() !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Forbidden' })
+    }
+
+    reqDoc.isResolved = true
+    reqDoc.isRedAlert = false
+    await reqDoc.save()
+
+    return res.status(200).json({ success: true, message: 'Request marked resolved', data: { id: String(reqDoc._id) } })
+  } catch (err) {
+    console.error('Resolve request failed:', err)
+    return res.status(500).json({ success: false, message: 'Server error' })
   }
 })
 

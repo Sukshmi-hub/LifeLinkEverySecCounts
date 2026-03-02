@@ -14,40 +14,51 @@ const HospitalDashboard = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
 
-  const [redAlerts, setRedAlerts] = useState([
-    {
-      id: 'ra1',
-      patientName: 'Amit Sharma',
-      organNeeded: 'Kidney',
-      bloodGroup: 'O+',
-      criticality: 'Critical',
-      hospital: 'City General Hospital',
-      location: 'Mumbai',
-      contactNumber: '+91 98765 43210',
-      timeLogged: new Date(Date.now() - 3600000),
-      status: 'active',
-    },
-    {
-      id: 'ra2',
-      patientName: 'Priya Patel',
-      organNeeded: 'Liver',
-      bloodGroup: 'A+',
-      criticality: 'High',
-      hospital: 'City General Hospital',
-      location: 'Mumbai',
-      contactNumber: '+91 98765 43211',
-      timeLogged: new Date(Date.now() - 7200000),
-      status: 'active',
-    },
-  ]);
+  const [redAlerts, setRedAlerts] = useState([]);
+
+  // fetch red alerts from backend and poll periodically
+  React.useEffect(() => {
+    let mounted = true
+    const token = localStorage.getItem('token')
+    const fetchAlerts = async () => {
+      try {
+        const resp = await fetch('http://localhost:5000/api/requests/red-alerts', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        })
+        if (!resp.ok) return
+        const json = await resp.json()
+        if (json && json.success && mounted) {
+          setRedAlerts(json.data || [])
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    fetchAlerts()
+    const id = setInterval(fetchAlerts, 7000) // poll every 7 seconds
+    return () => { mounted = false; clearInterval(id) }
+  }, [])
 
   const hasRedAlerts = redAlerts.some(a => a.status === 'active');
   const pendingVerifications = 2; // Simulated
 
   const handleResolveAlert = (alertId) => {
-    setRedAlerts(prev => prev.map(a => 
-      a.id === alertId ? { ...a, status: 'resolved' } : a
-    ));
+    // call API to mark resolved then update local list
+    (async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const resp = await fetch(`http://localhost:5000/api/requests/${alertId}/resolve`, {
+          method: 'PUT',
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        })
+        if (resp.ok) {
+          setRedAlerts(prev => prev.map(a => a.id === alertId ? { ...a, status: 'resolved' } : a))
+        }
+      } catch (e) {
+        // ignore
+      }
+    })()
   };
 
   const renderContent = () => {
