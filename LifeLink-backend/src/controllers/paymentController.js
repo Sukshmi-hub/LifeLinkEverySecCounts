@@ -1,5 +1,7 @@
 import Payment from '../models/Payment.js'
 import Request from '../models/Request.js'
+import Donor from '../models/Donor.js'
+import { createCertificateForDonor } from './certificateController.js'
 import crypto from 'crypto'
 import axios from 'axios'
 
@@ -29,6 +31,65 @@ export const createSummary = async (req, res) => {
       } catch (updateErr) {
         console.error('Failed to update request with payment info', updateErr)
         // continue - payment was created, but request update failed
+      }
+      // Attempt to generate donation certificate for matched donor (only once)
+      try {
+        const reqDoc = await Request.findById(requestId).lean()
+        if (reqDoc) {
+            // Try to derive donor id from matchedDonor snapshot or top-level donorId
+            let donorId = null
+            try {
+              if (reqDoc.matchedDonor && reqDoc.matchedDonor.raw && reqDoc.matchedDonor.raw._resolvedDonor && reqDoc.matchedDonor.raw._resolvedDonor.id) {
+                donorId = reqDoc.matchedDonor.raw._resolvedDonor.id
+              }
+              donorId = donorId || (reqDoc.donorId ? String(reqDoc.donorId) : null)
+              donorId = donorId || (reqDoc.matchedDonor && (reqDoc.matchedDonor.donorId || reqDoc.matchedDonor._id) ? String(reqDoc.matchedDonor.donorId || reqDoc.matchedDonor._id) : null)
+
+              // Fallback: if no id yet, try matching by donor name + blood type (best-effort)
+              if (!donorId && reqDoc.matchedDonor) {
+                const candName = (reqDoc.matchedDonor.name || reqDoc.matchedDonor.raw && reqDoc.matchedDonor.raw.name || '')
+                const candBlood = (reqDoc.matchedDonor.bloodType || reqDoc.matchedDonor.raw && (reqDoc.matchedDonor.raw.blood_type || reqDoc.matchedDonor.raw.blood) || '')
+                if (candName && candName.trim()) {
+                  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                  const q = { name: { $regex: `^${esc(candName.trim())}$`, $options: 'i' } }
+                  if (candBlood && candBlood.trim()) q.blood_type = candBlood.trim()
+                  try {
+                    const found = await Donor.findOne(q).lean()
+                    if (found && found._id) donorId = String(found._id)
+                  } catch (e) {
+                    // ignore
+                  }
+                }
+              }
+            } catch (e) {
+              console.error('Error while resolving donorId for certificate generation', e)
+            }
+
+            console.debug('Certificate resolution: donorId=', donorId, 'matchedDonor:', reqDoc.matchedDonor && { name: reqDoc.matchedDonor.name, bloodType: reqDoc.matchedDonor.bloodType })
+
+            if (donorId) {
+            try {
+              const donorDoc = await Donor.findById(donorId).lean()
+              if (donorDoc) {
+                // ensure we only generate once: check donor certificateStatus or existing certificates
+                const already = donorDoc.certificateStatus === 'Certificate Issued' || (donorDoc.certificates && donorDoc.certificates.length > 0)
+                if (!already) {
+                  const donorName = donorDoc.name || donorDoc.fullName || ''
+                  const organOrBlood = reqDoc.matchedDonor && (reqDoc.matchedDonor.bloodType || reqDoc.matchedDonor.organOffered) || reqDoc.bloodType || ''
+                  const hospitalName = reqDoc.receivingHospitalName || reqDoc.patientHospitalName || ''
+                  const cert = await createCertificateForDonor({ donorId: donorDoc._id, donorUserId: donorDoc.userId || null, donorName, organOrBlood, dateOfDonation: new Date(), hospitalName })
+                  if (cert) {
+                    console.debug('Certificate created for donor', { donorId: donorDoc._id, certId: cert._id })
+                  }
+                }
+              }
+            } catch (e) {
+              console.error('Failed to resolve donor or create certificate', e)
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Certificate generation attempted but failed', e)
       }
     }
 

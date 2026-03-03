@@ -26,6 +26,7 @@ export const DonorProvider = ({ children }) => {
   const [donationIntents, setDonationIntents] = useState([]);
   const [donorMatches, setDonorMatches] = useState([]);
   const [donorProfile, setDonorProfile] = useState(defaultProfile);
+  const [donationCertificates, setDonationCertificates] = useState([]);
 
   const { user } = useAuth();
 
@@ -82,6 +83,14 @@ export const DonorProvider = ({ children }) => {
           willingToDonate: p.willing_organs || p.willingToDonate || prev.willingToDonate,
           lastDonationDate: p.last_donation_date || prev.lastDonationDate,
         }));
+        // fetch certificates for this donor account
+        try {
+          const resp2 = await fetch('http://localhost:5000/api/certificates/me', { headers: { Authorization: `Bearer ${token}` } })
+          const j2 = await resp2.json().catch(() => ({}))
+          if (resp2.ok && Array.isArray(j2.data)) setDonationCertificates(j2.data || [])
+        } catch (e) {
+          // ignore
+        }
       } catch (err) {
         // ignore
       }
@@ -311,6 +320,7 @@ export const DonorProvider = ({ children }) => {
         donationIntents,
         donorMatches,
         donorProfile,
+        donationCertificates,
         addDonationIntent,
         updateDonationStatus,
         verifyDonation,

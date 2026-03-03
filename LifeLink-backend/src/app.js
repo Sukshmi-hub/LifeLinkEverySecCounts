@@ -21,6 +21,7 @@ import hospitalRoutesCustom from './routes/hospital.js'
 import ngoRoutesCustom from './routes/ngo.js'
 import chatRoutes from './routes/chat.js'
 import paymentsRoutes from './routes/payments.js'
+import certificatesRoutes from './routes/certificates.js'
 import paymentSingleRoutes from './routes/paymentSingle.js'
 import notificationRoutes from './routes/notificationRoutes.js'
 import { dbCheck } from './middleware/dbCheck.js'
@@ -107,6 +108,7 @@ app.use('/api/hospital', hospitalRoutesCustom)
 app.use('/api/ngo', ngoRoutesCustom)
 app.use('/api/chat', chatRoutes)
 app.use('/api/payments', paymentsRoutes)
+app.use('/api/certificates', certificatesRoutes)
 app.use('/api/payment', paymentSingleRoutes)
 app.use('/api/donors', donorRoutes)
 app.use('/api/hospitals', hospitalRoutes)

@@ -14,6 +14,7 @@ import { Heart, AlertTriangle, MessageCircle, CheckCircle, Award, FileText, Cloc
 const DonorDashboard = () => {
   const { user } = useAuth();
   const { donationIntents = [], donorMatches = [], donorProfile = {} } = useDonor();
+  const { donationCertificates = [] } = useDonor();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showDonateModal, setShowDonateModal] = useState(false);
   const [showCertificate, setShowCertificate] = useState(false);
@@ -181,6 +182,60 @@ const DonorDashboard = () => {
               </CardContent>
             </Card>
           )}
+
+          {/* My Donations / Certificates */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-primary" />
+                My Donations
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {donationCertificates.length === 0 ? (
+                <p className="text-muted-foreground">No certificates yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full table-auto">
+                    <thead>
+                      <tr className="text-left border-b">
+                        <th className="py-2">Organ</th>
+                        <th className="py-2">Date</th>
+                        <th className="py-2">Status</th>
+                        <th className="py-2">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {donationCertificates.map(c => (
+                        <tr key={c._id} className="border-b">
+                          <td className="py-3">{c.organOrBlood || '—'}</td>
+                          <td className="py-3">{c.dateOfDonation ? (new Date(c.dateOfDonation)).toLocaleDateString() : '—'}</td>
+                          <td className="py-3">Certificate Issued</td>
+                          <td className="py-3">
+                            <button className="text-primary underline" onClick={async () => {
+                              try {
+                                const token = localStorage.getItem('token')
+                                const resp = await fetch(`/api/certificates/${encodeURIComponent(c._id)}/download`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+                                const html = await resp.text()
+                                const w = window.open('', '_blank')
+                                if (w) {
+                                  w.document.open()
+                                  w.document.write(html)
+                                  w.document.close()
+                                }
+                              } catch (e) {
+                                console.error('Failed to open certificate', e)
+                              }
+                            }}>Download Certificate</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </main>
 

@@ -85,6 +85,9 @@ const donorSchema = new mongoose.Schema(
       ref: 'Hospital',
       default: null,
     },
+    // Certificates issued to this donor
+    certificates: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Certificate' }],
+    certificateStatus: { type: String, default: '' },
     is_active: {
       type: Boolean,
       default: true,
