@@ -52,6 +52,11 @@ const patientSchema = new mongoose.Schema(
       type: String,
       default: ''
     },
+    // Backwards-compatible alias for UIs that expect `admittedHospital`
+    admittedHospital: {
+      type: String,
+      default: ''
+    },
     // medical_id field removed to allow multiple entries
     health_conditions: {
       type: [String],

@@ -91,7 +91,7 @@ export const register = async (req, res) => {
     const lonNormalized = pick(['longitude', 'lon', 'lng', 'location_lon', 'location_lng', 'latlng_lon']);
     const fullAddressNormalized = pick(['full_address', 'fullAddress', 'address', 'location_full_address', 'display_name']);
     const countryNormalized = pick(['country', 'location_country']);
-    const hospitalNormalized = pick(['hospital', 'hospital_id', 'hospitalId', 'hospitalIdStr', 'hospitalIdString']);
+    const hospitalNormalized = pick(['hospital', 'hospital_id', 'hospitalId', 'hospitalIdStr', 'hospitalIdString', 'admittedHospital', 'admitted_hospital']);
     const locationAutoFlag = pick(['location_auto', 'use_location', 'auto_location', 'useMyLocation']);
 
     // Normalize aadhaar: trim and treat empty string as not provided
@@ -323,6 +323,19 @@ export const register = async (req, res) => {
             } catch (e) {
               console.warn('Failed to resolve hospital name during registration update', e && e.message ? e.message : e);
             }
+            // Fallback: if hospital name could not be resolved from ID, accept a name sent by frontend
+            try {
+              if (!update.$set.hospitalName) {
+                const bodyHospitalName = pick(['patientHospitalName', 'patient_hospital_name', 'hospitalName', 'hospital_name', 'hospitalNameDisplay', 'admittedHospital', 'admitted_hospital']);
+                if (bodyHospitalName) update.$set.hospitalName = bodyHospitalName;
+              }
+            } catch (e) {
+              // ignore
+            }
+            // Mirror denormalized field to admit-friendly alias for compatibility
+            try {
+              if (update.$set.hospitalName) update.$set.admittedHospital = update.$set.hospitalName;
+            } catch (e) {}
           }
         // Donor additional fields
         if (role === 'donor') {

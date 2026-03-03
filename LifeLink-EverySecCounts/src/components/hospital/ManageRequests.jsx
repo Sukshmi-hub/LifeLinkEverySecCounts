@@ -815,6 +815,14 @@ const ManageRequests = () => {
                     {selectedForPayment.raw.patientId && selectedForPayment.raw.patientId.phone && <p><strong>Phone:</strong> {selectedForPayment.raw.patientId.phone}</p>}
                     {selectedForPayment.raw.patientId && selectedForPayment.raw.patientId.blood_type && <p><strong>Blood Group:</strong> {selectedForPayment.raw.patientId.blood_type}</p>}
                     {selectedForPayment.raw.message && <p><strong>Notes:</strong> {selectedForPayment.raw.message}</p>}
+                    <p><strong>Admitted Hospital:</strong> {
+                      (selectedForPayment.hospital && selectedForPayment.hospital.name)
+                      || selectedForPayment.patientHospitalName
+                      || selectedForPayment.hospitalName
+                      || (selectedForPayment.raw && (selectedForPayment.raw.patientHospitalName || selectedForPayment.raw.hospitalName))
+                      || (selectedForPayment.raw && selectedForPayment.raw.patientId && ((selectedForPayment.raw.patientId.hospital && selectedForPayment.raw.patientId.hospital.name) || selectedForPayment.raw.patientId.hospitalName || selectedForPayment.raw.patientId.admittedHospital))
+                      || '—'
+                    }</p>
                   </>
                 )}
               </div>
@@ -853,10 +861,15 @@ const ManageRequests = () => {
               setSendPaymentLoading(true);
               try {
                 const token = localStorage.getItem('token');
+                // determine admitted/receiving hospital name to send
+                const receivingHospitalName = (selectedForPayment && (selectedForPayment.patientHospitalName || selectedForPayment.hospitalName)) || (selectedForPayment && selectedForPayment.raw && (selectedForPayment.raw.patientHospitalName || selectedForPayment.raw.hospitalName)) || (selectedForPayment && selectedForPayment.raw && selectedForPayment.raw.patientId && (selectedForPayment.raw.patientId.hospitalName || selectedForPayment.raw.patientId.admittedHospital)) || null;
+                const payload = { donor: selectedDonorForMatch.raw || selectedDonorForMatch };
+                if (receivingHospitalName) payload.receivingHospital = receivingHospitalName;
+
                 const resp = await fetch(`/api/requests/${selectedForPayment.id}/send-matched-details`, {
                   method: 'PUT',
                   headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-                  body: JSON.stringify({ donor: selectedDonorForMatch.raw || selectedDonorForMatch }),
+                  body: JSON.stringify(payload),
                 });
                 const json = await resp.json().catch(() => ({}));
                 if (!resp.ok) throw new Error(json.message || 'Failed to send matched details');

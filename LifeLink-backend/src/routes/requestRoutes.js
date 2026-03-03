@@ -120,12 +120,36 @@ router.put('/:id/send-matched-details', authenticate, async (req, res) => {
     reqDoc.matchedAt = new Date()
     reqDoc.detailsSentToPatientHospital = true
     reqDoc.sentToPatientHospitalAt = new Date()
+    // Save sent-from hospital metadata
+    try {
+      reqDoc.sentFromHospitalName = hospital && hospital.name ? hospital.name : ''
+      reqDoc.sentFromHospitalId = hospital && hospital._id ? hospital._id : null
+    } catch (e) {}
     await reqDoc.save()
 
     // Resolve the hospital where the patient is admitted (targetHospitalId).
-    // Prefer reqDoc.hospitalId, fallback to Patient.hospital or Patient by requestedBy
+    // Allow frontend to explicitly provide a receiving hospital name/id in the payload (receivingHospital)
     let targetHospitalId = reqDoc.hospitalId || null
+    const receivingHospitalRaw = req.body?.receivingHospital || req.body?.receivingHospitalName || req.body?.admittedHospital || null
     try {
+      // If frontend provided a receiving hospital, try to normalize it to an ObjectId
+      let resolvedReceiving = null
+      if (receivingHospitalRaw) {
+        const cand = receivingHospitalRaw
+        const isObjectIdLike = typeof cand === 'string' && cand.length === 24 && /^[0-9a-fA-F]+$/.test(cand)
+        if (isObjectIdLike) resolvedReceiving = await Hospital.findById(cand).exec()
+        if (!resolvedReceiving) resolvedReceiving = await Hospital.findOne({ $or: [{ name: cand }, { legacyId: cand }, { externalId: cand }] }).exec()
+        if (resolvedReceiving && resolvedReceiving._id) {
+          targetHospitalId = resolvedReceiving._id
+          reqDoc.receivingHospitalId = resolvedReceiving._id
+          reqDoc.receivingHospitalName = resolvedReceiving.name || String(receivingHospitalRaw)
+        } else {
+          // store the raw name even if not resolvable to an id
+          reqDoc.receivingHospitalName = String(receivingHospitalRaw)
+        }
+      }
+
+      // If still no targetHospitalId, fallback to patient profile or requestedBy
       if (!targetHospitalId && reqDoc.patientId) {
         const p = await Patient.findById(reqDoc.patientId)
         if (p && p.hospital) targetHospitalId = p.hospital
@@ -134,9 +158,23 @@ router.put('/:id/send-matched-details', authenticate, async (req, res) => {
         const p2 = await Patient.findOne({ userId: reqDoc.requestedBy })
         if (p2 && p2.hospital) targetHospitalId = p2.hospital
       }
-      // If we found a target hospital and request didn't have it, persist it for future clarity
-      if (targetHospitalId && (!reqDoc.hospitalId || String(reqDoc.hospitalId) !== String(targetHospitalId))) {
-        reqDoc.hospitalId = targetHospitalId
+
+      // Persist hospital id/name on request for clarity
+      if (targetHospitalId) {
+        if (!reqDoc.hospitalId || String(reqDoc.hospitalId) !== String(targetHospitalId)) {
+          reqDoc.hospitalId = targetHospitalId
+        }
+        // if receivingHospitalName not set yet, try to resolve name from hospital id
+        if (!reqDoc.receivingHospitalName) {
+          try {
+            const th = await Hospital.findById(targetHospitalId).lean()
+            if (th && th.name) reqDoc.receivingHospitalName = th.name
+            reqDoc.receivingHospitalId = targetHospitalId
+          } catch (e) {}
+        }
+        await reqDoc.save()
+      } else {
+        // save any receivingHospitalName we might have set earlier
         await reqDoc.save()
       }
     } catch (e) {
@@ -563,7 +601,13 @@ router.get('/', optionalAuth, async (req, res) => {
 
     // If hospitalId provided, return requests for that hospital
     if (queryHospitalId) {
-      const list = await Request.find({ hospitalId: queryHospitalId })
+      // Only return requests that were explicitly sent to the patient's hospital
+      // (created when hospital clicked "Send to Patient's Hospital").
+      // Exclude verification/registration requests (requestType: 'user_verification').
+      const list = await Request.find({
+        hospitalId: queryHospitalId,
+        detailsSentToPatientHospital: true
+      })
         .sort({ createdAt: -1 })
         .populate('patientId', 'name email phone age blood_type aadhaar_no location emergency_contact')
         .populate('hospitalId', 'name address phone contact_phone location')

@@ -184,9 +184,9 @@ const Login = () => {
         const result = await response.json();
         if (result.success) {
           setHospitals(result.data);
-          if (!patientData.hospital && Array.isArray(result.data) && result.data.length > 0) {
-            setPatientData(p => ({ ...p, hospital: String(result.data[0].id) }));
-          }
+              if (!patientData.hospital && Array.isArray(result.data) && result.data.length > 0) {
+                setPatientData(p => ({ ...p, hospital: String(result.data[0].id), hospitalName: result.data[0].name || '' }));
+              }
         }
       } catch (err) {
         console.error('Failed to fetch hospitals:', err);
@@ -374,7 +374,8 @@ const Login = () => {
           blood_type: patientData.bloodGroup,
           location: locationObj,
           aadhaar_no: patientData.aadhaarNumber,
-          hospital: patientData.hospital
+          hospital: patientData.hospital,
+          patientHospitalName: patientData.hospitalName || ''
         });
       } else if (commonData.role === 'donor') {
         Object.assign(payload, {
@@ -576,7 +577,10 @@ const Login = () => {
                   {/* ADDED: ADMITTED HOSPITAL HEADING */}
                   <div className="space-y-2">
                     <Label>Admitted Hospital</Label>
-                    <Select value={patientData.hospital || ''} onValueChange={(v) => setPatientData({ ...patientData, hospital: v })}>
+                    <Select value={patientData.hospital || ''} onValueChange={(v) => {
+                      const sel = hospitals.find(h => String(h.id) === String(v) || String(h._id) === String(v));
+                      setPatientData({ ...patientData, hospital: v, hospitalName: sel ? (sel.name || sel.hospitalName || '') : '' });
+                    }}>
                       <SelectTrigger><SelectValue placeholder="Select Hospital" /></SelectTrigger>
                       <SelectContent className="bg-white">
                         {hospitals.map((hospital) => (

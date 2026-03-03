@@ -98,5 +98,13 @@ RequestSchema.add({
   sentToPatientHospitalAt: { type: Date }
 });
 
+// Fields for tracking which hospital the matched details were sent to/from
+RequestSchema.add({
+  receivingHospitalName: { type: String, default: '' },
+  receivingHospitalId: { type: Schema.Types.ObjectId, ref: 'Hospital', default: null },
+  sentFromHospitalName: { type: String, default: '' },
+  sentFromHospitalId: { type: Schema.Types.ObjectId, ref: 'Hospital', default: null }
+});
+
 export default mongoose.models.Request || mongoose.model('Request', RequestSchema);
 
