@@ -97,14 +97,71 @@ router.put('/:id/send-matched-details', authenticate, async (req, res) => {
       rawSnapshot = { note: 'snapshot_failed' }
     }
 
+    // helper: shallow recursive search for a key matching a regex
+    const searchForKey = (obj, regex, depth = 2) => {
+      if (!obj || depth < 0) return null
+      if (typeof obj === 'string') return null
+      try {
+        const keys = Object.keys(obj || {})
+        for (const k of keys) {
+          if (regex.test(k) && obj[k]) return obj[k]
+        }
+        for (const k of keys) {
+          const val = obj[k]
+          if (val && typeof val === 'object') {
+            const found = searchForKey(val, regex, depth - 1)
+            if (found) return found
+          }
+        }
+      } catch (e) {
+        return null
+      }
+      return null
+    }
+
     const sanitizedDonor = {
-      name: donorDetails.name || donorDetails.fullName || donorDetails.user?.name || donorDetails.requestedBy?.name || donorDetails.donorName || null,
-      phone: donorDetails.phone || donorDetails.mobile || donorDetails.contact || donorDetails.user?.phone || null,
-      bloodType: donorDetails.blood_type || donorDetails.bloodGroup || donorDetails.blood || null,
-      organOffered: donorDetails.organType || donorDetails.organOffered || donorDetails.organ || null,
-      hospitalName: donorDetails.hospitalName || donorDetails.hospital || null,
+      name: donorDetails.name || donorDetails.fullName || donorDetails.user?.name || donorDetails.requestedBy?.name || donorDetails.donorName || searchForKey(donorDetails, /name|fullName|donorName|displayName/i) || null,
+      phone: donorDetails.phone || donorDetails.mobile || donorDetails.contact || donorDetails.user?.phone || searchForKey(donorDetails, /phone|mobile|contact|telephone/i) || null,
+      bloodType: donorDetails.blood_type || donorDetails.bloodGroup || donorDetails.blood || searchForKey(donorDetails, /blood|blood_type|bloodGroup/i) || null,
+      organOffered: donorDetails.organType || donorDetails.organOffered || donorDetails.organ || searchForKey(donorDetails, /organ|organType|organOffered/i) || null,
+      hospitalName: donorDetails.hospitalName || donorDetails.hospital || searchForKey(donorDetails, /hospital|hospitalName|hospital_id/i) || null,
       // compact JSON-safe snapshot
       raw: rawSnapshot,
+    }
+    // If name or bloodType missing, try to resolve from Donor model using common id fields
+    try {
+      const donorIdCandidate = donorDetails && (donorDetails._id || donorDetails.donorId || donorDetails.userId || donorDetails.id || (donorDetails.user && donorDetails.user._id))
+      const donorId = donorIdCandidate ? String(donorIdCandidate) : null
+      if ((!sanitizedDonor.name || !sanitizedDonor.bloodType) && donorId) {
+        try {
+          let donorDoc = await Donor.findById(donorId).lean()
+          // If donorId looks like a Request id (selectedDonorForMatch.id), try to resolve donorId from that Request
+          if (!donorDoc) {
+            try {
+              const potentialReq = await Request.findById(donorId).lean()
+              if (potentialReq && potentialReq.donorId) {
+                donorDoc = await Donor.findById(potentialReq.donorId).lean()
+              }
+            } catch (e) {
+              // ignore
+            }
+          }
+
+          if (donorDoc) {
+            sanitizedDonor.name = sanitizedDonor.name || donorDoc.name || donorDoc.fullName || (donorDoc.user && donorDoc.user.name) || null
+            sanitizedDonor.bloodType = sanitizedDonor.bloodType || donorDoc.blood_type || donorDoc.bloodGroup || null
+            sanitizedDonor.phone = sanitizedDonor.phone || donorDoc.phone || null
+            sanitizedDonor.hospitalName = sanitizedDonor.hospitalName || (donorDoc.hospital && donorDoc.hospital.name) || null
+            // add a lightweight reference to the resolved donor into the raw snapshot for debugging
+            sanitizedDonor.raw = sanitizedDonor.raw || {}
+            sanitizedDonor.raw._resolvedDonor = { id: donorDoc._id, name: donorDoc.name, blood_type: donorDoc.blood_type }
+          }
+        } catch (e) {
+          // ignore resolution errors
+        }
+      }
+    } catch (e) {
+      // ignore
     }
     // Include sender hospital info on the sanitized donor snapshot so recipients can see who sent it
     try {
@@ -258,7 +315,32 @@ router.put('/:id/send-matched-details', authenticate, async (req, res) => {
       console.error('Failed to create chat messages for donor/hospital rooms', e)
     }
 
-    return res.status(200).json({ success: true, message: "Details sent to patient's hospital successfully", data: reqDoc })
+    // Log what we received and what we're saving so we can debug missing donor fields
+    try {
+      console.debug('send-matched-details - received donorDetails:', donorDetails)
+      console.debug('send-matched-details - sanitizedDonor before save:', sanitizedDonor)
+    } catch (e) {}
+
+    try {
+      await reqDoc.save()
+    } catch (e) {
+      console.error('Final save of request doc failed', e)
+    }
+
+    // Re-fetch the request to return the canonical saved document
+    try {
+      const finalDoc = await Request.findById(reqDoc._id)
+        .populate('patientId', 'name email phone age blood_type aadhaar_no location emergency_contact admittedHospital')
+        .populate('hospitalId', 'name address phone contact_phone location')
+        .lean()
+      try {
+        console.debug('send-matched-details - saved matchedDonor:', finalDoc && finalDoc.matchedDonor)
+      } catch (e) {}
+      return res.status(200).json({ success: true, message: "Details sent to patient's hospital successfully", data: finalDoc })
+    } catch (e) {
+      console.error('Failed to re-fetch request after save', e)
+      return res.status(200).json({ success: true, message: "Details sent to patient's hospital successfully", data: reqDoc })
+    }
   } catch (err) {
     console.error('Send matched details failed:', err && err.stack ? err.stack : err, { body: req.body, user: req.user && { id: req.user._id, role: req.user.role } })
     return res.status(500).json({ success: false, message: 'Server error' })
@@ -609,7 +691,7 @@ router.get('/', optionalAuth, async (req, res) => {
         detailsSentToPatientHospital: true
       })
         .sort({ createdAt: -1 })
-        .populate('patientId', 'name email phone age blood_type aadhaar_no location emergency_contact')
+        .populate('patientId', 'name email phone age blood_type aadhaar_no location emergency_contact admittedHospital')
         .populate('hospitalId', 'name address phone contact_phone location')
         .lean()
       return res.json({ success: true, data: list })
@@ -624,7 +706,7 @@ router.get('/', optionalAuth, async (req, res) => {
       // If not found, attempt to resolve NGO by userId (frontend may pass NGO's account id)
       let list = await Request.find({ ngoId: aja })
         .sort({ createdAt: -1 })
-        .populate('patientId', 'name email phone age blood_type aadhaar_no location emergency_contact')
+        .populate('patientId', 'name email phone age blood_type aadhaar_no location emergency_contact admittedHospital')
         .populate('hospitalId', 'name address phone contact_phone location')
         .lean()
       if ((!list || list.length === 0)) {
@@ -649,7 +731,7 @@ router.get('/', optionalAuth, async (req, res) => {
       if (queryStatus) q.status = queryStatus
       const list = await Request.find(q)
         .sort({ createdAt: -1 })
-        .populate('patientId', 'name email phone age blood_type aadhaar_no location emergency_contact')
+        .populate('patientId', 'name email phone age blood_type aadhaar_no location emergency_contact admittedHospital')
         .populate('hospitalId', 'name address phone contact_phone location')
         .lean()
       return res.json({ success: true, data: list })
@@ -670,7 +752,7 @@ router.get('/', optionalAuth, async (req, res) => {
     // First try to find requests directly by patientId (if it is a Patient._id)
     let list = await Request.find({ patientId: patientIdToQuery })
       .sort({ createdAt: -1 })
-      .populate('patientId', 'name email phone age blood_type aadhaar_no location emergency_contact')
+      .populate('patientId', 'name email phone age blood_type aadhaar_no location emergency_contact admittedHospital')
       .populate('hospitalId', 'name address phone contact_phone location')
       .lean()
 
@@ -680,7 +762,7 @@ router.get('/', optionalAuth, async (req, res) => {
       if (potentialPatient) {
         list = await Request.find({ patientId: potentialPatient._id })
           .sort({ createdAt: -1 })
-          .populate('patientId', 'name email phone age blood_type aadhaar_no location emergency_contact')
+          .populate('patientId', 'name email phone age blood_type aadhaar_no location emergency_contact admittedHospital')
           .populate('hospitalId', 'name address phone contact_phone location')
           .lean()
       }
@@ -690,6 +772,23 @@ router.get('/', optionalAuth, async (req, res) => {
   } catch (err) {
     console.error('Fetch requests failed:', err)
     return res.status(500).json({ success: false, message: 'Failed to fetch requests' })
+  }
+})
+
+// Get a single request by id (populated)
+router.get('/:id', authenticate, async (req, res) => {
+  try {
+    const id = req.params.id
+    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ success: false, message: 'Invalid id' })
+    const reqDoc = await Request.findById(id)
+      .populate('patientId', 'name email phone age blood_type aadhaar_no location emergency_contact admittedHospital')
+      .populate('hospitalId', 'name address phone contact_phone location')
+      .lean()
+    if (!reqDoc) return res.status(404).json({ success: false, message: 'Request not found' })
+    return res.json({ success: true, data: reqDoc })
+  } catch (err) {
+    console.error('Fetch request by id failed:', err)
+    return res.status(500).json({ success: false, message: 'Server error' })
   }
 })
 

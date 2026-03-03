@@ -92,8 +92,27 @@ function HospitalPayments() {
     }
   }
 
-  const openDetails = (req) => {
-    setSelectedRequest(req)
+  const openDetails = async (req) => {
+    // Fetch fresh request document from server to ensure matchedDonor fields are present
+    try {
+      const token = localStorage.getItem('token')
+      const id = req._id || req.id
+      if (!id) {
+        setSelectedRequest(req)
+        setShowDetails(true)
+        return
+      }
+      const resp = await fetch(`/api/requests/${encodeURIComponent(id)}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+      const json = await resp.json().catch(() => ({}))
+      if (resp.ok && json.data) {
+        setSelectedRequest(json.data)
+      } else {
+        setSelectedRequest(req)
+      }
+    } catch (e) {
+      console.error('Failed to fetch request details', e)
+      setSelectedRequest(req)
+    }
     setShowDetails(true)
   }
 
@@ -246,17 +265,17 @@ function HospitalPayments() {
             <div>
               <h4 className="font-semibold">Patient</h4>
               <p><strong>Name:</strong> {(selectedRequest.patientId && (selectedRequest.patientId.name || selectedRequest.patientId.user?.name)) || selectedRequest.patientName || 'Unknown'}</p>
-              <p><strong>Blood Group:</strong> {(selectedRequest.patientId && (selectedRequest.patientId.blood_type || selectedRequest.patientId.bloodType)) || selectedRequest.bloodGroup || '—'}</p>
-              <p><strong>Organ Required:</strong> {selectedRequest.organ || selectedRequest.organRequired || selectedRequest.organType || '—'}</p>
-              <p><strong>Contact:</strong> {(selectedRequest.patientId && (selectedRequest.patientId.phone || selectedRequest.patientId.user?.phone)) || selectedRequest.contact || '—'}</p>
-              <p><strong>Admitted Hospital:</strong> {(selectedRequest.hospital && selectedRequest.hospital.name) || selectedRequest.hospitalName || '—'}</p>
+              <p><strong>Blood Group:</strong> {(selectedRequest.patientId && (selectedRequest.patientId.blood_type || selectedRequest.patientId.bloodType)) || selectedRequest.bloodGroup || 'Not available'}</p>
+              <p><strong>Organ Required:</strong> {selectedRequest.organ || selectedRequest.organRequired || selectedRequest.organType || 'Not available'}</p>
+              <p><strong>Contact:</strong> {(selectedRequest.patientId && (selectedRequest.patientId.phone || selectedRequest.patientId.user?.phone)) || selectedRequest.contact || 'Not available'}</p>
+              <p><strong>Admitted Hospital:</strong> {(selectedRequest.patientId && (selectedRequest.patientId.admittedHospital || selectedRequest.patientId.hospitalName)) || selectedRequest.patientHospitalName || (selectedRequest.hospital && selectedRequest.hospital.name) || selectedRequest.hospitalName || selectedRequest.receivingHospitalName || 'Not available'}</p>
 
               <h4 className="font-semibold mt-3">Matched Donor</h4>
-              <p><strong>Name:</strong> {(selectedRequest.matchedDonor && (selectedRequest.matchedDonor.name || selectedRequest.matchedDonor.raw?.name)) || '—'}</p>
-              <p><strong>Blood Group:</strong> {(selectedRequest.matchedDonor && (selectedRequest.matchedDonor.bloodType || selectedRequest.matchedDonor.blood_type || selectedRequest.matchedDonor.raw?.blood_type)) || '—'}</p>
-              <p><strong>Organ Available:</strong> {(selectedRequest.matchedDonor && (selectedRequest.matchedDonor.organOffered || selectedRequest.matchedDonor.raw?.organ)) || '—'}</p>
-              <p><strong>Sent by Hospital:</strong> {(selectedRequest.matchedDonor && (selectedRequest.matchedDonor.senderHospitalName || selectedRequest.matchedDonor.hospitalName)) || '—'}</p>
-              <p><strong>Date received:</strong> {selectedRequest.sentToPatientHospitalAt || selectedRequest.matchedAt || (selectedRequest.matchedDonor && selectedRequest.matchedDonor.raw && selectedRequest.matchedDonor.raw.matchedAt) || '—'}</p>
+              <p><strong>Name:</strong> {(selectedRequest.matchedDonor && (selectedRequest.matchedDonor.name || selectedRequest.matchedDonor.raw?.name)) || 'Not available'}</p>
+              <p><strong>Blood Group:</strong> {(selectedRequest.matchedDonor && (selectedRequest.matchedDonor.bloodType || selectedRequest.matchedDonor.blood_type || selectedRequest.matchedDonor.raw?.blood_type)) || 'Not available'}</p>
+              <p><strong>Organ Available:</strong> {(selectedRequest.matchedDonor && (selectedRequest.matchedDonor.organOffered || selectedRequest.matchedDonor.raw?.organ)) || 'Not available'}</p>
+              <p><strong>Sent by Hospital:</strong> {(selectedRequest.matchedDonor && (selectedRequest.matchedDonor.senderHospitalName || selectedRequest.matchedDonor.hospitalName)) || 'Not available'}</p>
+              <p><strong>Date received:</strong> {selectedRequest.sentToPatientHospitalAt || selectedRequest.matchedAt || (selectedRequest.matchedDonor && selectedRequest.matchedDonor.raw && selectedRequest.matchedDonor.raw.matchedAt) || 'Not available'}</p>
 
               <h4 className="font-semibold mt-3">Message</h4>
               <p>{selectedRequest.message || selectedRequest.details || ''}</p>

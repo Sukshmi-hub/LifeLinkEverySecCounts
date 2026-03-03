@@ -863,7 +863,23 @@ const ManageRequests = () => {
                 const token = localStorage.getItem('token');
                 // determine admitted/receiving hospital name to send
                 const receivingHospitalName = (selectedForPayment && (selectedForPayment.patientHospitalName || selectedForPayment.hospitalName)) || (selectedForPayment && selectedForPayment.raw && (selectedForPayment.raw.patientHospitalName || selectedForPayment.raw.hospitalName)) || (selectedForPayment && selectedForPayment.raw && selectedForPayment.raw.patientId && (selectedForPayment.raw.patientId.hospitalName || selectedForPayment.raw.patientId.admittedHospital)) || null;
-                const payload = { donor: selectedDonorForMatch.raw || selectedDonorForMatch };
+                // Build donor payload explicitly so backend always receives name/blood fields
+                const donorPayloadBase = selectedDonorForMatch && (selectedDonorForMatch.raw || selectedDonorForMatch) ? (selectedDonorForMatch.raw || selectedDonorForMatch) : {};
+                const donorPayload = { ...donorPayloadBase };
+                if (selectedDonorForMatch && selectedDonorForMatch.name) donorPayload.name = selectedDonorForMatch.name;
+                if (selectedDonorForMatch && selectedDonorForMatch.bloodGroup) {
+                  donorPayload.bloodGroup = selectedDonorForMatch.bloodGroup;
+                  donorPayload.blood_type = donorPayload.blood_type || selectedDonorForMatch.bloodGroup;
+                }
+                // ensure we include donorId (Donor._id) when available from the donor request raw object
+                const possibleDonorId = (selectedDonorForMatch && (selectedDonorForMatch.id || selectedDonorForMatch._id)) || null;
+                const rawDonorId = selectedDonorForMatch && selectedDonorForMatch.raw && (selectedDonorForMatch.raw.donorId || selectedDonorForMatch.raw.donor_id || selectedDonorForMatch.raw.donor?._id || selectedDonorForMatch.raw.donorId?._id) || null;
+                const detailsDonorId = selectedDonorForMatch && selectedDonorForMatch.details && (selectedDonorForMatch.details.donorId || selectedDonorForMatch.details.donor_id || selectedDonorForMatch.details._id) || null;
+                if (rawDonorId) donorPayload.donorId = donorPayload.donorId || rawDonorId;
+                else if (detailsDonorId) donorPayload.donorId = donorPayload.donorId || detailsDonorId;
+                else if (possibleDonorId) donorPayload.id = donorPayload.id || possibleDonorId;
+
+                const payload = { donor: donorPayload };
                 if (receivingHospitalName) payload.receivingHospital = receivingHospitalName;
 
                 const resp = await fetch(`/api/requests/${selectedForPayment.id}/send-matched-details`, {
