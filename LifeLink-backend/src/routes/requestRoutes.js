@@ -488,8 +488,27 @@ router.post('/donor', authenticate, upload.fields([
     if (!user) return res.status(401).json({ success: false, message: 'Authentication required' })
     if (!hospital) return res.status(400).json({ success: false, message: 'hospital id required' })
 
-    // Try to find donor profile for this user
+    // Try to find donor profile for this user. If missing, create a minimal donor document
     let donorDoc = await Donor.findOne({ userId: user._id })
+    try {
+      if (!donorDoc) {
+        donorDoc = new Donor({
+          userId: user._id,
+          name: user.name || user.fullName || '',
+          email: user.email || '',
+          hospital: hospital || null
+        })
+        await donorDoc.save()
+      } else {
+        // If donor exists but hospital not set (or changed), persist the selected hospital
+        if (!donorDoc.hospital || String(donorDoc.hospital) !== String(hospital)) {
+          donorDoc.hospital = hospital
+          await donorDoc.save()
+        }
+      }
+    } catch (e) {
+      console.error('Failed to ensure donor document exists/updated for donor registration', e)
+    }
 
     const reqDoc = new Request({
       requestType: 'donor_registration',

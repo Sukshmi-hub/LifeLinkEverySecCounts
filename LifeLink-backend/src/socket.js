@@ -175,7 +175,17 @@ async function canAccessRoom(userId, role, roomId) {
           const hospital = await Hospital.findOne({ userId })
           return hospital && String(hospital._id) === hospitalId
         }
-        if (r === 'donor') return String(userId) === donorId
+        if (r === 'donor') {
+          // allow donor access when the room uses either the donor's User._id or the Donor document _id
+          try {
+            if (String(userId) === donorId) return true
+            const donor = await Donor.findOne({ userId })
+            if (donor && String(donor._id) === donorId) return true
+          } catch (e) {
+            // ignore and deny below
+          }
+          return false
+        }
       }
     }
 

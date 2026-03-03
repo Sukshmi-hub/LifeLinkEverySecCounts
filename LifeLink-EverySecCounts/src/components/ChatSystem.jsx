@@ -15,121 +15,68 @@ import {
   User,
   Building2,
   Heart,
-  AlertTriangle,
   Search,
+  AlertTriangle,
 } from "lucide-react";
-
-/* ---------------- MOCK DATA (INDIAN CONTEXT) ---------------- */
-
-const mockContacts = [
-  {
-    id: "contact_001",
-    name: "City Care Hospital",
-    role: "hospital",
-    lastMessage: "Your blood donation appointment is confirmed.",
-    lastMessageTime: "10:30 AM",
-    unread: 2,
-    online: true,
-  },
-  {
-    id: "contact_002",
-    name: "Dr. Anjali Mehta",
-    role: "hospital",
-    lastMessage: "Thank you for your willingness to help.",
-    lastMessageTime: "Yesterday",
-    unread: 0,
-    online: false,
-  },
-  {
-    id: "contact_003",
-    name: "Seva Foundation",
-    role: "ngo",
-    lastMessage: "We appreciate your support and contribution.",
-    lastMessageTime: "Yesterday",
-    unread: 1,
-    online: true,
-  },
-  {
-    id: "contact_004",
-    name: "LifeLink Admin",
-    role: "admin",
-    lastMessage: "Your profile has been verified successfully.",
-    lastMessageTime: "2 days ago",
-    unread: 0,
-    online: true,
-  },
-];
-
-const mockMessages = {
-  contact_001: [
-    {
-      id: "msg_001",
-      senderId: "contact_001",
-      senderName: "City Care Hospital",
-      senderRole: "hospital",
-      content: "Hello! Thank you for registering as a donor.",
-      timestamp: "10:00 AM",
-    },
-    {
-      id: "msg_002",
-      senderId: "user",
-      senderName: "You",
-      senderRole: "donor",
-      content: "Happy to help! When do you need blood donors?",
-      timestamp: "10:15 AM",
-    },
-    {
-      id: "msg_003",
-      senderId: "contact_001",
-      senderName: "City Care Hospital",
-      senderRole: "hospital",
-      content:
-        "We are organizing a blood donation camp this Saturday from 9 AM to 5 PM. Will you be available?",
-      timestamp: "10:20 AM",
-    },
-    {
-      id: "msg_004",
-      senderId: "user",
-      senderName: "You",
-      senderRole: "donor",
-      content: "Yes, I can come in the morning around 10 AM.",
-      timestamp: "10:25 AM",
-    },
-    {
-      id: "msg_005",
-      senderId: "contact_001",
-      senderName: "City Care Hospital",
-      senderRole: "hospital",
-      content: "Your blood donation appointment is confirmed.",
-      timestamp: "10:30 AM",
-    },
-  ],
-};
 
 /* ---------------- COMPONENT ---------------- */
 
 function ChatSystem({ className = "" }) {
   const { user } = useAuth();
 
-  const [contacts] = useState(mockContacts);
+  // State for real data
+  const [contacts, setContacts] = useState([]); // Initialize as empty array
   const [selectedContact, setSelectedContact] = useState(null);
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState([]); // Initialize as empty array
   const [newMessage, setNewMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const messagesEndRef = useRef(null);
 
+  // 1. Fetch Contacts on load
+  useEffect(() => {
+    const fetchContacts = async () => {
+      try {
+        // Replace with your actual API call: 
+        // const response = await fetch('/api/contacts');
+        // const data = await response.json();
+        // setContacts(data);
+      } catch (error) {
+        console.error("Error fetching contacts:", error);
+      }
+    };
+
+    fetchContacts();
+  }, []);
+
+  // 2. Fetch Messages when a contact is selected
   useEffect(() => {
     if (selectedContact) {
-      setMessages(mockMessages[selectedContact.id] || []);
+      const fetchMessages = async () => {
+        setIsLoading(true);
+        try {
+          // Replace with your actual API call:
+          // const response = await fetch(`/api/messages/${selectedContact.id}`);
+          // const data = await response.json();
+          // setMessages(data);
+        } catch (error) {
+          console.error("Error fetching messages:", error);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      fetchMessages();
     }
   }, [selectedContact]);
 
+  // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedContact) return;
 
     const lower = newMessage.toLowerCase();
@@ -138,52 +85,32 @@ function ChatSystem({ className = "" }) {
       lower.includes("urgent") ||
       lower.includes("critical");
 
-    const message = {
-      id: `msg_${Date.now()}`,
-      senderId: "user",
-      senderName: user?.name || "You",
-      senderRole: user?.role || "donor",
+    const messageData = {
+      senderId: user?.id || "user",
+      receiverId: selectedContact.id,
       content: newMessage,
-      timestamp: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
       isEmergency,
+      timestamp: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev, message]);
+    // Optimistically add message to UI
+    setMessages((prev) => [...prev, { ...messageData, id: Date.now(), senderName: "You" }]);
     setNewMessage("");
 
-    setTimeout(() => {
-      const reply = {
-        id: `msg_${Date.now()}`,
-        senderId: selectedContact.id,
-        senderName: selectedContact.name,
-        senderRole: selectedContact.role,
-        content: isEmergency
-          ? "🚨 EMERGENCY FLAGGED: Our medical team has been notified and will respond immediately."
-          : "Thank you for your message. Our team will get back to you shortly.",
-        timestamp: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      };
-
-      setMessages((prev) => [...prev, reply]);
-    }, 1500);
+    try {
+      // Replace with your API call to save message
+      // await fetch('/api/messages/send', { method: 'POST', body: JSON.stringify(messageData) });
+    } catch (error) {
+      console.error("Failed to send message:", error);
+    }
   };
 
   const getRoleIcon = (role) => {
     switch (role) {
-      case "hospital":
-        return <Building2 className="h-4 w-4" />;
+      case "hospital": return <Building2 className="h-4 w-4" />;
       case "donor":
-      case "ngo":
-        return <Heart className="h-4 w-4" />;
-      case "admin":
-        return <User className="h-4 w-4" />;
-      default:
-        return <User className="h-4 w-4" />;
+      case "ngo": return <Heart className="h-4 w-4" />;
+      default: return <User className="h-4 w-4" />;
     }
   };
 
@@ -193,14 +120,13 @@ function ChatSystem({ className = "" }) {
 
   return (
     <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 h-[600px] ${className}`}>
-      {/* Contacts */}
+      {/* Contacts List */}
       <Card className="md:col-span-1 flex flex-col">
         <CardHeader className="pb-3">
           <CardTitle className="text-lg flex items-center gap-2">
             <MessageCircle className="h-5 w-5" />
             Messages
           </CardTitle>
-
           <div className="relative mt-2">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
@@ -214,42 +140,38 @@ function ChatSystem({ className = "" }) {
 
         <CardContent className="flex-1 overflow-y-auto p-0">
           <div className="divide-y divide-border">
-            {filteredContacts.map((contact) => (
-              <div
-                key={contact.id}
-                onClick={() => setSelectedContact(contact)}
-                className={`p-4 cursor-pointer transition-colors hover:bg-muted/50 ${
-                  selectedContact?.id === contact.id ? "bg-muted" : ""
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="relative">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      {getRoleIcon(contact.role)}
+            {filteredContacts.length > 0 ? (
+              filteredContacts.map((contact) => (
+                <div
+                  key={contact.id}
+                  onClick={() => setSelectedContact(contact)}
+                  className={`p-4 cursor-pointer transition-colors hover:bg-muted/50 ${
+                    selectedContact?.id === contact.id ? "bg-muted" : ""
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="relative">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        {getRoleIcon(contact.role)}
+                      </div>
+                      {contact.online && (
+                        <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />
+                      )}
                     </div>
-                    {contact.online && (
-                      <span className="absolute bottom-0 right-0 w-3 h-3 bg-success rounded-full border-2 border-background" />
-                    )}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <p className="font-medium truncate">{contact.name}</p>
-                      <span className="text-xs text-muted-foreground">
-                        {contact.lastMessageTime}
-                      </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <p className="font-medium truncate">{contact.name}</p>
+                        <span className="text-xs text-muted-foreground">{contact.lastMessageTime}</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground truncate">{contact.lastMessage}</p>
                     </div>
-                    <p className="text-sm text-muted-foreground truncate">
-                      {contact.lastMessage}
-                    </p>
+                    {contact.unread > 0 && <Badge variant="destructive">{contact.unread}</Badge>}
                   </div>
-
-                  {contact.unread > 0 && (
-                    <Badge>{contact.unread}</Badge>
-                  )}
                 </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="p-4 text-center text-sm text-muted-foreground">No contacts found</p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -260,13 +182,8 @@ function ChatSystem({ className = "" }) {
           <>
             <CardHeader className="border-b pb-4">
               <div className="flex items-center gap-3">
-                <div className="relative">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    {getRoleIcon(selectedContact.role)}
-                  </div>
-                  {selectedContact.online && (
-                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-success rounded-full border-2 border-background" />
-                  )}
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  {getRoleIcon(selectedContact.role)}
                 </div>
                 <div>
                   <p className="font-medium">{selectedContact.name}</p>
@@ -281,33 +198,22 @@ function ChatSystem({ className = "" }) {
               {messages.map((message) => (
                 <div
                   key={message.id}
-                  className={`flex ${
-                    message.senderId === "user"
-                      ? "justify-end"
-                      : "justify-start"
-                  }`}
+                  className={`flex ${message.senderId === user?.id || message.senderId === "user" ? "justify-end" : "justify-start"}`}
                 >
                   <div
                     className={`max-w-[70%] rounded-2xl px-4 py-2 ${
-                      message.senderId === "user"
+                      message.senderId === user?.id || message.senderId === "user"
                         ? "bg-primary text-primary-foreground"
                         : "bg-muted"
-                    } ${
-                      message.isEmergency
-                        ? "border-2 border-destructive"
-                        : ""
-                    }`}
+                    } ${message.isEmergency ? "border-2 border-destructive" : ""}`}
                   >
                     {message.isEmergency && (
-                      <div className="flex items-center gap-1 text-xs mb-1">
-                        <AlertTriangle className="h-3 w-3" />
-                        EMERGENCY
+                      <div className="flex items-center gap-1 text-xs mb-1 font-bold">
+                        <AlertTriangle className="h-3 w-3" /> EMERGENCY
                       </div>
                     )}
                     <p className="text-sm">{message.content}</p>
-                    <p className="text-xs mt-1 opacity-70">
-                      {message.timestamp}
-                    </p>
+                    <p className="text-xs mt-1 opacity-70">{message.timestamp}</p>
                   </div>
                 </div>
               ))}
@@ -326,11 +232,10 @@ function ChatSystem({ className = "" }) {
                   placeholder="Type a message..."
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  className="flex-1 rounded-full bg-white px-4 py-3 h-11 placeholder:text-muted-foreground outline-none border-2 border-destructive/60"
+                  className="flex-1 rounded-full"
                 />
-                <Button type="submit" className="ml-3 flex items-center gap-2 bg-destructive text-white px-4 py-2 rounded-md shadow-sm">
+                <Button type="submit" size="icon" className="rounded-full">
                   <Send className="h-4 w-4" />
-                  <span>Send</span>
                 </Button>
               </form>
             </div>

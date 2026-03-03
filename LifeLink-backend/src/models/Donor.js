@@ -79,6 +79,12 @@ const donorSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    // Link donor to a chosen hospital (if donor selected one during intent/registration)
+    hospital: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Hospital',
+      default: null,
+    },
     is_active: {
       type: Boolean,
       default: true,

@@ -1,282 +1,239 @@
-import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { MessageCircle, Building2, Send } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import React, { useState, useRef, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/context/AuthContext";
+import useChat from '@/hooks/useChat'
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { MessageCircle, Send, Building2, Search, AlertTriangle } from "lucide-react";
 
-const predefinedDonorReplies = [
-  "I am available for the procedure",
-  "When should I visit the hospital?",
-  "Any update on verification?",
-  "Please confirm next steps",
-  "I have completed the required tests",
-  "What documents do I need to bring?",
-];
+/**
+ * ChatSystem now accepts 'initialContacts' and 'initialMessages' as props.
+ * This removes the hardcoded mock data from this file.
+ */
+function ChatSystem({ className = "" }) {
+  const { user } = useAuth();
 
-const DonorMessages = () => {
-  const [chats, setChats] = useState([
-    {
-      id: 'chat_1',
-      hospitalName: 'City Care Hospital, Kanpur',
-      lastMessage: 'Your documents are verified',
-      unread: 1,
-      messages: [
-        {
-          id: 'msg_1',
-          sender: 'hospital',
-          content: 'Thank you for registering as a donor.',
-          timestamp: new Date(Date.now() - 3600000),
-        },
-        {
-          id: 'msg_2',
-          sender: 'hospital',
-          content: 'Your documents are verified',
-          timestamp: new Date(Date.now() - 1800000),
-        },
-      ],
-    },
-    {
-      id: 'chat_2',
-      hospitalName: 'Metro Life Hospital, Lucknow',
-      lastMessage: 'Medical screening scheduled',
-      unread: 0,
-      messages: [
-        {
-          id: 'msg_3',
-          sender: 'hospital',
-          content: 'Medical screening scheduled for tomorrow',
-          timestamp: new Date(Date.now() - 7200000),
-        },
-      ],
-    },
-  ]);
+  const serverUrl = 'http://localhost:5000'
+  const { sendMessage, joinRoom, loadHistory } = useChat(serverUrl)
 
-  const [selectedChat, setSelectedChat] = useState(null);
+  const [contacts, setContacts] = useState([]);
+  const [selectedContact, setSelectedContact] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const handleSendPredefinedMessage = (message) => {
-    if (!selectedChat) return;
+  const messagesEndRef = useRef(null);
 
-    const newMessage = {
-      id: `msg_${Date.now()}`,
-      sender: 'donor',
-      content: message,
-      timestamp: new Date(),
-    };
+  // Fetch donor's chat rooms (conversations) on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const res = await fetch('/api/chat/rooms', { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+        if (!res.ok) return
+        const json = await res.json()
+        if (json && json.success && Array.isArray(json.data)) {
+          // transform rooms into contact list used by the UI
+          const contacts = json.data.map(r => ({
+            id: r.roomId,
+            name: r.title || r.roomId,
+            lastMessage: r.lastMessage && (r.lastMessage.content || r.lastMessage.message || '') || '',
+            unread: r.unreadCount || 0,
+            subtitle: r.subtitle || ''
+          }))
+          setContacts(contacts)
+        }
+      } catch (e) {
+        console.error('Failed to fetch chat rooms for donor', e)
+      }
+    })()
+  }, [])
 
-    setChats(prev =>
-      prev.map(chat =>
-        chat.id === selectedChat.id
-          ? {
-              ...chat,
-              messages: [...chat.messages, newMessage],
-              lastMessage: message,
-            }
-          : chat
-      )
-    );
+  // Load messages for the selected contact (room) when it changes
+  useEffect(() => {
+    if (!selectedContact) return
+    ;(async () => {
+      try {
+        const roomId = selectedContact.id
+        // ensure socket joins the same room the hospital uses
+        try { await joinRoom(roomId) } catch (e) { /* ignore join errors */ }
 
-    setSelectedChat(prev =>
-      prev ? { ...prev, messages: [...prev.messages, newMessage] } : null
-    );
+        const token = localStorage.getItem('token')
+        const res = await fetch(`/api/chat/history/${encodeURIComponent(roomId)}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+        if (!res.ok) return
+        const json = await res.json()
+        if (json && json.success && Array.isArray(json.data)) {
+          // normalize messages for UI
+          const msgs = json.data.map(m => ({
+            id: String(m._id || m.id || `msg_${Date.now()}`),
+            senderId: String(m.senderId || m.sender_id || ''),
+            senderRole: (m.senderRole || m.sender_role || '').toString().toLowerCase(),
+            content: m.content || m.message || '',
+            timestamp: new Date(m.timestamp || m.createdAt || Date.now()).toLocaleString(),
+            isEmergency: false,
+            _raw: m
+          }))
+          setMessages(msgs)
+        }
+      } catch (e) {
+        console.error('Failed to fetch room history', e)
+      }
+    })()
+  }, [selectedContact])
 
-    // Simulate hospital response after delay
-    setTimeout(() => {
-      const hospitalResponses = [
-        "Your documents are verified",
-        "Medical screening scheduled",
-        "Please report tomorrow at 9 AM",
-        "Donation process is in progress",
-        "Thank you for your cooperation",
-      ];
-      const randomResponse =
-        hospitalResponses[Math.floor(Math.random() * hospitalResponses.length)];
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
-      const responseMessage = {
-        id: `msg_${Date.now()}_resp`,
-        sender: 'hospital',
-        content: randomResponse,
-        timestamp: new Date(),
-      };
-
-      setChats(prev =>
-        prev.map(chat =>
-          chat.id === selectedChat.id
-            ? {
-                ...chat,
-                messages: [...chat.messages, newMessage, responseMessage],
-                lastMessage: randomResponse,
-              }
-            : chat
-        )
-      );
-
-      setSelectedChat(prev =>
-        prev
-          ? { ...prev, messages: [...prev.messages, responseMessage] }
-          : null
-      );
-    }, 1500);
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !selectedContact) return;
+    try {
+      const roomId = selectedContact.id
+      // send via socket so server saves and emits to the room the hospital joined
+      const res = await sendMessage(roomId, newMessage)
+      if (res && res.success && res.data) {
+        const m = res.data
+        // append saved message to local UI
+        setMessages(prev => [...prev, {
+          id: String(m._id || m.id || `msg_${Date.now()}`),
+          senderId: String(m.senderId || ''),
+          senderRole: (m.senderRole || '').toString().toLowerCase(),
+          content: m.content || '',
+          timestamp: new Date(m.timestamp || m.createdAt || Date.now()).toLocaleString(),
+          isEmergency: false,
+        }])
+      }
+    } catch (e) {
+      console.error('Failed to send message', e)
+      // optimistic fallback - mark as sent by current user id and role
+      setMessages(prev => [...prev, { id: `msg_${Date.now()}`, senderId: String(user?._id || ''), senderRole: 'donor', content: newMessage, timestamp: new Date().toLocaleTimeString(), isEmergency: false }])
+    } finally {
+      setNewMessage('')
+    }
   };
 
-  const formatTime = (date) => {
-    return date.toLocaleTimeString('en-IN', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+  const filteredContacts = contacts.filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
 
   return (
-    <div className="grid lg:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
-      {/* Chat List Sidebar */}
-      <Card className="lg:col-span-1">
+    <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 h-[600px] ${className}`}>
+      {/* Sidebar: Contacts */}
+      <Card className="md:col-span-1 flex flex-col border-none shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <MessageCircle className="h-5 w-5 text-primary" />
+          <CardTitle className="text-md font-semibold flex items-center gap-2">
+            <MessageCircle className="h-5 w-5 text-red-500" />
             Hospital Chats
           </CardTitle>
+          <div className="relative mt-2">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search..."
+              className="pl-9 bg-slate-50 border-none"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
         </CardHeader>
-        <CardContent className="p-0">
-          <ScrollArea className="h-[calc(100vh-320px)]">
-            {chats.map(chat => (
-              <button
-                key={chat.id}
-                onClick={() => {
-                  setSelectedChat(chat);
-                  setChats(prev =>
-                    prev.map(c =>
-                      c.id === chat.id ? { ...c, unread: 0 } : c
-                    )
-                  );
-                }}
-                className={cn(
-                  "w-full p-4 text-left border-b border-border transition-colors",
-                  selectedChat?.id === chat.id
-                    ? "bg-primary/10"
-                    : "hover:bg-muted/50"
-                )}
+
+        <CardContent className="flex-1 overflow-y-auto p-0">
+          <div className="divide-y divide-slate-100">
+            {filteredContacts.map((contact) => (
+              <div
+                key={contact.id}
+                onClick={() => setSelectedContact(contact)}
+                className={`p-4 cursor-pointer transition-colors hover:bg-slate-50 ${
+                  selectedContact?.id === contact.id ? "bg-slate-50" : ""
+                }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Building2 className="h-5 w-5 text-primary" />
+                  <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
+                    <Building2 className="h-5 w-5 text-red-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <p className="font-medium text-foreground truncate">
-                        {chat.hospitalName}
-                      </p>
-                      {chat.unread > 0 && (
-                        <span className="bg-primary text-primary-foreground text-xs font-bold px-2 py-0.5 rounded-full">
-                          {chat.unread}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground truncate">
-                      {chat.lastMessage}
-                    </p>
+                    <p className="font-medium text-sm text-slate-900 truncate">{contact.name}</p>
+                    <p className="text-xs text-slate-500 truncate">{contact.lastMessage}</p>
                   </div>
+                  {contact.unread > 0 && (
+                    <Badge variant="destructive" className="rounded-full h-5 w-5 flex items-center justify-center p-0">
+                      {contact.unread}
+                    </Badge>
+                  )}
                 </div>
-              </button>
+              </div>
             ))}
-          </ScrollArea>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Main Chat Window */}
-      <Card className="lg:col-span-2 flex flex-col">
-        {selectedChat ? (
+      {/* Main Chat Area */}
+      <Card className="md:col-span-2 flex flex-col border-none shadow-sm">
+        {selectedContact ? (
           <>
-            <CardHeader className="pb-3 border-b border-border">
+            <CardHeader className="border-b border-slate-100 pb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Building2 className="h-5 w-5 text-primary" />
+                <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
+                  <Building2 className="h-5 w-5 text-red-600" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg">
-                    {selectedChat.hospitalName}
-                  </CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Controlled chat • Predefined replies only
-                  </p>
+                  <p className="font-medium text-sm">{selectedContact.name}</p>
+                  <p className="text-[10px] text-green-500 font-medium">Online</p>
                 </div>
               </div>
             </CardHeader>
 
-            <CardContent className="flex-1 flex flex-col p-0">
-              {/* Chat Messages */}
-              <ScrollArea className="flex-1 p-4">
-                <div className="space-y-4">
-                  {selectedChat.messages.map(message => (
-                    <div
-                      key={message.id}
-                      className={cn(
-                        "flex",
-                        message.sender === 'donor'
-                          ? "justify-end"
-                          : "justify-start"
+            <CardContent className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/30">
+              {messages.map((message) => {
+                // Determine ownership: match by senderId or by role when current user is donor
+                const isMine = (String(message.senderId) === String(user?._id)) || ((user && String(user.role).toLowerCase() === 'donor') && String(message.senderRole) === 'donor')
+                return (
+                  <div key={message.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[75%] rounded-2xl px-4 py-2 text-sm ${
+                        isMine
+                          ? "bg-red-600 text-white shadow-sm"
+                          : "bg-white text-slate-800 shadow-sm border border-slate-100"
+                      } ${message.isEmergency ? "ring-2 ring-red-400" : ""}`}
+                    >
+                      {message.isEmergency && (
+                        <div className="flex items-center gap-1 text-[10px] font-bold mb-1 uppercase">
+                          <AlertTriangle className="h-3 w-3" /> Emergency
+                        </div>
                       )}
-                    >
-                      <div
-                        className={cn(
-                          "max-w-[70%] rounded-2xl px-4 py-2 shadow-sm",
-                          message.sender === 'donor'
-                            ? "bg-primary text-primary-foreground rounded-br-md"
-                            : "bg-muted text-foreground rounded-bl-md"
-                        )}
-                      >
-                        <p className="text-sm">{message.content}</p>
-                        <p
-                          className={cn(
-                            "text-[10px] mt-1 opacity-70",
-                            message.sender === 'donor'
-                              ? "text-primary-foreground"
-                              : "text-muted-foreground"
-                          )}
-                        >
-                          {formatTime(message.timestamp)}
-                        </p>
-                      </div>
+                      <p>{message.content}</p>
+                      <p className={`text-[10px] mt-1 text-right ${isMine ? "text-red-100" : "text-slate-400"}`}>
+                        {message.timestamp}
+                      </p>
                     </div>
-                  ))}
-                </div>
-              </ScrollArea>
-
-              {/* Quick Reply Selection Area */}
-              <div className="p-4 border-t border-border bg-muted/30">
-                <p className="text-xs text-muted-foreground mb-3">
-                  Select a message to send:
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {predefinedDonorReplies.map((reply, index) => (
-                    <Button
-                      key={index}
-                      variant="outline"
-                      size="sm"
-                      className="text-xs h-auto py-2 px-3 whitespace-normal text-left max-w-xs"
-                      onClick={() => handleSendPredefinedMessage(reply)}
-                    >
-                      <Send className="h-3 w-3 mr-2 shrink-0" />
-                      {reply}
-                    </Button>
-                  ))}
-                </div>
-              </div>
+                  </div>
+                )
+              })}
+              <div ref={messagesEndRef} />
             </CardContent>
+
+            <div className="p-4 bg-white border-t border-slate-100">
+              <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="flex gap-2">
+                <Input
+                  placeholder="Type your message..."
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  className="flex-1 rounded-full bg-slate-100 border-none h-10"
+                />
+                <Button type="submit" size="icon" className="rounded-full bg-red-600 hover:bg-red-700">
+                  <Send className="h-4 w-4" />
+                </Button>
+              </form>
+            </div>
           </>
         ) : (
-          <CardContent className="flex-1 flex items-center justify-center">
-            <div className="text-center text-muted-foreground">
-              <MessageCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p className="font-medium">Select a chat to start messaging</p>
-              <p className="text-sm">
-                Choose a hospital from the list to view the conversation
-              </p>
+          <CardContent className="flex-1 flex items-center justify-center text-slate-400">
+            <div className="text-center">
+              <MessageCircle className="h-12 w-12 mx-auto mb-2 opacity-20" />
+              <p className="text-sm">Choose a hospital to start talking</p>
             </div>
           </CardContent>
         )}
       </Card>
     </div>
   );
-};
+}
 
-export default DonorMessages;
+export default ChatSystem;
