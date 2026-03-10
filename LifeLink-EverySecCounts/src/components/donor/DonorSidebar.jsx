@@ -6,27 +6,17 @@ import { useNotifications } from '@/context/NotificationContext';
 import LifeLinkLogo from '@/components/LifeLinkLogo';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import {
-  LayoutDashboard,
-  Bell,
-  MessageCircle,
-  User,
-  LogOut,
-  Menu,
-  X,
-  Award,
-  Settings,
-} from 'lucide-react';
+import { Bell, MessageCircle, User, LogOut, Menu, X, Award } from 'lucide-react';
 
 const DonorSidebar = ({ isOpen, onToggle }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout } = useAuth();
-  const { donationIntents } = useDonor();
+  const { donationIntents } = useDonor() || { donationIntents: [] };
   const { getUnreadCount } = useNotifications();
 
-  const unreadNotifications = getUnreadCount('donor');
-  const hasCompletedDonation = donationIntents.some(i => i.status === 'Completed');
+  const unreadNotifications = getUnreadCount ? getUnreadCount('donor') : 0;
+  const hasCompletedDonation = (donationIntents || []).some(i => i.status === 'Completed');
 
   const handleLogout = () => {
     logout();
@@ -34,39 +24,13 @@ const DonorSidebar = ({ isOpen, onToggle }) => {
   };
 
   const navItems = [
-    {
-      path: '/donor/alerts',
-      icon: Bell,
-      label: 'Alerts',
-      badge: unreadNotifications > 0 ? unreadNotifications : null,
-    },
-    {
-      path: '/donor/messages',
-      icon: MessageCircle,
-      label: 'Messages',
-      badge: null,
-    },
-    {
-      path: '/donor/profile',
-      icon: User,
-      label: 'Profile',
-      badge: null,
-    },
-    {
-      path: '/donor/settings',
-      icon: Settings,
-      label: 'Settings',
-      badge: null,
-    },
+    { path: '/donor/alerts', icon: Bell, label: 'Alerts', badge: unreadNotifications > 0 ? unreadNotifications : null },
+    { path: '/donor/messages', icon: MessageCircle, label: 'Messages', badge: null },
+    { path: '/donor/profile', icon: User, label: 'Profile', badge: null },
   ];
 
   if (hasCompletedDonation) {
-    navItems.push({
-      path: '/donor/certificate',
-      icon: Award,
-      label: 'Certificate',
-      badge: null,
-    });
+    navItems.push({ path: '/donor/certificate', icon: Award, label: 'Certificate', badge: null });
   }
 
   return (
@@ -81,10 +45,7 @@ const DonorSidebar = ({ isOpen, onToggle }) => {
 
       {/* Overlay for mobile */}
       {isOpen && (
-        <div
-          className="lg:hidden fixed inset-0 bg-black/50 z-30"
-          onClick={onToggle}
-        />
+        <div className="lg:hidden fixed inset-0 bg-black/50 z-30" onClick={onToggle} />
       )}
 
       {/* Sidebar */}

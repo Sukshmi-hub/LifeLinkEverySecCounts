@@ -16,7 +16,6 @@ import {
   FileText, 
   Bell, 
   Award, 
-  Settings, 
   Home 
 } from "lucide-react";
 
@@ -26,7 +25,6 @@ const items = [
   { title: "Requests", url: "/admin/requests", icon: FileText },
   { title: "System Alerts", url: "/admin/alerts", icon: Bell },
   { title: "Tributes", url: "/admin/tributes", icon: Award },
-  { title: "Settings", url: "/admin/settings", icon: Settings },
 ];
 
 const AdminSidebar = () => {

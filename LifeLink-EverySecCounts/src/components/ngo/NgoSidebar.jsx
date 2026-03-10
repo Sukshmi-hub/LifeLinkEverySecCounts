@@ -9,7 +9,7 @@ import {
   MessageCircle, 
   User, 
   LogOut,
-  Settings
+  
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -22,7 +22,6 @@ const NgoSidebar = ({ activeTab, setActiveTab }) => {
     { id: 'requests', label: 'Fund Requests', icon: FileText },
     { id: 'messages', label: 'Messages', icon: MessageCircle },
     { id: 'profile', label: 'Profile', icon: User },
-    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   const handleLogout = () => {

@@ -8,7 +8,6 @@ import RedAlerts from '@/components/hospital/RedAlerts';
 import HospitalMessages from '@/components/hospital/HospitalMessages';
 import HospitalNotifications from '@/components/hospital/HospitalNotifications';
 import HospitalProfile from '@/components/hospital/HospitalProfile';
-import HospitalSettings from '@/components/hospital/HospitalSettings';
 
 const HospitalDashboard = () => {
   const { user } = useAuth();
@@ -83,8 +82,6 @@ const HospitalDashboard = () => {
         return <HospitalNotifications />;
       case 'profile':
         return <HospitalProfile />;
-      case 'settings':
-        return <HospitalSettings />;
       default:
           return (
             <HospitalDashboardOverview 

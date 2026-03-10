@@ -4,16 +4,15 @@ import { Button } from '@/components/ui/button';
 import { Heart, Award, Download, Building2, Calendar, User } from 'lucide-react';
 
 const DonationCertificate = ({
-  donorName,
-  organType,
-  hospitalName,
-  patientName,
-  donationDate,
-  certificateId,
+  donorName = "John Doe",
+  organType = "Kidney",
+  hospitalName = "City General Hospital",
+  patientName = "Jane Smith",
+  donationDate = new Date(),
+  certificateId = "LL-000001",
   onClose,
 }) => {
   const handleDownload = () => {
-    // Simulate PDF download - in real app would generate actual PDF
     const certificateContent = `
       CERTIFICATE OF ORGAN DONATION
       
@@ -144,9 +143,9 @@ const DonationCertificate = ({
               </div>
             </div>
 
-            {/* Inspirational Quote */}
-            <div className="mt-6 p-4 bg-success/10 rounded-lg border border-success/20">
-              <p className="text-success font-medium italic">
+            {/* Inspirational Quote — FIXED: bg-success/text-success are not valid Tailwind classes */}
+            <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
+              <p className="text-green-700 font-medium italic">
                 "The gift of life is the most precious gift one can give."
               </p>
             </div>

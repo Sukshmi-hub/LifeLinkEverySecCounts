@@ -7,7 +7,6 @@ import AdminUserManagement from '@/components/admin/AdminUserManagement';
 import AdminRequestsView from '@/components/admin/AdminRequestsView';
 import AdminAlerts from '@/components/admin/AdminAlerts';
 import AdminTributes from '@/components/admin/AdminTributes';
-import AdminSettings from '@/components/admin/AdminSettings';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { Users, FileText, Bell, Activity } from 'lucide-react';
 
@@ -25,8 +24,7 @@ const AdminDashboard = () => {
         return <AdminAlerts />;
       case '/admin/tributes':
         return <AdminTributes />;
-      case '/admin/settings':
-        return <AdminSettings />;
+      /* Admin settings removed from dashboard navigation */
       default:
         return (
           <div className="space-y-6">

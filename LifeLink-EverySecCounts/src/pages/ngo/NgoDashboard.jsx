@@ -8,7 +8,6 @@ import NgoSidebar from '@/components/ngo/NgoSidebar';
 import NgoStatCard from '@/components/ngo/NgoStatCard';
 import NgoMessages from '@/components/ngo/NgoMessages';
 import NgoProfile from '@/components/ngo/NgoProfile';
-import NgoSettings from '@/components/ngo/NgoSettings';
 import FundRequestDetails from '@/components/ngo/FundRequestDetails';
 import NgoHospitalChat from '@/components/ngo/NgoHospitalChat';
 import { 
@@ -336,8 +335,6 @@ const NgoDashboard = () => {
         return <NgoMessages />;
       case 'profile':
         return <NgoProfile />;
-      case 'settings':
-        return <NgoSettings />;
       default:
         return renderDashboard();
     }

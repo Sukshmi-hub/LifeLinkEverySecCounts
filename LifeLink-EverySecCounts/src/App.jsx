@@ -27,7 +27,6 @@ import RequestFundsPage from "./pages/patient/RequestFundsPage";
 import PaymentPage from "./pages/patient/PaymentPage";
 import PatientProfilePage from "./pages/patient/PatientProfilePage";
 import PatientMessagesPage from "./pages/patient/PatientMessagesPage";
-import PatientSettingsPage from "./pages/patient/PatientSettingsPage";
 import PatientPaymentDemo from "./components/patient/PatientPaymentDemo";
 import DonorDashboard from "./pages/donor/DonorDashboard";
 import DonorRegister from "./pages/donor/DonorRegister";
@@ -35,7 +34,6 @@ import DonorAlerts from "./pages/donor/DonorAlerts";
 import DonorChat from "./pages/donor/DonorChat";
 import DonorMessagesPage from "./pages/donor/DonorMessagesPage";
 import DonorProfilePage from "./pages/donor/DonorProfilePage";
-import DonorSettingsPage from "./pages/donor/DonorSettingsPage";
 import HospitalDashboard from "./pages/hospital/HospitalDashboard";
 import NgoDashboard from "./pages/ngo/NgoDashboard";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -74,7 +72,7 @@ const App = () => (
                     <Route path="/patient/payment" element={<ProtectedRoute allowedRoles={['patient']}><PaymentPage /></ProtectedRoute>} />
                     <Route path="/patient/profile" element={<ProtectedRoute allowedRoles={['patient']}><PatientProfilePage /></ProtectedRoute>} />
                     <Route path="/patient/messages" element={<ProtectedRoute allowedRoles={['patient']}><PatientMessagesPage /></ProtectedRoute>} />
-                    <Route path="/patient/settings" element={<ProtectedRoute allowedRoles={['patient']}><PatientSettingsPage /></ProtectedRoute>} />
+                    {/* Patient settings removed from routes */}
 
                     {/* ========================================== */}
                     {/* DONOR ROUTES (LOCKED)                      */}
@@ -85,7 +83,7 @@ const App = () => (
                     <Route path="/donor/chat" element={<ProtectedRoute allowedRoles={['donor']}><DonorChat /></ProtectedRoute>} />
                     <Route path="/donor/messages" element={<ProtectedRoute allowedRoles={['donor']}><DonorMessagesPage /></ProtectedRoute>} />
                     <Route path="/donor/profile" element={<ProtectedRoute allowedRoles={['donor']}><DonorProfilePage /></ProtectedRoute>} />
-                    <Route path="/donor/settings" element={<ProtectedRoute allowedRoles={['donor']}><DonorSettingsPage /></ProtectedRoute>} />
+                    {/* Donor settings removed from routes */}
 
                     {/* ========================================== */}
                     {/* HOSPITAL ROUTES (LOCKED)                   */}
@@ -106,7 +104,7 @@ const App = () => (
                     <Route path="/admin/requests" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
                     <Route path="/admin/alerts" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
                     <Route path="/admin/tributes" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
-                    <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
+                    {/* Admin settings removed from routes */}
 
                     {/* 404 - Not Found */}
                     <Route path="/demo/payment" element={<PatientPaymentDemo />} />

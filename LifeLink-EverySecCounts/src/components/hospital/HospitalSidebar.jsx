@@ -9,7 +9,7 @@ import {
   CreditCard,
   User, 
   LogOut,
-  Settings
+  
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -30,7 +30,6 @@ const HospitalSidebar = ({ activeTab, setActiveTab, hasRedAlerts }) => {
     { id: 'messages', label: 'Messages', icon: MessageCircle },
     { id: 'notifications', label: 'Notifications', icon: Bell, badge: unreadCount },
     { id: 'profile', label: 'Profile', icon: User },
-    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   const handleLogout = () => {
