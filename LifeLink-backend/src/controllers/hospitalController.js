@@ -248,4 +248,65 @@ export const updateHospitalInventory = async (req, res) => {
   }
 }
 
+// Get dashboard stats for a hospital (consolidated endpoint for 4 stat cards)
+export const getHospitalStats = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, message: 'Not authenticated' });
+
+    // Get current user's hospital
+    const hospital = await Hospital.findOne({ userId });
+    if (!hospital) return res.status(404).json({ success: false, message: 'Hospital not found for user' });
+
+    const hospitalId = hospital._id;
+    const Request = (await import('../models/Request.js')).default;
+
+    // Execute all 4 queries in parallel
+    const [
+      pendingRequests,
+      redAlerts,
+      pendingVerifications,
+      matchedDonors
+    ] = await Promise.all([
+      // 1. Pending patient organ requests
+      Request.countDocuments({
+        requestType: 'organ_request',
+        status: 'pending',
+        hospitalId: hospitalId
+      }),
+      // 2. Red alerts (high urgency cases that are not resolved)
+      Request.countDocuments({
+        urgency: 'high',
+        isResolved: false,
+        hospitalId: hospitalId
+      }),
+      // 3. Pending verifications (user verification requests)
+      Request.countDocuments({
+        requestType: 'user_verification',
+        status: 'pending',
+        hospitalId: hospitalId
+      }),
+      // 4. Matched donors (requests with a matched donor)
+      Request.countDocuments({
+        hospitalId: hospitalId,
+        matchedDonor: { $ne: null }
+      })
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        pendingRequests,
+        redAlerts,
+        pendingVerifications,
+        matchedDonors
+      }
+    });
+  } catch (err) {
+    console.error('getHospitalStats error', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+}
+
+
 export default { getMyHospitalProfile, updateMyHospitalProfile }

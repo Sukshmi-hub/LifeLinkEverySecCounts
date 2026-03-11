@@ -387,3 +387,26 @@ export const verifyRazorpayPayment = async (req, res) => {
     return res.status(502).json({ success: false, message })
   }
 }
+
+export const getPaymentSummaryCountByHospital = async (req, res) => {
+  try {
+    if (!req.user) return res.status(401).json({ success: false, message: 'Not authenticated' })
+    if (req.user.role !== 'hospital') return res.status(403).json({ success: false, message: 'Forbidden' })
+
+    const Hospital = (await import('../models/Hospital.js')).default
+    let hospital = await Hospital.findOne({ userId: req.user._id })
+    if (!hospital) {
+      hospital = await Hospital.findById(req.user._id).exec()
+    }
+
+    if (!hospital) {
+      return res.status(200).json({ success: true, count: 0 })
+    }
+
+    const count = await Payment.countDocuments({ hospitalId: hospital._id })
+    return res.status(200).json({ success: true, count })
+  } catch (error) {
+    console.error('getPaymentSummaryCountByHospital error:', error)
+    return res.status(500).json({ success: false, message: 'Server error', error: error.message })
+  }
+}

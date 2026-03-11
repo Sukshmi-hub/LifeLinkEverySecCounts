@@ -14,6 +14,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 // Public pages
 import Home from "./pages/public/Home";
 import Login from "./pages/public/Login";
+import ResetPassword from "./pages/public/ResetPassword";
 import About from "./pages/public/About";
 import TributeWall from "./pages/public/TributeWall";
 import NotFound from "./pages/NotFound";
@@ -58,6 +59,7 @@ const App = () => (
                     <Route path="/" element={<Home />} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/register" element={<Login />} />
+                    <Route path="/reset-password" element={<ResetPassword />} />
                     <Route path="/about" element={<About />} />
                     <Route path="/tribute" element={<TributeWall />} />
                     <Route path="/red-alert" element={<RedAlertPage />} />

@@ -7,6 +7,7 @@ import NGO from '../models/NGO.js';
 import Admin from '../models/Admin.js';
 import Message from '../models/Message.js'
 import jwt from 'jsonwebtoken';
+import { sendPasswordResetEmail } from '../config/email.js';
 
 // Helper to parse MongoDB duplicate key errors into { field, value }
 const parseDuplicateKeyError = (err) => {
@@ -676,4 +677,122 @@ export const logout = async (req, res) => {
   }
 };
 
-export default { register, login, getMe, logout };
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide an email address'
+      });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found with this email'
+      });
+    }
+
+    // Generate reset token
+    const crypto = await import('crypto');
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour from now
+
+    // Save reset token and expiry to user
+    user.resetToken = resetToken;
+    user.resetTokenExpiry = resetTokenExpiry;
+    await user.save();
+
+    // Create reset link
+    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`;
+    
+    try {
+      // Send password reset email
+      await sendPasswordResetEmail(email, resetLink);
+      
+      res.status(200).json({
+        success: true,
+        message: 'Password reset link has been sent to your email. Please check your inbox.'
+      });
+    } catch (emailError) {
+      console.error('Email sending failed:', emailError);
+      // Even if email fails, token is saved, so inform user to check console
+      res.status(200).json({
+        success: true,
+        message: 'Password reset link generated. Email service unavailable. Reset link: ' + resetLink,
+        resetLink // Development fallback
+      });
+    }
+  } catch (error) {
+    console.error('Forgot Password Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error processing forgot password request',
+      error: error.message
+    });
+  }
+};
+
+export const resetPassword = async (req, res) => {
+  try {
+    const { token, password, confirmPassword } = req.body;
+
+    if (!token || !password || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token and password fields are required'
+      });
+    }
+
+    if (password !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Passwords do not match'
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters long'
+      });
+    }
+
+    // Find user with valid reset token
+    const user = await User.findOne({
+      resetToken: token,
+      resetTokenExpiry: { $gt: new Date() } // Token must not be expired
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired reset token'
+      });
+    }
+
+    // Update password and clear reset token
+    user.password = password;
+    user.resetToken = undefined;
+    user.resetTokenExpiry = undefined;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Password reset successful. You can now login with your new password.'
+    });
+  } catch (error) {
+    console.error('Reset Password Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error resetting password',
+      error: error.message
+    });
+  }
+};
+
+export default { register, login, getMe, logout, forgotPassword, resetPassword };

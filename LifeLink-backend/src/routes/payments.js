@@ -1,5 +1,6 @@
 import express from 'express'
-import { createSummary, getPaymentsForPatient, createRazorpayOrder, verifyRazorpayPayment } from '../controllers/paymentController.js'
+import { createSummary, getPaymentsForPatient, createRazorpayOrder, verifyRazorpayPayment, getPaymentSummaryCountByHospital } from '../controllers/paymentController.js'
+import { authenticate } from '../middleware/auth.js'
 
 const router = express.Router()
 
@@ -17,5 +18,8 @@ router.post('/verify', verifyRazorpayPayment)
 
 // Get payment summaries for a patient
 router.get('/patient/:patientId', getPaymentsForPatient)
+
+// Get payment summary count sent by hospital
+router.get('/hospital/count', authenticate, getPaymentSummaryCountByHospital)
 
 export default router

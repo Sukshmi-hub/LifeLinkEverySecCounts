@@ -1,6 +1,6 @@
 // src/routes/authRoutes.js - Authentication Routes
 import express from 'express'
-import { register, login, getMe, logout } from '../controllers/authController.js'
+import { register, login, getMe, logout, forgotPassword, resetPassword } from '../controllers/authController.js'
 import { authenticate } from '../middleware/auth.js'
 
 const router = express.Router()
@@ -32,5 +32,19 @@ router.get('/me', authenticate, getMe)
  * @access  Private
  */
 router.post('/logout', authenticate, logout)
+
+/**
+ * @route   POST /api/auth/forgot-password
+ * @desc    Request password reset token
+ * @access  Public
+ */
+router.post('/forgot-password', forgotPassword)
+
+/**
+ * @route   POST /api/auth/reset-password
+ * @desc    Reset password with token
+ * @access  Public
+ */
+router.post('/reset-password', resetPassword)
 
 export default router

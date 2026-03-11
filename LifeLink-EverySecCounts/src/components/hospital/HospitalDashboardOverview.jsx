@@ -41,6 +41,15 @@ const HospitalDashboardOverview = ({
   const { organRequests, notifications } = useNotifications();
   const { toast } = useToast();
 
+  // State for dynamic stats
+  const [stats, setStats] = useState({
+    pendingRequests: 0,
+    redAlerts: 0,
+    pendingVerifications: 0,
+    matchedDonors: 0
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
+
   const pendingRequests = organRequests.filter(r => r.status === 'Pending – Hospital Review').length;
   const emergencies = organRequests.filter(r => r.urgency === 'High').length;
   const matchedCount = organRequests.filter(r => r.status === 'Donor Matched').length;
@@ -85,6 +94,51 @@ const HospitalDashboardOverview = ({
     familyConsent: false,
     photo: null,
   });
+
+  // Fetch dashboard stats from API with 30-second auto-refresh
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setStatsLoading(false);
+          return;
+        }
+
+        const response = await fetch(`${API_BASE}/api/hospital/stats`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data) {
+            setStats({
+              pendingRequests: data.data.pendingRequests || 0,
+              redAlerts: data.data.redAlerts || 0,
+              pendingVerifications: data.data.pendingVerifications || 0,
+              matchedDonors: data.data.matchedDonors || 0
+            });
+          }
+        } else {
+          console.warn('Failed to fetch hospital stats:', response.status);
+        }
+      } catch (err) {
+        console.error('Failed to fetch dashboard stats:', err);
+      } finally {
+        setStatsLoading(false);
+      }
+    };
+
+    // Fetch immediately on mount
+    fetchStats();
+
+    // Set up 30-second auto-refresh interval
+    const refreshInterval = setInterval(fetchStats, 30000);
+
+    // Cleanup interval on component unmount
+    return () => clearInterval(refreshInterval);
+  }, [API_BASE]);
+
 
   useEffect(() => {
     const loadHospitalTributes = async () => {
@@ -338,26 +392,26 @@ const HospitalDashboardOverview = ({
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <DashboardCard 
           icon={FileText} 
-          title="Pending Requests" 
-          value={String(pendingRequests)} 
+          title="Patient Requests" 
+          value={String(stats.pendingRequests)} 
           variant="warning" 
         />
         <DashboardCard 
           icon={AlertTriangle} 
           title="Red Alerts" 
-          value={String(redAlertsCount)} 
+          value={String(stats.redAlerts)} 
           variant="critical" 
         />
         <DashboardCard 
           icon={UserCheck} 
           title="Pending Verifications" 
-          value={String(pendingVerifications)} 
+          value={String(stats.pendingVerifications)} 
           variant="primary" 
         />
         <DashboardCard 
           icon={Activity} 
           title="Matched Donors" 
-          value={String(matchedCount)} 
+          value={String(stats.matchedDonors)} 
           variant="success" 
         />
       </div>

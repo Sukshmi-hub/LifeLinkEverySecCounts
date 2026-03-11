@@ -1,12 +1,13 @@
 // src/routes/hospital.js
 import express from 'express'
-import { getMyHospitalProfile, updateMyHospitalProfile, listHospitals, getHospitalInventory, updateHospitalInventory, getPublicHospitalInventory, getHospitalById } from '../controllers/hospitalController.js'
+import { getMyHospitalProfile, updateMyHospitalProfile, listHospitals, getHospitalInventory, updateHospitalInventory, getPublicHospitalInventory, getHospitalById, getHospitalStats } from '../controllers/hospitalController.js'
 import { authMiddleware } from '../middleware/authMiddleware.js'
 import { hospitalOnly } from '../middleware/roleMiddleware.js'
 
 const router = express.Router()
 
 router.get('/me', authMiddleware, hospitalOnly, getMyHospitalProfile)
+router.get('/stats', authMiddleware, hospitalOnly, getHospitalStats)
 router.put('/me', authMiddleware, hospitalOnly, updateMyHospitalProfile)
 router.get('/list', authMiddleware, listHospitals)
 // Public inventory for a hospital id
@@ -21,3 +22,4 @@ router.get('/:id/inventory', getPublicHospitalInventory)
 router.get('/:id', getHospitalById)
 
 export default router
+

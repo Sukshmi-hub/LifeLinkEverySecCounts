@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import useGeolocation from '@/hooks/use-geolocation';
 import { serverUrl } from '@/lib/serverConfig';
+import ForgotPasswordModal from '@/components/ForgotPasswordModal';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -41,6 +42,7 @@ const Login = () => {
   const [activeTab, setActiveTab] = useState('login');
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
 
   // Form states
   const [loginEmail, setLoginEmail] = useState('');
@@ -492,6 +494,15 @@ const Login = () => {
               <Input type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} required />
               <Label>Password</Label>
               <Input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required />
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setForgotPasswordOpen(true)}
+                  className="text-sm text-red-600 hover:text-red-700 hover:underline"
+                >
+                  Forgot Password?
+                </button>
+              </div>
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? <Loader2 className="animate-spin" /> : 'Sign In'}
               </Button>
@@ -680,6 +691,7 @@ const Login = () => {
           </TabsContent>
         </Tabs>
       </div>
+      <ForgotPasswordModal open={forgotPasswordOpen} onOpenChange={setForgotPasswordOpen} />
     </div>
   );
 };
