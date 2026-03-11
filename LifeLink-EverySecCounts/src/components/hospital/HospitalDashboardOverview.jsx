@@ -9,6 +9,28 @@ import { useNotifications } from '@/context/NotificationContext';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import { addTribute } from '@/data/tributes';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Plus } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 
 const HospitalDashboardOverview = ({
   userName,
@@ -49,8 +71,35 @@ const HospitalDashboardOverview = ({
   const [initialBloodInventory, setInitialBloodInventory] = useState({});
   const [selectedBlood, setSelectedBlood] = useState([]);
   const [initialSelectedBlood, setInitialSelectedBlood] = useState([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [hospitalTributes, setHospitalTributes] = useState([]);
+  const [formData, setFormData] = useState({
+    donorName: '',
+    age: '',
+    donorLocation: '',
+    donationType: '',
+    hospitalName: '',
+    aboutDonor: '',
+    familyConsent: false,
+    photo: null,
+  });
 
   useEffect(() => {
+    const loadHospitalTributes = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const resp = await fetch(`${API_BASE}/api/tributes/mine`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!resp.ok) return;
+        const json = await resp.json();
+        if (json && json.tributes) setHospitalTributes(json.tributes);
+      } catch (e) {
+        // ignore
+      }
+    };
+    loadHospitalTributes();
     const loadInventory = async () => {
       try {
         const token = localStorage.getItem('token');
@@ -139,6 +188,142 @@ const HospitalDashboardOverview = ({
     } catch (err) {
       console.error('Failed to save inventory', err);
       toast({ title: 'Save error', description: err?.message || 'Failed to save inventory', variant: 'destructive' });
+    }
+  };
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setFormData({ ...formData, photo: file });
+    const reader = new FileReader();
+    reader.onloadend = () => setPhotoPreview(reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmit = async (e) => {
+    e && e.preventDefault && e.preventDefault();
+    setIsSubmitting(true);
+
+    // Validate required fields
+    if (!formData.donorName || !formData.donorName.trim()) {
+      setIsSubmitting(false);
+      toast({ title: 'Missing field', description: 'Donor name is required', variant: 'destructive' });
+      return;
+    }
+
+    if (!formData.age) {
+      setIsSubmitting(false);
+      toast({ title: 'Missing field', description: 'Age is required', variant: 'destructive' });
+      return;
+    }
+
+    if (!formData.donorLocation || !formData.donorLocation.trim()) {
+      setIsSubmitting(false);
+      toast({ title: 'Missing field', description: 'Location is required', variant: 'destructive' });
+      return;
+    }
+
+    if (!formData.donationType || !formData.donationType.trim()) {
+      setIsSubmitting(false);
+      toast({ title: 'Missing field', description: 'Donation type is required', variant: 'destructive' });
+      return;
+    }
+
+    if (!formData.hospitalName || !formData.hospitalName.trim()) {
+      setIsSubmitting(false);
+      toast({ title: 'Missing field', description: 'Hospital name is required', variant: 'destructive' });
+      return;
+    }
+
+    if (!formData.aboutDonor || !formData.aboutDonor.trim()) {
+      setIsSubmitting(false);
+      toast({ title: 'Missing field', description: 'About the donor is required', variant: 'destructive' });
+      return;
+    }
+
+    // Client-side age validation: must be between 18 and 70
+    const ageNum = Number(formData.age);
+    if (Number.isNaN(ageNum) || ageNum < 18 || ageNum > 70) {
+      setIsSubmitting(false);
+      toast({ title: 'Invalid age', description: 'Age must be between 18 and 70', variant: 'destructive' });
+      return;
+    }
+
+    // Validate aboutDonor length: minimum 20 characters
+    const aboutTrimmed = formData.aboutDonor.trim();
+    if (aboutTrimmed.length < 20) {
+      setIsSubmitting(false);
+      toast({ title: 'Invalid input', description: 'About the donor must be at least 20 characters', variant: 'destructive' });
+      return;
+    }
+
+    if (aboutTrimmed.length > 700) {
+      setIsSubmitting(false);
+      toast({ title: 'Invalid input', description: 'About the donor must be at most 700 characters', variant: 'destructive' });
+      return;
+    }
+
+    // If location empty, try geolocation
+    let finalLocation = formData.donorLocation;
+    if (!finalLocation && navigator && navigator.geolocation) {
+      try {
+        const pos = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000 }));
+        const { latitude, longitude } = pos.coords;
+        finalLocation = `Lat:${latitude.toFixed(4)}, Lon:${longitude.toFixed(4)}`;
+      } catch (err) {
+        console.warn('Geolocation failed or denied', err);
+      }
+    }
+
+    const payload = {
+      donorName: formData.donorName.trim(),
+      age: Number(formData.age),
+      location: finalLocation,
+      donationType: formData.donationType,
+      hospitalName: formData.hospitalName.trim(),
+      aboutDonor: aboutTrimmed,
+      photoUrl: photoPreview || undefined,
+      isPublic: !!formData.familyConsent,
+    };
+
+    // Try to send to API; if that fails, append locally using addTribute
+    try {
+      const token = localStorage.getItem('token');
+      const resp = await fetch(`${API_BASE}/api/tributes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify(payload),
+      });
+      
+      const respJson = await resp.json();
+      if (!resp.ok) {
+        setIsSubmitting(false);
+        toast({ title: 'Submission failed', description: respJson.message || 'Failed to submit tribute', variant: 'destructive' });
+        return;
+      }
+
+      // Refresh list after successful submit
+      try {
+        const listResp = await fetch(`${API_BASE}/api/tributes/mine`, { headers: { Authorization: `Bearer ${token}` } });
+        if (listResp.ok) {
+          const listJson = await listResp.json();
+          if (listJson && listJson.tributes) {
+            setHospitalTributes(listJson.tributes);
+          }
+        }
+      } catch (e) { 
+        console.warn('Failed to refresh tributes list', e);
+      }
+      
+      setIsSubmitting(false);
+      setDialogOpen(false);
+      setFormData({ donorName: '', age: '', donorLocation: '', donationType: '', hospitalName: '', aboutDonor: '', familyConsent: false, photo: null });
+      setPhotoPreview(null);
+      toast({ title: 'Tribute Submitted', description: 'Your tribute has been recorded successfully!', variant: 'default' });
+    } catch (err) {
+      console.error('Tribute submission error:', err);
+      setIsSubmitting(false);
+      toast({ title: 'Error', description: 'An error occurred while submitting the tribute', variant: 'destructive' });
     }
   };
 
@@ -312,25 +497,217 @@ const HospitalDashboardOverview = ({
       {/* Quick Stats Summary */}
       <Card>
         <CardHeader>
-          <CardTitle>Today's Summary</CardTitle>
+          <CardTitle>Tribute Wall</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center p-4 bg-muted/30 rounded-lg">
-              <p className="text-2xl font-bold text-primary">{organRequests.length}</p>
-              <p className="text-sm text-muted-foreground">Total Requests</p>
-            </div>
-            <div className="text-center p-4 bg-muted/30 rounded-lg">
-              <p className="text-2xl font-bold text-success">{matchedCount}</p>
-              <p className="text-sm text-muted-foreground">Successful Matches</p>
-            </div>
-            <div className="text-center p-4 bg-muted/30 rounded-lg">
-              <p className="text-2xl font-bold text-warning">{pendingVerifications}</p>
-              <p className="text-sm text-muted-foreground">Pending Verifications</p>
-            </div>
-            <div className="text-center p-4 bg-muted/30 rounded-lg">
-              <p className="text-2xl font-bold text-destructive">{emergencies}</p>
-              <p className="text-sm text-muted-foreground">High Urgency Cases</p>
+          <div className="flex items-center justify-center py-8">
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="lg" className="mt-0 gap-2">
+                  <Plus className="h-4 w-4" />
+                  Submit a Tribute
+                </Button>
+              </DialogTrigger>
+
+              <DialogContent className="max-w-lg bg-background max-h-[90vh] overflow-y-auto">
+                <DialogHeader className="sticky top-0 bg-background z-10">
+                  <DialogTitle>Submit a Tribute</DialogTitle>
+                  <DialogDescription>
+                    Tributes with consent will be published publicly.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <form onSubmit={handleSubmit} className="space-y-5 mt-4 pb-6">
+                  {/* Donor Name */}
+                  <div className="space-y-2">
+                    <Label htmlFor="donorName" className="text-sm font-medium">
+                      Donor Name <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="donorName"
+                      placeholder="Enter donor's full name"
+                      value={formData.donorName}
+                      onChange={(e) => setFormData({ ...formData, donorName: e.target.value })}
+                      className="w-full"
+                    />
+                    <p className="text-xs text-muted-foreground">Minimum 3 characters required</p>
+                  </div>
+
+                  {/* Age */}
+                  <div className="space-y-2">
+                    <Label htmlFor="age" className="text-sm font-medium">
+                      Age <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="age"
+                      type="number"
+                      placeholder="Enter age (18-70)"
+                      value={formData.age}
+                      onChange={(e) => setFormData({ ...formData, age: e.target.value })}
+                      min="18"
+                      max="70"
+                      className="w-full"
+                    />
+                    <p className="text-xs text-muted-foreground">Must be between 18 and 70 years</p>
+                  </div>
+
+                  {/* Location */}
+                  <div className="space-y-2">
+                    <Label htmlFor="location" className="text-sm font-medium">
+                      Location <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="location"
+                      placeholder="Enter location or city"
+                      value={formData.donorLocation}
+                      onChange={(e) => setFormData({ ...formData, donorLocation: e.target.value })}
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* Donation Type */}
+                  <div className="space-y-2">
+                    <Label htmlFor="donationType" className="text-sm font-medium">
+                      Donation Type <span className="text-red-500">*</span>
+                    </Label>
+                    <Select value={formData.donationType} onValueChange={(value) => setFormData({ ...formData, donationType: value })}>
+                      <SelectTrigger id="donationType" className="w-full">
+                        <SelectValue placeholder="Select a donation type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Kidney">Kidney</SelectItem>
+                        <SelectItem value="Liver">Liver</SelectItem>
+                        <SelectItem value="Heart">Heart</SelectItem>
+                        <SelectItem value="Lung">Lung</SelectItem>
+                        <SelectItem value="Pancreas">Pancreas</SelectItem>
+                        <SelectItem value="Cornea">Cornea</SelectItem>
+                        <SelectItem value="Bone Marrow">Bone Marrow</SelectItem>
+                        <SelectItem value="Blood">Blood</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Hospital Name */}
+                  <div className="space-y-2">
+                    <Label htmlFor="hospitalName" className="text-sm font-medium">
+                      Hospital Name <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="hospitalName"
+                      placeholder="Enter hospital name"
+                      value={formData.hospitalName}
+                      onChange={(e) => setFormData({ ...formData, hospitalName: e.target.value })}
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* About the Donor */}
+                  <div className="space-y-2">
+                    <Label htmlFor="aboutDonor" className="text-sm font-medium">
+                      About the Donor <span className="text-red-500">*</span>
+                    </Label>
+                    <Textarea
+                      id="aboutDonor"
+                      placeholder="Share a tribute about the donor (minimum 20 characters)"
+                      rows={4}
+                      value={formData.aboutDonor}
+                      onChange={(e) => setFormData({ ...formData, aboutDonor: e.target.value })}
+                      className="w-full resize-none"
+                    />
+                    <div className="flex justify-between">
+                      <p className="text-xs text-muted-foreground">Minimum 20 characters required</p>
+                      <p className={`text-xs ${formData.aboutDonor.trim().length >= 20 ? 'text-green-600' : 'text-red-500'}`}>
+                        {formData.aboutDonor.length}/700
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Photo Upload */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Photo (Optional)</Label>
+                    <div className="border-dashed border-2 rounded-xl p-6 text-center cursor-pointer hover:bg-muted/30 transition">
+                      <input type="file" id="photo_hosp" hidden accept="image/*" onChange={handlePhotoChange} />
+                      <label htmlFor="photo_hosp" className="cursor-pointer block">
+                        {photoPreview ? (
+                          <div className="space-y-2">
+                            <img src={photoPreview} alt="preview" className="w-24 h-24 mx-auto rounded-lg object-cover" />
+                            <p className="text-sm text-muted-foreground">Click to change photo</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium">Click to upload photo</p>
+                            <p className="text-xs text-muted-foreground">PNG, JPG, GIF up to 10MB</p>
+                          </div>
+                        )}
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Publish Tribute */}
+                  <div className="flex items-center justify-between border p-4 rounded-lg bg-muted/5">
+                    <div>
+                      <p className="font-medium text-sm">Publish Tribute</p>
+                      <p className="text-xs text-muted-foreground">Make this tribute visible to the public</p>
+                    </div>
+                    <Switch checked={formData.familyConsent} onCheckedChange={(v) => setFormData({ ...formData, familyConsent: !!v })} />
+                  </div>
+
+                  {/* Form Actions */}
+                  <div className="flex items-center justify-end gap-3 pt-4">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => { 
+                        setDialogOpen(false); 
+                        setFormData({ donorName: '', age: '', donorLocation: '', donationType: '', hospitalName: '', aboutDonor: '', familyConsent: false, photo: null }); 
+                        setPhotoPreview(null); 
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      type="submit" 
+                      className="bg-red-600 hover:bg-red-700"
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? 'Submitting...' : 'Submit Tribute'}
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
+          {/* Hospital tributes list */}
+          <div className="mt-6">
+            <div className="container grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {hospitalTributes.map((t) => (
+                <div key={t._id || t.id} className="rounded-2xl border bg-card p-6 hover:shadow-lg transition">
+                  <div className="flex gap-4">
+                    {t.photoUrl ? (
+                      <img src={t.photoUrl} alt={t.donorName} className="w-16 h-16 rounded-xl object-cover" />
+                    ) : (
+                      <div className="w-16 h-16 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <Heart className="text-primary/50" />
+                      </div>
+                    )}
+                    <div>
+                      <h3 className="font-semibold">{t.donorName}</h3>
+                      <p className="text-xs text-muted-foreground">{t.location}</p>
+                    </div>
+                  </div>
+                  <blockquote className="mt-4 italic text-sm text-muted-foreground">“{t.aboutDonor || t.familyMessage || ''}”</blockquote>
+                  <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3M3 11h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        <span>{t.donationDate ? new Date(t.donationDate).toLocaleDateString() : new Date(t.createdAt).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                    <div className="text-red-600">{t.livesImpacted ? `${t.livesImpacted} lives` : ''}</div>
+                  </div>
+                  <div className="mt-2 text-sm text-muted-foreground">— {t.hospitalName}</div>
+                </div>
+              ))}
             </div>
           </div>
         </CardContent>

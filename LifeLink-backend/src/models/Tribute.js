@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const TributeSchema = new mongoose.Schema(
   {
@@ -76,4 +76,4 @@ const TributeSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model('Tribute', TributeSchema);
+export default mongoose.model('Tribute', TributeSchema);

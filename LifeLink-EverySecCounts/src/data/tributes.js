@@ -102,3 +102,10 @@ export const getTributeStats = () => {
     ),
   };
 };
+
+// Utility to add a tribute at runtime (used as a fallback when no backend exists)
+export const addTribute = (t) => {
+  const newT = { ...t, id: `trb_${Date.now()}`, createdAt: new Date().toISOString() };
+  tributes.unshift(newT);
+  return newT;
+};

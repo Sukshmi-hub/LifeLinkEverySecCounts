@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +6,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { getPublishedTributes, getTributeStats } from "@/data/tributes";
 import {
   Heart,
   Flower2,
@@ -29,8 +28,10 @@ import {
 
 function TributeWall() {
   const { toast } = useToast();
-
-  const [tributes, setTributes] = useState(getPublishedTributes());
+  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+  
+  const [tributes, setTributes] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [photoPreview, setPhotoPreview] = useState(null);
@@ -46,7 +47,26 @@ function TributeWall() {
     photo: null,
   });
 
-  const stats = getTributeStats();
+  // Fetch public tributes on mount
+  useEffect(() => {
+    const fetchTributes = async () => {
+      try {
+        setIsLoading(true);
+        const resp = await fetch(`${API_BASE}/api/tributes/public`);
+        if (!resp.ok) throw new Error('Failed to fetch tributes');
+        const json = await resp.json();
+        if (json.success && Array.isArray(json.tributes)) {
+          setTributes(json.tributes);
+        }
+      } catch (err) {
+        console.error('Failed to fetch tributes:', err);
+        setTributes([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchTributes();
+  }, []);
 
   const handlePhotoChange = (e) => {
     const file = e.target.files && e.target.files[0];
@@ -130,13 +150,13 @@ function TributeWall() {
           <div className="mt-8 flex justify-center gap-10">
             <div>
               <p className="text-3xl font-bold text-primary">
-                {stats.published}
+                {tributes.length}
               </p>
               <p className="text-sm text-muted-foreground">Tributes</p>
             </div>
             <div>
               <p className="text-3xl font-bold text-primary">
-                {stats.livesImpacted}+
+                {tributes.length > 0 ? tributes.length * 2 : 0}+
               </p>
               <p className="text-sm text-muted-foreground">
                 Lives Impacted
@@ -144,205 +164,71 @@ function TributeWall() {
             </div>
           </div>
 
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="lg" className="mt-8 gap-2">
-                <Plus className="h-4 w-4" />
-                Submit a Tribute
-              </Button>
-            </DialogTrigger>
-
-            <DialogContent className="max-w-lg bg-background">
-              <DialogHeader>
-                <DialogTitle>Submit a Tribute</DialogTitle>
-                <DialogDescription>
-                  Tributes with consent will be published publicly.
-                </DialogDescription>
-              </DialogHeader>
-
-              <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-                <Input
-                  placeholder="Donor Name"
-                  value={formData.donorName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, donorName: e.target.value })
-                  }
-                  required
-                />
-
-                <Input
-                  type="number"
-                  placeholder="Age (optional)"
-                  value={formData.donorAge}
-                  onChange={(e) =>
-                    setFormData({ ...formData, donorAge: e.target.value })
-                  }
-                />
-
-                <Input
-                  placeholder="Location"
-                  value={formData.donorLocation}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      donorLocation: e.target.value,
-                    })
-                  }
-                  required
-                />
-
-                <Input
-                  placeholder="Donation Type"
-                  value={formData.donationType}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      donationType: e.target.value,
-                    })
-                  }
-                  required
-                />
-
-                <Input
-                  placeholder="Family Name"
-                  value={formData.familyName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, familyName: e.target.value })
-                  }
-                  required
-                />
-
-                <Textarea
-                  placeholder="Family Message"
-                  rows={4}
-                  value={formData.familyMessage}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      familyMessage: e.target.value,
-                    })
-                  }
-                  required
-                />
-
-                {/* Photo */}
-                <div className="border-dashed border-2 rounded-xl p-6 text-center">
-                  <input
-                    type="file"
-                    id="photo"
-                    hidden
-                    accept="image/*"
-                    onChange={handlePhotoChange}
-                  />
-                  <label htmlFor="photo" className="cursor-pointer">
-                    {photoPreview ? (
-                      <img
-                        src={photoPreview}
-                        alt="preview"
-                        className="w-24 h-24 mx-auto rounded-xl object-cover"
-                      />
-                    ) : (
-                      <>
-                        <ImageIcon className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                        <p>Upload Photo (optional)</p>
-                      </>
-                    )}
-                  </label>
-                </div>
-
-                <div className="flex items-center justify-between border p-4 rounded-lg">
-                  <div>
-                    <p className="font-medium">Publish Tribute</p>
-                    <p className="text-sm text-muted-foreground">
-                      Display publicly
-                    </p>
-                  </div>
-                  <Switch
-                    checked={formData.familyConsent}
-                    onCheckedChange={(v) =>
-                      setFormData({ ...formData, familyConsent: v })
-                    }
-                  />
-                </div>
-
-                <div className="flex gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => setDialogOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    className="flex-1"
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <Send className="mr-2 h-4 w-4" />
-                        Submit
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+          {/* hero submit button removed; submission available from hospital dashboard */}
         </div>
       </section>
 
       {/* TRIBUTE GRID */}
       <section className="py-12">
-        <div className="container grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {tributes.map((t) => (
-            <div
-              key={t.id}
-              className="rounded-2xl border bg-card p-6 hover:shadow-lg transition"
-            >
-              <div className="flex gap-4">
-                {t.photo ? (
-                  <img
-                    src={t.photo}
-                    alt={t.donorName}
-                    className="w-16 h-16 rounded-xl object-cover"
-                  />
-                ) : (
-                  <div className="w-16 h-16 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <Heart className="text-primary/50" />
+        <div className="container">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : tributes && tributes.length > 0 ? (
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {tributes.map((t) => (
+                <div
+                  key={t._id || t.id}
+                  className="rounded-2xl border bg-card p-6 hover:shadow-lg transition"
+                >
+                  <div className="flex gap-4">
+                    {t.photoUrl ? (
+                      <img
+                        src={t.photoUrl}
+                        alt={t.donorName}
+                        className="w-16 h-16 rounded-xl object-cover"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <Heart className="text-primary/50" />
+                      </div>
+                    )}
+                    <div>
+                      <h3 className="font-semibold">{t.donorName}</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {t.location}
+                      </p>
+                    </div>
                   </div>
-                )}
-                <div>
-                  <h3 className="font-semibold">{t.donorName}</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {t.donorLocation}
+
+                  <p className="mt-4 text-sm text-muted-foreground italic">
+                    "{t.aboutDonor}"
+                  </p>
+
+                  <div className="mt-4 flex justify-between text-xs text-muted-foreground">
+                    <span>
+                      <CalendarDays className="inline h-3 w-3 mr-1" />
+                      {new Date(t.createdAt).toLocaleDateString('en-IN')}
+                    </span>
+                    <span className="text-primary">
+                      <Heart className="inline h-3 w-3 mr-1" />
+                      {t.donationType}
+                    </span>
+                  </div>
+
+                  <p className="mt-3 text-xs italic text-muted-foreground">
+                    — {t.hospitalName}
                   </p>
                 </div>
-              </div>
-
-              <p className="mt-4 text-sm text-muted-foreground italic">
-                “{t.familyMessage}”
-              </p>
-
-              <div className="mt-4 flex justify-between text-xs text-muted-foreground">
-                <span>
-                  <CalendarDays className="inline h-3 w-3 mr-1" />
-                  {new Date(t.donationDate).toLocaleDateString()}
-                </span>
-                <span className="text-primary">
-                  <Users className="inline h-3 w-3 mr-1" />
-                  {t.livesImpacted} lives
-                </span>
-              </div>
-
-              <p className="mt-3 text-xs italic text-muted-foreground">
-                — {t.familyName}
-              </p>
+              ))}
             </div>
-          ))}
+          ) : (
+            <div className="text-center py-12">
+              <Heart className="h-12 w-12 mx-auto text-primary/30 mb-4" />
+              <p className="text-muted-foreground">No tributes yet</p>
+            </div>
+          )}
         </div>
       </section>
     </div>

@@ -70,3 +70,12 @@ export const getMyTributes = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to fetch tributes' })
   }
 }
+
+export const getPublicTributes = async (req, res) => {
+  try {
+    const tributes = await Tribute.find({ isPublic: true, status: 'active' }).sort({ createdAt: -1 })
+    return res.json({ success: true, tributes })
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to fetch public tributes' })
+  }
+}
