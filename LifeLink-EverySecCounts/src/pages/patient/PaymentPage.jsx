@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CreditCard, Clock, User, Heart, Building2, Eye } from 'lucide-react';
+import { CreditCard, Clock, User, Heart, Building2, Eye, CheckCircle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 const PaymentPage = () => {
@@ -15,24 +15,35 @@ const PaymentPage = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentSummary, setPaymentSummary] = useState(null);
-  
+  const [paymentCompleted, setPaymentCompleted] = useState(false);
+
+  const refreshPaymentStatus = async () => {
+    try {
+      if (!user?.id) return;
+      // Add timestamp to prevent caching
+      const resp = await fetch(`/api/payments/patient/${encodeURIComponent(user.id)}?t=${Date.now()}`, {
+        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (resp.ok && Array.isArray(json.data)) {
+        // Get the most recent payment (could be completed or pending)
+        const sorted = (json.data || []).sort((a, b) => {
+          const dateA = new Date(a.createdAt || a.updatedAt || 0).getTime();
+          const dateB = new Date(b.createdAt || b.updatedAt || 0).getTime();
+          return dateB - dateA;
+        });
+        const latest = sorted[0] || null;
+        console.log('Payment status refreshed:', latest);
+        setPaymentSummary(latest);
+      }
+    } catch (e) {
+      console.error('Failed to refresh payment status:', e);
+    }
+  };
 
   useEffect(() => {
     if (user?.id && loadOrganRequests) loadOrganRequests(user.id);
-
-    (async () => {
-      try {
-        if (!user?.id) return;
-        const resp = await fetch(`/api/payments/patient/${encodeURIComponent(user.id)}`);
-        const json = await resp.json().catch(() => ({}));
-        if (resp.ok && Array.isArray(json.data)) {
-          const pending = json.data.find(p => String(p.status || '').toLowerCase() === 'pending');
-          setPaymentSummary(pending || (json.data[0] || null));
-        }
-      } catch (e) {
-        // ignore
-      }
-    })();
+    refreshPaymentStatus();
   }, [user?.id, loadOrganRequests]);
 
   const matchedRequest = (organRequests || []).find((r) => {
@@ -83,44 +94,8 @@ const PaymentPage = () => {
                 </p>
               </CardContent>
             </Card>
-          ) : paymentSummary ? (
-            // If a payment summary exists for the patient, show only the summary (no donor details or buttons)
-            <div className="max-w-2xl mx-auto">
-              <Card className="overflow-hidden">
-                <CardContent className="p-6 space-y-6">
-                  <div className="border-t border-border pt-0">
-                    <h4 className="font-semibold mb-4">Payment Summary</h4>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Transplant Surgery Fee</span>
-                        <span>₹{(paymentSummary?.surgeryFee || 0).toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Hospital Charges</span>
-                        <span>₹{(paymentSummary?.hospitalCharges || 0).toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Processing Fee</span>
-                        <span>₹{(paymentSummary?.processingFee || 0).toLocaleString()}</span>
-                      </div>
-                      <div className="border-t border-border pt-2 mt-2 flex justify-between">
-                        <span className="font-semibold">Total Amount</span>
-                        <span className="font-bold text-lg">₹{(paymentSummary?.totalAmount || 0).toLocaleString()}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <Button onClick={() => setShowPaymentModal(true)} className="flex-1 h-12 text-base">
-                      <CreditCard className="w-5 h-5 mr-2" />
-                      Proceed to Payment
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
           ) : (
-            // No paymentSummary but matched donor/request exists -> show donor matched UI
+            // Show donor matched details with payment summary
             <div className="max-w-2xl mx-auto">
               <Card className="overflow-hidden">
                 <div className="bg-success/10 p-6 border-b border-success/20">
@@ -142,7 +117,7 @@ const PaymentPage = () => {
                       <div>
                         <p className="text-xs text-muted-foreground">Donor Name</p>
                         <p className="font-medium">
-                          {matchedDonor?.name || matchedRequest?.donorName || (matchedRequest?.patientName || '').trim() || 'Anonymous Donor'}
+                          {matchedDonor?.name || paymentSummary?.donorName || matchedRequest?.donorName || (matchedRequest?.patientName || '').trim() || 'Anonymous Donor'}
                         </p>
                       </div>
                     </div>
@@ -150,14 +125,14 @@ const PaymentPage = () => {
                       <Heart className="w-5 h-5 text-muted-foreground" />
                       <div>
                         <p className="text-xs text-muted-foreground">Organ Type</p>
-                        <p className="font-medium">{matchedDonor?.organType || matchedRequest?.organType}</p>
+                        <p className="font-medium">{matchedDonor?.organType || paymentSummary?.organType || matchedRequest?.organType}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg sm:col-span-2">
                       <Building2 className="w-5 h-5 text-muted-foreground" />
                       <div>
                         <p className="text-xs text-muted-foreground">Hospital</p>
-                        <p className="font-medium">{matchedDonor?.hospitalName || matchedRequest?.hospitalName || 'City General Hospital'}</p>
+                        <p className="font-medium">{matchedDonor?.hospitalName || paymentSummary?.hospitalName || matchedRequest?.hospitalName || 'City General Hospital'}</p>
                       </div>
                     </div>
                   </div>
@@ -167,7 +142,7 @@ const PaymentPage = () => {
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Transplant Surgery Fee</span>
-                        <span>₹{(paymentSummary?.surgeryFee || 0).toLocaleString()}</span>
+                        <span>₹{(paymentSummary?.surgeryFee || paymentSummary?.transplantFee || 0).toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Hospital Charges</span>
@@ -185,10 +160,17 @@ const PaymentPage = () => {
                   </div>
 
                   <div className="flex gap-3">
-                    <Button onClick={() => setShowPaymentModal(true)} className="flex-1 h-12 text-base">
-                      <CreditCard className="w-5 h-5 mr-2" />
-                      Proceed to Payment
-                    </Button>
+                    {paymentCompleted || (paymentSummary && (String(paymentSummary.status || '').toLowerCase() !== 'pending' || !!paymentSummary.paymentId)) ? (
+                      <div className="flex-1 h-12 flex items-center justify-center bg-success text-white rounded-md font-semibold">
+                        <CheckCircle className="w-5 h-5 mr-2" />
+                        DONE
+                      </div>
+                    ) : (
+                      <Button onClick={() => setShowPaymentModal(true)} className="flex-1 h-12 text-base">
+                        <CreditCard className="w-5 h-5 mr-2" />
+                        Proceed to Payment
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -200,7 +182,14 @@ const PaymentPage = () => {
       {(paymentSummary || matchedDonor || matchedRequest) && (
         <RazorpayModal
           isOpen={showPaymentModal}
-          onClose={() => setShowPaymentModal(false)}
+          onClose={() => {
+            setShowPaymentModal(false);
+            refreshPaymentStatus();
+          }}
+          onPaymentSuccess={() => {
+            setPaymentCompleted(true);
+            refreshPaymentStatus();
+          }}
           donorName={user?.name || matchedDonor?.name || matchedRequest?.donorName || (matchedRequest?.patientName || '').trim() || 'Anonymous Donor'}
           organType={matchedDonor?.organType || matchedRequest?.organType}
           hospitalName={matchedDonor?.hospitalName || matchedRequest?.hospitalName || 'City General Hospital'}

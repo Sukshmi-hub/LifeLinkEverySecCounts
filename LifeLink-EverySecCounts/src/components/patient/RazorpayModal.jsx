@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 const RazorpayModal = ({ 
   isOpen, 
   onClose, 
+  onPaymentSuccess,
   donorName, 
   organType, 
   hospitalName,
@@ -63,6 +64,7 @@ const RazorpayModal = ({
       // If backend returned a mock order (Razorpay auth failed), treat as immediate success
       if (mock) {
         setIsSuccess(true)
+        if (onPaymentSuccess) onPaymentSuccess()
         return
       }
 
@@ -98,6 +100,8 @@ const RazorpayModal = ({
             // verifyJson.data should include receipt and payment
             setReceipt(verifyJson.data && verifyJson.data.receipt ? verifyJson.data.receipt : null)
             setIsSuccess(true)
+            // Call the onPaymentSuccess callback to refresh parent state
+            if (onPaymentSuccess) onPaymentSuccess()
           } catch (vErr) {
             console.error('Verification error', vErr)
             alert('Payment verification failed. Please contact support.')

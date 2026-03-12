@@ -227,6 +227,7 @@ function HospitalPayments() {
                       const organ = r.organ || r.organRequired || r.organType || (r.raw && r.raw.organ) || '—'
                       const receivedFrom = r.sentFromHospitalName || (r.matchedDonor && (r.matchedDonor.senderHospitalName || r.matchedDonor.hospitalName)) || (r.matchedDonor && r.matchedDonor.hospitalName) || '—'
                       const summarySent = !!r.summarySent || !!r.paymentSummarySent || !!r.summaryCreated || !!r.paymentSent || !!r.paymentId
+                      const paymentCompleted = r.paymentId && String(r.paymentStatus || r.status || '').toLowerCase() !== 'pending'
 
                       return (
                         <tr key={r._id || r.id} className="border-b">
@@ -240,6 +241,8 @@ function HospitalPayments() {
                                 <Button variant="ghost" onClick={() => openDetails(r)} title="View Details"><Eye className="w-4 h-4" /></Button>
                                 <Button onClick={() => handleOpenPayment(r)} className="ml-2 bg-red-600 text-white">Generate Payment Summary</Button>
                               </>
+                            ) : paymentCompleted ? (
+                              <span className="text-sm font-medium text-green-600">Payment Done</span>
                             ) : (
                               <span className="text-sm font-medium text-green-600">Summary Sent</span>
                             )}
