@@ -404,7 +404,7 @@ const HospitalDashboardOverview = ({
         />
         <DashboardCard 
           icon={UserCheck} 
-          title="Pending Verifications" 
+          title="Patient Verifications" 
           value={String(stats.pendingVerifications)} 
           variant="primary" 
         />

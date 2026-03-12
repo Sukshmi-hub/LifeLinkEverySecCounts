@@ -172,8 +172,8 @@ router.put('/:id/send-matched-details', authenticate, async (req, res) => {
     }
     reqDoc.matchedDonor = sanitizedDonor
     // Use an allowed enum value for `status` to avoid validation errors
-    // The schema currently permits: 'pending', 'approved', 'rejected'
-    reqDoc.status = 'approved'
+    // The schema currently permits: 'pending', 'approved', 'rejected', 'SentToHospital', 'VerifiedByHospital', 'Donor Matched'
+    reqDoc.status = 'Donor Matched'
     reqDoc.matchedAt = new Date()
     reqDoc.detailsSentToPatientHospital = true
     reqDoc.sentToPatientHospitalAt = new Date()

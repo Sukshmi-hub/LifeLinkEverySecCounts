@@ -61,7 +61,7 @@ function HospitalPayments() {
       const resp = await fetch(`/api/requests?hospitalId=${encodeURIComponent(idToUse)}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.message || 'Failed to load')
-      const list = (json.data || []).filter(r => r.detailsSentToPatientHospital || !!r.matchedDonor || r.status === 'approved')
+      const list = (json.data || []).filter(r => r.detailsSentToPatientHospital || !!r.matchedDonor || r.status === 'approved' || r.status === 'Donor Matched')
       setReceivedRequests(list)
     } catch (e) {
       console.error('Failed to fetch received requests', e)

@@ -398,7 +398,7 @@ const ManageRequests = () => {
 
       <Tabs defaultValue="patients" className="w-full">
         <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="verification">User Verification</TabsTrigger>
+          <TabsTrigger value="verification">Patient Verification</TabsTrigger>
           <TabsTrigger value="patients">Patient Requests</TabsTrigger>
           <TabsTrigger value="ngo">NGO Pay Verify</TabsTrigger>
           <TabsTrigger value="donors">Donor Requests</TabsTrigger>
@@ -409,7 +409,7 @@ const ManageRequests = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <User className="w-5 h-5" />
-                Pending Verifications
+                Patient Verifications
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -831,9 +831,9 @@ const ManageRequests = () => {
             <div className="p-3 bg-muted/30 rounded">
               <p className="text-xs text-muted-foreground">Select Donor</p>
               <div className="mt-2 space-y-2 max-h-64 overflow-auto">
-                {donorRequests.length === 0 ? (
+                {donorRequests.filter(d => d.status !== 'Donor Matched').length === 0 ? (
                   <p className="text-sm text-muted-foreground">No donor registrations available</p>
-                ) : donorRequests.map(d => (
+                ) : donorRequests.filter(d => d.status !== 'Donor Matched').map(d => (
                   <div key={d.id} className={cn('p-2 rounded border', selectedDonorForMatch && selectedDonorForMatch.id === d.id ? 'border-primary bg-primary/10' : 'border-border')}>
                     <div className="flex items-start justify-between gap-2">
                       <div>
@@ -890,7 +890,8 @@ const ManageRequests = () => {
                 const json = await resp.json().catch(() => ({}));
                 if (!resp.ok) throw new Error(json.message || 'Failed to send matched details');
 
-                // Update local UI state
+                // Update local UI state - mark the matched donor as no longer available
+                setDonorRequests(prev => prev.map(d => d.id === selectedDonorForMatch.id ? { ...d, status: 'Donor Matched' } : d));
                 setHospitalOrganRequests(prev => prev.map(r => r.id === selectedForPayment.id ? { ...r, status: 'Donor Matched' } : r));
                 updateOrganRequestStatus(selectedForPayment.id, 'Donor Matched');
                 addNotification({ type: 'success', title: "Details sent", message: "Details sent to patient's hospital successfully", targetRole: 'patient' });
