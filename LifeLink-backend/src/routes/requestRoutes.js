@@ -7,7 +7,7 @@ import Request from '../models/Request.js'
 import mongoose from 'mongoose'
 import Patient from '../models/Patient.js'
 import NGO from '../models/NGO.js'
-import Notification from '../models/Notification.js'
+import Dots from '../models/Dots.js'
 import Donor from '../models/Donor.js'
 import Message from '../models/Message.js'
 import Hospital from '../models/Hospital.js'
@@ -251,36 +251,24 @@ router.put('/:id/send-matched-details', authenticate, async (req, res) => {
       console.error('Failed to persist matched donor snapshot to patient/hospital', e && e.stack ? e.stack : e)
     }
 
-    // Persist notification to DB and emit event so hospital dashboards show a new incoming-match notification
+    // Set dots flag for hospital when new request comes in
     try {
-      const notif = new Notification({
-        title: 'New match request received',
-        message: `New match request received from ${hospital && hospital.name ? hospital.name : 'another hospital'}`,
-        type: 'info',
-        targetRole: 'hospital',
-        recipientHospitalId: targetHospitalId || null,
-        requestId: reqDoc._id,
-        senderHospitalId: hospital && hospital._id ? hospital._id : null,
-        senderHospitalName: hospital && hospital.name ? hospital.name : ''
-      })
-      await notif.save()
-
-      const io = global.__LIFELINK_IO
-      const payload = {
-        id: notif._id,
-        type: notif.type,
-        title: notif.title,
-        message: notif.message,
-        targetRole: notif.targetRole,
-        hospitalId: String(notif.recipientHospitalId || ''),
-        requestId: String(notif.requestId || ''),
-        senderHospitalId: notif.senderHospitalId ? String(notif.senderHospitalId) : null,
-        senderHospitalName: notif.senderHospitalName || null,
-        timestamp: notif.timestamp
+      const targetHospital = await Hospital.findById(targetHospitalId || reqDoc.hospitalId)
+      if (targetHospital && targetHospital.userId) {
+        let dots = await Dots.findOne({ userId: targetHospital.userId })
+        if (!dots) {
+          dots = await Dots.create({
+            userId: targetHospital.userId,
+            userType: 'hospital',
+            dots: { messages: false, requests: true, alerts: false, payments: false }
+          })
+        } else {
+          dots.dots.requests = true
+          await dots.save()
+        }
       }
-      if (io && typeof io.emit === 'function') io.emit('new_notification', payload)
     } catch (e) {
-      console.error('Failed to emit notification event', e && e.stack ? e.stack : e)
+      console.error('Failed to set requests dot', e && e.stack ? e.stack : e)
     }
 
     // Create a lightweight message/notification so patient-hospital staff can see it in their chat/feeds

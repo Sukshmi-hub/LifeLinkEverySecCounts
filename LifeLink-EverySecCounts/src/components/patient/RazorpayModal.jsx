@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +29,7 @@ const RazorpayModal = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [receipt, setReceipt] = useState(null);
+  const razorpayRef = useRef(null);
 
   // Load external Razorpay checkout script
   const loadRazorpayScript = () => new Promise((resolve, reject) => {
@@ -39,6 +40,46 @@ const RazorpayModal = ({
     script.onerror = () => reject(new Error('Razorpay SDK failed to load'))
     document.body.appendChild(script)
   })
+
+  // Callback to handle payment verification
+  const handlePaymentVerification = useCallback(async (response) => {
+    console.log('Payment verification started with response:', response);
+    try {
+      const verifyResp = await fetch('/api/payments/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(response)
+      })
+      const verifyJson = await verifyResp.json()
+      console.log('Verify response received:', verifyJson);
+      
+      if (!verifyResp.ok) {
+        console.error('Verification failed with status:', verifyResp.status);
+        throw new Error(verifyJson.message || 'Verification failed')
+      }
+      
+      // verifyJson.data should include receipt and payment
+      console.log('Payment verified successfully:', verifyJson.data);
+      setReceipt(verifyJson.data && verifyJson.data.receipt ? verifyJson.data.receipt : null)
+      console.log('Setting isSuccess to true');
+      setIsSuccess(true)
+      
+      // Close Razorpay modal if it exists
+      if (razorpayRef.current) {
+        try {
+          razorpayRef.current.close();
+          console.log('Razorpay modal closed');
+        } catch (e) {
+          console.warn('Could not close Razorpay modal:', e);
+        }
+      }
+      // Don't call onPaymentSuccess here - wait for user to click Done
+    } catch (vErr) {
+      console.error('Payment verification failed:', vErr)
+      alert('Payment verification failed: ' + (vErr.message || 'Please contact support.'))
+      setIsSuccess(false)
+    }
+  }, []);
 
   const handlePayment = async () => {
     // Create order on backend, then open Razorpay Checkout (UPI-only)
@@ -86,30 +127,23 @@ const RazorpayModal = ({
         method: { upi: true, card: false, netbanking: false, wallet: false, emi: false },
         // Theme and branding
         theme: { color: '#2c3e50' },
-        modal: { escape: false },
-        handler: async function (response) {
-          // response contains razorpay_order_id, razorpay_payment_id, razorpay_signature
-          try {
-            const verifyResp = await fetch('/api/payments/verify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(response)
-            })
-            const verifyJson = await verifyResp.json()
-            if (!verifyResp.ok) throw new Error(verifyJson.message || 'Verification failed')
-            // verifyJson.data should include receipt and payment
-            setReceipt(verifyJson.data && verifyJson.data.receipt ? verifyJson.data.receipt : null)
-            setIsSuccess(true)
-            // Call the onPaymentSuccess callback to refresh parent state
-            if (onPaymentSuccess) onPaymentSuccess()
-          } catch (vErr) {
-            console.error('Verification error', vErr)
-            alert('Payment verification failed. Please contact support.')
-          }
-        }
+        modal: { 
+          escape: false,
+          ondismiss: () => { 
+            console.log('Payment modal dismissed by user')
+            setIsProcessing(false)
+          } 
+        },
+        // Suppress the native Razorpay success page
+        hide_topbar: false,
+        handler: handlePaymentVerification,
+        // Prevent redirect to another page after success
+        notes: { hospitalId: String(hospitalId), requestId: String(requestId || '') }
       }
 
       const rzp = new window.Razorpay(options)
+      razorpayRef.current = rzp;
+      console.log('Razorpay instance created and stored');
       rzp.open()
     } catch (err) {
       console.error('Payment initiation failed', err)
@@ -121,11 +155,20 @@ const RazorpayModal = ({
 
   const resetAndClose = () => {
     setIsSuccess(false);
+    setReceipt(null);
+    razorpayRef.current = null;
     onClose();
   };
 
+  const handleDialogOpenChange = (open) => {
+    // Only handle actual close events (when open becomes false)
+    if (!open && isOpen) {
+      resetAndClose();
+    }
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={resetAndClose}>
+    <Dialog open={isOpen} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="sm:max-w-lg">
         {isSuccess ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -161,7 +204,11 @@ const RazorpayModal = ({
               }} className="w-1/2">
                 Download Receipt
               </Button>
-              <Button onClick={resetAndClose} className="w-1/2">
+              <Button onClick={() => {
+                // Call the success callback and then close
+                if (onPaymentSuccess) onPaymentSuccess();
+                resetAndClose();
+              }} className="w-1/2">
                 Done
               </Button>
             </div>

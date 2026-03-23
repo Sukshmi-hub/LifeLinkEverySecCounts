@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { useDots } from '@/context/DotsContext';
 import { Button } from '@/components/ui/button';
 import LifeLinkLogo from '@/components/LifeLinkLogo';
 import { 
@@ -9,24 +10,31 @@ import {
   MessageCircle, 
   User, 
   LogOut,
-  
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const NgoSidebar = ({ activeTab, setActiveTab }) => {
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const { dots, clearDot } = useDots();
 
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'requests', label: 'Fund Requests', icon: FileText },
-    { id: 'messages', label: 'Messages', icon: MessageCircle },
-    { id: 'profile', label: 'Profile', icon: User },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, dotName: null },
+    { id: 'requests', label: 'Fund Requests', icon: FileText, dotName: 'requests' },
+    { id: 'messages', label: 'Messages', icon: MessageCircle, dotName: 'messages' },
+    { id: 'profile', label: 'Profile', icon: User, dotName: null },
   ];
 
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  const handleSetTab = (id, dotName) => {
+    setActiveTab(id);
+    if (dotName && dots[dotName]) {
+      clearDot(dotName);
+    }
   };
 
   return (
@@ -44,13 +52,22 @@ const NgoSidebar = ({ activeTab, setActiveTab }) => {
               key={item.id}
               variant={activeTab === item.id ? 'secondary' : 'ghost'}
               className={cn(
-                "w-full justify-start gap-3 h-11",
+                "w-full justify-start gap-3 h-11 relative",
                 activeTab === item.id && "bg-primary/10 text-primary font-medium"
               )}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => handleSetTab(item.id, item.dotName)}
             >
               <item.icon className="w-5 h-5" />
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              {/* Dot indicator */}
+              {item.dotName && dots[item.dotName] && (
+                <span className={cn(
+                  "w-2.5 h-2.5 rounded-full",
+                  activeTab === item.id 
+                    ? "bg-primary"  // Dot color matches text on active button
+                    : "bg-red-500"  // Red dot on inactive button
+                )} />
+              )}
             </Button>
           ))}
         </div>

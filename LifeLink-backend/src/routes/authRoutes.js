@@ -1,6 +1,6 @@
 // src/routes/authRoutes.js - Authentication Routes
 import express from 'express'
-import { register, login, getMe, logout, forgotPassword, resetPassword } from '../controllers/authController.js'
+import { register, login, getMe, logout, forgotPassword, resetPassword, sendOTP, verifyOTP } from '../controllers/authController.js'
 import { authenticate } from '../middleware/auth.js'
 
 const router = express.Router()
@@ -46,5 +46,19 @@ router.post('/forgot-password', forgotPassword)
  * @access  Public
  */
 router.post('/reset-password', resetPassword)
+
+/**
+ * @route   POST /api/auth/send-otp
+ * @desc    Send OTP to phone number via SMS
+ * @access  Public
+ */
+router.post('/send-otp', sendOTP)
+
+/**
+ * @route   POST /api/auth/verify-otp
+ * @desc    Verify OTP code
+ * @access  Public
+ */
+router.post('/verify-otp', verifyOTP)
 
 export default router

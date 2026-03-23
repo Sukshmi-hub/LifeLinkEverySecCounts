@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { useDots } from '@/context/DotsContext';
 import { 
   FileText, 
   CreditCard, 
@@ -16,17 +17,18 @@ import { cn } from '@/lib/utils';
 import LifeLinkLogo from '@/components/LifeLinkLogo';
 
 const menuItems = [
-  { icon: FileText, label: 'Request', path: '/patient/request' },
-  { icon: MessageCircle, label: 'Messages', path: '/patient/messages' },
-  { icon: CreditCard, label: 'Payments', path: '/patient/payment' },
-  { icon: HandHeart, label: 'Request Funds', path: '/patient/request-funds' },
-  { icon: User, label: 'Profile', path: '/patient/profile' },
+  { icon: FileText, label: 'Request', path: '/patient/request', dotName: 'requests' },
+  { icon: MessageCircle, label: 'Messages', path: '/patient/messages', dotName: 'messages' },
+  { icon: CreditCard, label: 'Payments', path: '/patient/payment', dotName: 'payments' },
+  { icon: HandHeart, label: 'Request Funds', path: '/patient/request-funds', dotName: null },
+  { icon: User, label: 'Profile', path: '/patient/profile', dotName: null },
 ];
 
 const PatientSidebar = ({ isOpen, onToggle }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const { dots, clearDot } = useDots();
 
   const handleLogout = async () => {
     try {
@@ -34,6 +36,13 @@ const PatientSidebar = ({ isOpen, onToggle }) => {
       navigate('/login'); 
     } catch (error) {
       console.error("Logout failed:", error);
+    }
+  };
+
+  const handleNavClick = (dotName) => {
+    onToggle();
+    if (dotName && dots[dotName]) {
+      clearDot(dotName);
     }
   };
 
@@ -74,15 +83,24 @@ const PatientSidebar = ({ isOpen, onToggle }) => {
                 key={item.path}
                 to={item.path}
                 className={cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200",
+                  "flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 relative",
                   isActive
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
-                onClick={() => onToggle()}
+                onClick={() => handleNavClick(item.dotName)}
               >
                 <item.icon className="w-5 h-5" />
                 <span className="font-medium">{item.label}</span>
+                {/* Dot indicator */}
+                {item.dotName && dots[item.dotName] && (
+                  <span className={cn(
+                    "w-2.5 h-2.5 rounded-full absolute right-3",
+                    isActive 
+                      ? "bg-white"  // White dot on primary (dark) button
+                      : "bg-red-500"  // Red dot on light button
+                  )} />
+                )}
               </Link>
             );
           })}

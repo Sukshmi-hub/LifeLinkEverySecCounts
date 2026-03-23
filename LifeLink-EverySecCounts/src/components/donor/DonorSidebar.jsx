@@ -2,20 +2,19 @@ import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useDonor } from '@/context/DonorContext';
-import { useNotifications } from '@/context/NotificationContext';
+import { useDots } from '@/context/DotsContext';
 import LifeLinkLogo from '@/components/LifeLinkLogo';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Bell, MessageCircle, User, LogOut, Menu, X, Award } from 'lucide-react';
+import { MessageCircle, User, LogOut, Menu, X, Award, AlertTriangle } from 'lucide-react';
 
 const DonorSidebar = ({ isOpen, onToggle }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout } = useAuth();
   const { donationIntents } = useDonor() || { donationIntents: [] };
-  const { getUnreadCount } = useNotifications();
+  const { dots, clearDot } = useDots();
 
-  const unreadNotifications = getUnreadCount ? getUnreadCount('donor') : 0;
   const hasCompletedDonation = (donationIntents || []).some(i => i.status === 'Completed');
 
   const handleLogout = () => {
@@ -23,14 +22,20 @@ const DonorSidebar = ({ isOpen, onToggle }) => {
     navigate('/login');
   };
 
+  const handleNavClick = (dotName) => {
+    if (dotName && dots[dotName]) {
+      clearDot(dotName);
+    }
+  };
+
   const navItems = [
-    { path: '/donor/alerts', icon: Bell, label: 'Alerts', badge: unreadNotifications > 0 ? unreadNotifications : null },
-    { path: '/donor/messages', icon: MessageCircle, label: 'Messages', badge: null },
-    { path: '/donor/profile', icon: User, label: 'Profile', badge: null },
+    { path: '/donor/alerts', icon: AlertTriangle, label: 'Alerts', dotName: 'alerts' },
+    { path: '/donor/messages', icon: MessageCircle, label: 'Messages', dotName: 'messages' },
+    { path: '/donor/profile', icon: User, label: 'Profile', dotName: null },
   ];
 
   if (hasCompletedDonation) {
-    navItems.push({ path: '/donor/certificate', icon: Award, label: 'Certificate', badge: null });
+    navItems.push({ path: '/donor/certificate', icon: Award, label: 'Certificate', dotName: null });
   }
 
   return (
@@ -71,7 +76,10 @@ const DonorSidebar = ({ isOpen, onToggle }) => {
                 <Link
                   key={item.path}
                   to={item.path}
-                  onClick={() => onToggle()}
+                  onClick={() => {
+                    onToggle();
+                    handleNavClick(item.dotName);
+                  }}
                   className={cn(
                     "flex items-center gap-3 px-4 py-3 rounded-xl transition-all relative",
                     isActive
@@ -82,10 +90,14 @@ const DonorSidebar = ({ isOpen, onToggle }) => {
                   <Icon className="h-5 w-5" />
                   <span className="font-medium">{item.label}</span>
 
-                  {item.badge && (
-                    <span className="absolute right-3 bg-destructive text-destructive-foreground text-xs font-bold px-2 py-0.5 rounded-full">
-                      {item.badge}
-                    </span>
+                  {/* Dot indicator */}
+                  {item.dotName && dots[item.dotName] && (
+                    <span className={cn(
+                      "w-2.5 h-2.5 rounded-full absolute right-3",
+                      isActive 
+                        ? "bg-white"  // White dot on primary (dark) button
+                        : "bg-red-500"  // Red dot on light button
+                    )} />
                   )}
                 </Link>
               );

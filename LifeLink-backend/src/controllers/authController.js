@@ -9,6 +9,9 @@ import Message from '../models/Message.js'
 import jwt from 'jsonwebtoken';
 import { sendPasswordResetEmail } from '../config/email.js';
 
+// In-memory OTP storage: { phone: { code, expiry, attempts } }
+const otpStore = {};
+
 // Helper to parse MongoDB duplicate key errors into { field, value }
 const parseDuplicateKeyError = (err) => {
   try {
@@ -563,13 +566,21 @@ export const register = async (req, res) => {
 
 export const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, role } = req.body;
 
     // 1. Basic validation
     if (!email || !password) {
       return res.status(400).json({
         success: false,
         message: 'Email and password are required'
+      });
+    }
+
+    // Validate role selection
+    if (!role) {
+      return res.status(400).json({
+        success: false,
+        message: 'Role selection is required'
       });
     }
 
@@ -591,6 +602,14 @@ export const login = async (req, res) => {
       });
     }
 
+    // 4. Verify selected role matches user's database role (case-insensitive comparison)
+    if (user.role.toLowerCase() !== role.toLowerCase()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Invalid role selected for this user.'
+      });
+    }
+
     // Block login for unverified patients until hospital verification
     if (user.role === 'patient' && !user.is_verified) {
       return res.status(403).json({
@@ -601,7 +620,7 @@ export const login = async (req, res) => {
       });
     }
 
-    // 4. Generate Token and send success
+    // 5. Generate Token and send success
     const token = generateToken(user._id);
 
     res.status(200).json({
@@ -795,4 +814,116 @@ export const resetPassword = async (req, res) => {
   }
 };
 
-export default { register, login, getMe, logout, forgotPassword, resetPassword };
+export const sendOTP = async (req, res) => {
+  try {
+    const { phone } = req.body;
+
+    if (!phone || !/^[0-9]{10}$/.test(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid phone number. Must be 10 digits.'
+      });
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiryTime = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+
+    // Store OTP in memory
+    otpStore[phone] = {
+      code: otp,
+      expiry: expiryTime,
+      attempts: 0
+    };
+
+    console.log('\n✅ OTP GENERATED: ' + otp + '\n');
+
+    // SIMPLE WORKING SOLUTION:
+    // Return OTP directly to frontend - user will see it and enter it
+    return res.status(200).json({
+      success: true,
+      message: 'OTP sent successfully. Check the notification at the top.',
+      otp: otp  // Return OTP - user will see it
+    });
+  } catch (error) {
+    console.error('ERROR:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send OTP'
+    });
+  }
+};
+
+export const verifyOTP = async (req, res) => {
+  try {
+    const { phone, otp } = req.body;
+
+    if (!phone || !/^[0-9]{10}$/.test(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid phone number.'
+      });
+    }
+
+    if (!otp || !/^[0-9]{6}$/.test(otp)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid OTP format. Must be 6 digits.'
+      });
+    }
+
+    const storedOTP = otpStore[phone];
+
+    if (!storedOTP) {
+      return res.status(400).json({
+        success: false,
+        message: 'No OTP request found for this phone number.'
+      });
+    }
+
+    // Check if OTP has expired
+    if (new Date() > storedOTP.expiry) {
+      delete otpStore[phone];
+      return res.status(400).json({
+        success: false,
+        message: 'OTP has expired. Please request a new one.'
+      });
+    }
+
+    // Check if OTP matches
+    if (storedOTP.code !== otp) {
+      storedOTP.attempts = (storedOTP.attempts || 0) + 1;
+      
+      // Block after 5 failed attempts
+      if (storedOTP.attempts > 5) {
+        delete otpStore[phone];
+        return res.status(400).json({
+          success: false,
+          message: 'Too many failed attempts. Please request a new OTP.'
+        });
+      }
+
+      return res.status(400).json({
+        success: false,
+        message: `Invalid OTP. ${6 - storedOTP.attempts} attempts remaining.`
+      });
+    }
+
+    // OTP verified successfully
+    delete otpStore[phone];
+    
+    res.status(200).json({
+      success: true,
+      message: 'Phone number verified successfully.'
+    });
+  } catch (error) {
+    console.error('Verify OTP Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to verify OTP',
+      error: error.message
+    });
+  }
+};
+
+export default { register, login, getMe, logout, forgotPassword, resetPassword, sendOTP, verifyOTP };

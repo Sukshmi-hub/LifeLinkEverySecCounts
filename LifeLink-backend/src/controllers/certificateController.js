@@ -1,6 +1,5 @@
 import Certificate from '../models/Certificate.js'
 import Donor from '../models/Donor.js'
-import Notification from '../models/Notification.js'
 import mongoose from 'mongoose'
 
 // Generate next certificate number for year
@@ -50,17 +49,6 @@ export const createCertificateForDonor = async ({ donorId, donorUserId, donorNam
   // attach to donor
   try {
     await Donor.findByIdAndUpdate(donorId, { $push: { certificates: cert._id }, $set: { certificateStatus: 'Certificate Issued' } }, { new: true })
-  } catch (e) {
-    // ignore
-  }
-  // send notification
-  try {
-    const notif = new Notification({ title: 'Your donation certificate is ready', message: 'Your donation certificate is ready. Thank you for saving a life.', type: 'info', targetRole: 'donor', timestamp: new Date() })
-    await notif.save()
-    const io = global.__LIFELINK_IO
-    if (io && typeof io.emit === 'function') {
-      io.emit('new_notification', { id: notif._id, type: notif.type, title: notif.title, message: notif.message, targetRole: 'donor', timestamp: notif.timestamp })
-    }
   } catch (e) {
     // ignore
   }

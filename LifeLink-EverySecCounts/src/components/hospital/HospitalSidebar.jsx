@@ -5,32 +5,36 @@ import {
   FileText, 
   AlertTriangle, 
   MessageCircle, 
-  Bell, 
   CreditCard,
   User, 
   LogOut,
-  
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
-import { useNotifications } from '@/context/NotificationContext';
+import { useDots } from '@/context/DotsContext';
 import LifeLinkLogo from '@/components/LifeLinkLogo';
 
 const HospitalSidebar = ({ activeTab, setActiveTab, hasRedAlerts }) => {
   const { logout } = useAuth();
-  const { getUnreadCount } = useNotifications();
+  const { dots, clearDot } = useDots();
   const navigate = useNavigate();
-  const unreadCount = getUnreadCount('hospital');
 
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'payments', label: 'Payments', icon: CreditCard },
-    { id: 'requests', label: 'Manage Requests', icon: FileText },
-    { id: 'red-alerts', label: 'Red Alerts', icon: AlertTriangle, hasAlert: hasRedAlerts },
-    { id: 'messages', label: 'Messages', icon: MessageCircle },
-    { id: 'notifications', label: 'Notifications', icon: Bell, badge: unreadCount },
-    { id: 'profile', label: 'Profile', icon: User },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, dot: null },
+    { id: 'payments', label: 'Payments', icon: CreditCard, dot: 'payments' },
+    { id: 'requests', label: 'Manage Requests', icon: FileText, dot: 'requests' },
+    { id: 'red-alerts', label: 'Red Alerts', icon: AlertTriangle, dot: 'alerts' },
+    { id: 'messages', label: 'Messages', icon: MessageCircle, dot: 'messages' },
+    { id: 'profile', label: 'Profile', icon: User, dot: null },
   ];
+
+  const handleMenuClick = (item) => {
+    setActiveTab(item.id);
+    // Clear dot when user clicks the button
+    if (item.dot && dots[item.dot]) {
+      clearDot(item.dot);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -48,9 +52,9 @@ const HospitalSidebar = ({ activeTab, setActiveTab, hasRedAlerts }) => {
         {menuItems.map((item) => (
           <button
             key={item.id}
-            onClick={() => setActiveTab(item.id)}
+            onClick={() => handleMenuClick(item)}
             className={cn(
-              "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all duration-200",
+              "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all duration-200 relative",
               activeTab === item.id
                 ? "bg-primary text-primary-foreground"
                 : "hover:bg-muted text-muted-foreground hover:text-foreground"
@@ -61,15 +65,16 @@ const HospitalSidebar = ({ activeTab, setActiveTab, hasRedAlerts }) => {
                 "w-5 h-5",
                 item.id === 'red-alerts' && hasRedAlerts && "text-destructive animate-pulse"
               )} />
-              {item.hasAlert && hasRedAlerts && (
-                <span className="absolute -top-1 -right-1 w-2 h-2 bg-destructive rounded-full animate-ping" />
-              )}
             </div>
             <span className="flex-1">{item.label}</span>
-            {item.badge && item.badge > 0 && (
-              <span className="bg-destructive text-destructive-foreground text-xs px-2 py-0.5 rounded-full">
-                {item.badge}
-              </span>
+            {/* Dot indicator */}
+            {item.dot && dots[item.dot] && (
+              <span className={cn(
+                "w-2.5 h-2.5 rounded-full",
+                activeTab === item.id 
+                  ? "bg-white"  // White dot on primary (dark) button
+                  : "bg-red-500"  // Red dot on light button
+              )} />
             )}
           </button>
         ))}

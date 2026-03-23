@@ -6,9 +6,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import { ChatProvider } from "@/context/ChatContext";
-import { NotificationProvider } from "@/context/NotificationContext";
+import { DotsProvider } from "@/context/DotsContext";
 import { SharedChatProvider } from "@/context/SharedChatContext";
 import { DonorProvider } from "@/context/DonorContext";
+import { NotificationProvider } from "@/context/NotificationContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
 // Public pages
@@ -45,7 +46,8 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <NotificationProvider>
-        <DonorProvider>
+        <DotsProvider>
+          <DonorProvider>
           <SharedChatProvider>
             <ChatProvider>
               <TooltipProvider>
@@ -117,6 +119,7 @@ const App = () => (
             </ChatProvider>
           </SharedChatProvider>
         </DonorProvider>
+        </DotsProvider>
       </NotificationProvider>
     </AuthProvider>
   </QueryClientProvider>

@@ -15,16 +15,19 @@ const PaymentPage = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentSummary, setPaymentSummary] = useState(null);
-  const [paymentCompleted, setPaymentCompleted] = useState(false);
 
   const refreshPaymentStatus = async () => {
     try {
-      if (!user?.id) return;
+      if (!user?.id) {
+        console.warn('No user ID available');
+        return;
+      }
       // Add timestamp to prevent caching
       const resp = await fetch(`/api/payments/patient/${encodeURIComponent(user.id)}?t=${Date.now()}`, {
         headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
       });
       const json = await resp.json().catch(() => ({}));
+      console.log('Payment API Response:', json);
       if (resp.ok && Array.isArray(json.data)) {
         // Get the most recent payment (could be completed or pending)
         const sorted = (json.data || []).sort((a, b) => {
@@ -33,7 +36,10 @@ const PaymentPage = () => {
           return dateB - dateA;
         });
         const latest = sorted[0] || null;
-        console.log('Payment status refreshed:', latest);
+        console.log('Latest Payment Found:', latest);
+        if (latest) {
+          console.log('Payment Status:', latest.status);
+        }
         setPaymentSummary(latest);
       }
     } catch (e) {
@@ -160,11 +166,11 @@ const PaymentPage = () => {
                   </div>
 
                   <div className="flex gap-3">
-                    {paymentCompleted || (paymentSummary && (String(paymentSummary.status || '').toLowerCase() !== 'pending' || !!paymentSummary.paymentId)) ? (
-                      <div className="flex-1 h-12 flex items-center justify-center bg-success text-white rounded-md font-semibold">
+                    {paymentSummary && paymentSummary.status === 'success' ? (
+                      <Button disabled className="flex-1 h-12 text-base bg-success text-white cursor-not-allowed opacity-100">
                         <CheckCircle className="w-5 h-5 mr-2" />
                         DONE
-                      </div>
+                      </Button>
                     ) : (
                       <Button onClick={() => setShowPaymentModal(true)} className="flex-1 h-12 text-base">
                         <CreditCard className="w-5 h-5 mr-2" />
@@ -184,11 +190,14 @@ const PaymentPage = () => {
           isOpen={showPaymentModal}
           onClose={() => {
             setShowPaymentModal(false);
-            refreshPaymentStatus();
           }}
           onPaymentSuccess={() => {
-            setPaymentCompleted(true);
-            refreshPaymentStatus();
+            // Trigger refresh when payment succeeds
+            console.log('Payment success triggered, refreshing status...');
+            setTimeout(() => {
+              refreshPaymentStatus();
+              setShowPaymentModal(false);
+            }, 500);
           }}
           donorName={user?.name || matchedDonor?.name || matchedRequest?.donorName || (matchedRequest?.patientName || '').trim() || 'Anonymous Donor'}
           organType={matchedDonor?.organType || matchedRequest?.organType}

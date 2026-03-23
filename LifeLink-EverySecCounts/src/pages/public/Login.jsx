@@ -47,6 +47,7 @@ const Login = () => {
   // Form states
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [loginRole, setLoginRole] = useState('');
 
   const [commonData, setCommonData] = useState({
     name: '',
@@ -116,6 +117,13 @@ const Login = () => {
   const [hospitals, setHospitals] = useState([]);
   const { state: geoState, getLocation } = useGeolocation();
 
+  // OTP verification states
+  const [phoneVerified, setPhoneVerified] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpTimer, setOtpTimer] = useState(0);
+  const [otpLoading, setOtpLoading] = useState(false);
+
   const handleUseLocation = async () => {
     try {
       const res = await getLocation();
@@ -172,6 +180,21 @@ const Login = () => {
       toast({ title: 'Location Error', description: msg, variant: 'destructive' });
     }
   };
+
+  // OTP Timer countdown
+  useEffect(() => {
+    if (otpTimer <= 0) return;
+    const interval = setInterval(() => {
+      setOtpTimer(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [otpTimer]);
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -268,6 +291,10 @@ const Login = () => {
       toast({ title: 'Invalid Primary Phone', description: 'Phone number must be exactly 10 numeric digits.', variant: 'destructive' });
       return false;
     }
+    if (!phoneVerified) {
+      toast({ title: 'Phone Not Verified', description: 'Please verify your phone number using OTP before creating the account.', variant: 'destructive' });
+      return false;
+    }
     if (!emailRegex.test(commonData.email)) {
       toast({ 
         title: 'Invalid Email Domain', 
@@ -321,14 +348,98 @@ const Login = () => {
     return true;
   };
 
+  const handleSendOTP = async () => {
+    const phoneRegex = /^[0-9]{10}$/;
+    if (!phoneRegex.test(commonData.phone)) {
+      toast({ title: 'Invalid Phone', description: 'Please enter a valid 10-digit phone number.', variant: 'destructive' });
+      return;
+    }
+    
+    setOtpLoading(true);
+    try {
+      const response = await fetch(`${serverUrl}/api/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: commonData.phone }),
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        setOtpSent(true);
+        setOtpTimer(30);
+        setOtpCode('');
+        setPhoneVerified(false);
+        
+        // Show OTP prominently
+        if (result.otp) {
+          toast({ 
+            title: '✅ OTP is: ' + result.otp, 
+            description: 'Enter this code below. Valid for 5 minutes.',
+            className: 'bg-green-500 text-white text-lg font-bold'
+          });
+        } else {
+          toast({ title: 'OTP Sent', description: 'Check your SMS and the field below.' });
+        }
+      } else {
+        toast({ title: 'Error', description: result.message || 'Failed to send OTP', variant: 'destructive' });
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to send OTP. Check your connection.', variant: 'destructive' });
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    if (!otpCode.trim() || otpCode.length !== 6) {
+      toast({ title: 'Invalid OTP', description: 'Please enter a 6-digit OTP code.', variant: 'destructive' });
+      return;
+    }
+
+    setOtpLoading(true);
+    try {
+      const response = await fetch(`${serverUrl}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: commonData.phone, otp: otpCode }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setPhoneVerified(true);
+        setOtpSent(false);
+        setOtpCode('');
+        setOtpTimer(0);
+        toast({ title: 'Phone Verified', description: 'Your phone number has been verified successfully.' });
+      } else {
+        toast({ title: 'Invalid OTP', description: result.message || 'The OTP you entered is incorrect or expired.', variant: 'destructive' });
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to verify OTP. Check your connection.', variant: 'destructive' });
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleResendOTP = async () => {
+    await handleSendOTP();
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
+    
+    // Validate role selection
+    if (!loginRole.trim()) {
+      toast({ title: 'Role Required', description: 'Please select a role before logging in.', variant: 'destructive' });
+      return;
+    }
+
     setIsLoading(true);
     try {
       const response = await fetch(`${serverUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+        body: JSON.stringify({ email: loginEmail, password: loginPassword, role: loginRole }),
       });
       const result = await response.json();
       if (result.success) {
@@ -490,10 +601,29 @@ const Login = () => {
 
           <TabsContent value="login">
             <form onSubmit={handleLogin} className="space-y-4">
-              <Label>Email</Label>
-              <Input type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} required />
-              <Label>Password</Label>
-              <Input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required />
+              <div className="space-y-2">
+                <Label htmlFor="login-email-input">Email</Label>
+                <Input id="login-email-input" name="loginEmail" type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="login-password-input">Password</Label>
+                <Input id="login-password-input" name="loginPassword" type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="login-role-select">Login As</Label>
+                <Select value={loginRole} onValueChange={setLoginRole}>
+                  <SelectTrigger id="login-role-select">
+                    <SelectValue placeholder="Select Role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="patient">Patient</SelectItem>
+                    <SelectItem value="hospital">Hospital</SelectItem>
+                    <SelectItem value="donor">Donor</SelectItem>
+                    <SelectItem value="ngo">NGO</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="flex justify-end">
                 <button
                   type="button"
@@ -527,8 +657,10 @@ const Login = () => {
               </div>
 
               <div className="space-y-4 border-t pt-4">
-                <Label>{isOrganization ? 'Organization Name' : 'Full Name'}</Label>
+                <Label htmlFor="name-input">{isOrganization ? 'Organization Name' : 'Full Name'}</Label>
                 <Input 
+                   id="name-input"
+                   name="name"
                    placeholder={isOrganization ? 'Enter organization name' : 'Enter your full name'} 
                    value={commonData.name} 
                    onChange={(e) => setCommonData({ ...commonData, name: e.target.value })} 
@@ -536,22 +668,61 @@ const Login = () => {
                 />
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Email</Label>
-                    <Input placeholder="Email" type="email" value={commonData.email} onChange={(e) => setCommonData({ ...commonData, email: e.target.value })} required />
+                    <Label htmlFor="email-input">Email</Label>
+                    <Input id="email-input" name="email" placeholder="Email" type="email" value={commonData.email} onChange={(e) => setCommonData({ ...commonData, email: e.target.value })} required />
                   </div>
                   <div className="space-y-2">
-                    <Label>Primary Phone</Label>
-                    <Input placeholder="10-Digit Phone" value={commonData.phone} onChange={(e) => setCommonData({ ...commonData, phone: e.target.value.replace(/\D/g, '') })} required maxLength={10} />
+                    <Label htmlFor="phone-input">Primary Phone</Label>
+                    <div className="flex gap-2">
+                      <Input id="phone-input" name="phone" placeholder="10-Digit Phone" value={commonData.phone} onChange={(e) => setCommonData({ ...commonData, phone: e.target.value.replace(/\D/g, '') })} required maxLength={10} disabled={phoneVerified} />
+                      {phoneVerified ? (
+                        <Button type="button" variant="outline" disabled className="whitespace-nowrap flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-500" /> Verified
+                        </Button>
+                      ) : (
+                        <Button type="button" onClick={handleSendOTP} disabled={otpLoading || !commonData.phone || commonData.phone.length !== 10 || otpSent}>
+                          {otpLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Send OTP'}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
+
+                {otpSent && !phoneVerified && (
+                  <div className="space-y-2 bg-blue-50 p-3 rounded-lg border border-blue-200">
+                    <Label htmlFor="otp-input">Enter OTP Code</Label>
+                    <div className="flex gap-2">
+                      <Input 
+                        id="otp-input"
+                        name="otp"
+                        placeholder="6-digit OTP" 
+                        value={otpCode} 
+                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))} 
+                        maxLength={6}
+                      />
+                      <Button type="button" onClick={handleVerifyOTP} disabled={otpLoading || otpCode.length !== 6}>
+                        {otpLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Verify'}
+                      </Button>
+                    </div>
+                    <div className="flex gap-2 text-sm">
+                      {otpTimer > 0 ? (
+                        <span className="text-gray-600">Resend OTP in {otpTimer}s</span>
+                      ) : (
+                        <button type="button" onClick={handleResendOTP} className="text-blue-600 hover:underline">
+                          Resend OTP
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Password</Label>
-                    <Input placeholder="Max 10 chars" type="password" value={commonData.password} onChange={(e) => setCommonData({ ...commonData, password: e.target.value })} required />
+                    <Label htmlFor="password-input">Password</Label>
+                    <Input id="password-input" name="password" placeholder="Max 10 chars" type="password" value={commonData.password} onChange={(e) => setCommonData({ ...commonData, password: e.target.value })} required />
                   </div>
                   <div className="space-y-2">
-                    <Label>Confirm Password</Label>
-                    <Input placeholder="Confirm Password" type="password" value={commonData.confirmPassword} onChange={(e) => setCommonData({ ...commonData, confirmPassword: e.target.value })} required />
+                    <Label htmlFor="confirm-password-input">Confirm Password</Label>
+                    <Input id="confirm-password-input" name="confirmPassword" placeholder="Confirm Password" type="password" value={commonData.confirmPassword} onChange={(e) => setCommonData({ ...commonData, confirmPassword: e.target.value })} required />
                   </div>
                 </div>
               </div>
@@ -684,7 +855,7 @@ const Login = () => {
                 </div>
               )}
 
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              <Button type="submit" className="w-full" disabled={isLoading || !phoneVerified}>
                 {isLoading ? <Loader2 className="animate-spin" /> : 'Create Account'}
               </Button>
             </form>
