@@ -25,6 +25,7 @@ import certificatesRoutes from './routes/certificates.js'
 import paymentSingleRoutes from './routes/paymentSingle.js'
 import dotsRoutes from './routes/dotsRoutes.js'
 import tributesRoutes from './routes/tributes.js'
+import adminRoutes from './routes/adminRoutes.js'
 import { dbCheck } from './middleware/dbCheck.js'
 import mongoose from './config/mongodb.js'
 
@@ -117,6 +118,7 @@ app.use('/api/requests', requestRoutes)
 app.use('/api/user', userRoutes)
 app.use('/api/dots', dotsRoutes)
 app.use('/api/tributes', tributesRoutes)
+app.use('/api/admin', adminRoutes)
 app.use('/api/debug/env', debugEnvRoutes)
 
 // Debug routes (development only)

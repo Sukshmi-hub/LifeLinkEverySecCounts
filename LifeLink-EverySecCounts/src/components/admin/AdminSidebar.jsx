@@ -1,5 +1,6 @@
 import React from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 import {
   Sidebar,
   SidebarContent,
@@ -10,13 +11,13 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"; // Ensure these are all named exports in the UI file
+import { Button } from "@/components/ui/button";
 import { 
   LayoutDashboard, 
   Users, 
   FileText, 
   Bell, 
-  Award, 
-  Home 
+  LogOut 
 } from "lucide-react";
 
 const items = [
@@ -24,15 +25,21 @@ const items = [
   { title: "User Management", url: "/admin/users", icon: Users },
   { title: "Requests", url: "/admin/requests", icon: FileText },
   { title: "System Alerts", url: "/admin/alerts", icon: Bell },
-  { title: "Tributes", url: "/admin/tributes", icon: Award },
 ];
 
 const AdminSidebar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <Sidebar>
-      <SidebarContent>
+      <SidebarContent className="flex flex-col">
         <SidebarGroup>
           <SidebarGroupLabel>Admin Panel</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -51,17 +58,21 @@ const AdminSidebar = () => {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Back to Home">
-                  <Link to="/" className="flex items-center gap-3">
-                    <Home className="h-4 w-4" />
-                    <span>Back to Home</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Logout Section - Pushes to bottom */}
+        <div className="mt-auto pt-4 border-t border-border">
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+            onClick={handleLogout}
+          >
+            <LogOut className="w-5 h-5" />
+            <span className="font-medium">Logout</span>
+          </Button>
+        </div>
       </SidebarContent>
     </Sidebar>
   );

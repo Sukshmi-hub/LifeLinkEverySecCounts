@@ -44,20 +44,6 @@ const AdminDashboard = () => {
                 variant="primary"
               />
               <AdminStatCard
-                title="Active Requests"
-                subtitle="Pending and in-progress requests"
-                value="89"
-                icon={FileText}
-                variant="warning"
-              />
-              <AdminStatCard
-                title="Pending Alerts"
-                subtitle="System alerts requiring attention"
-                value="5"
-                icon={Bell}
-                variant="critical"
-              />
-              <AdminStatCard
                 title="System Health"
                 subtitle="Overall platform performance"
                 value="98%"

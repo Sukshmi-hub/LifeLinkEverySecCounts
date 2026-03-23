@@ -4,6 +4,7 @@ import Patient from '../models/Patient.js'
 import Donor from '../models/Donor.js'
 import Hospital from '../models/Hospital.js'
 import NGO from '../models/NGO.js'
+import Admin from '../models/Admin.js'
 
 export const getProfile = async (req, res) => {
   try {
@@ -58,6 +59,34 @@ export const getProfile = async (req, res) => {
         const ngo = await NGO.findOne({ userId })
         if (!ngo) return res.status(404).json({ success: false, message: 'NGO profile not found' })
         profileData = ngo
+        break
+      }
+      case 'admin': {
+        const admin = await Admin.findOne({ userId })
+        if (!admin) {
+          // If no Admin document exists, return basic user profile
+          profileData = {
+            id: user._id,
+            fullName: user.name || '',
+            email: user.email || '',
+            phone: user.phone || '',
+            role: user.role,
+            verified: user.is_verified ? 'Yes' : 'No'
+          }
+        } else {
+          profileData = {
+            id: user._id,
+            fullName: user.name || '',
+            email: user.email || '',
+            phone: user.phone || '',
+            role: user.role,
+            verified: user.is_verified ? 'Yes' : 'No',
+            admin_level: admin.admin_level || '',
+            department: admin.department || '',
+            permissions: admin.permissions || [],
+            is_active: admin.is_active || true
+          }
+        }
         break
       }
       default:
@@ -152,6 +181,11 @@ export const updateProfile = async (req, res) => {
           if (location[key] !== undefined) update[`location.${key}`] = location[key]
         }
         await NGO.findOneAndUpdate({ userId }, update)
+        break
+      }
+      case 'admin': {
+        // Admin profile updates (if needed in future)
+        // For now, only allow basic user updates (name, phone) via User.findByIdAndUpdate above
         break
       }
       default:

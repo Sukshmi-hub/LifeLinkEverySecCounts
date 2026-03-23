@@ -9,6 +9,16 @@ const adminSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+    },
+    password: {
+      type: String,
+      required: true,
+    },
     admin_level: {
       type: String,
       enum: ['super_admin', 'regional_admin', 'hospital_admin'],
@@ -33,10 +43,6 @@ const adminSchema = new mongoose.Schema(
       default: [],
     },
     // Store plain password for admin as requested (note: insecure)
-    password: {
-      type: String,
-      required: true,
-    },
     activity_logs: {
       type: [
         {
