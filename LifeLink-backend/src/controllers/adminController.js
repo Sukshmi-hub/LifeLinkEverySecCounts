@@ -140,3 +140,59 @@ export const getAdminDashboardData = async (req, res) => {
     })
   }
 }
+
+/**
+ * Get all users from the database with their details
+ */
+export const getAllUsers = async (req, res) => {
+  try {
+    const { role, search, status } = req.query
+
+    // Build filter object
+    const filter = {}
+    
+    if (role && role !== 'all') {
+      filter.role = role
+    }
+
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ]
+    }
+
+    if (status) {
+      filter.is_active = status === 'active'
+    }
+
+    // Fetch users
+    const users = await User.find(filter)
+      .select('name email role createdAt is_active')
+      .sort({ createdAt: -1 })
+      .lean()
+
+    // Format response
+    const formattedUsers = users.map(user => ({
+      id: user._id.toString(),
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      status: user.is_active ? 'active' : 'inactive',
+      createdAt: user.createdAt.toISOString().split('T')[0]
+    }))
+
+    res.status(200).json({
+      success: true,
+      data: formattedUsers,
+      count: formattedUsers.length
+    })
+  } catch (error) {
+    console.error('Error fetching users:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch users',
+      error: error.message
+    })
+  }
+}

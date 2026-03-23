@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import Header from '@/components/Header';
 import AdminSidebar from '@/components/admin/AdminSidebar';
@@ -8,11 +8,79 @@ import AdminRequestsView from '@/components/admin/AdminRequestsView';
 import AdminAlerts from '@/components/admin/AdminAlerts';
 import AdminTributes from '@/components/admin/AdminTributes';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
-import { Users, FileText, Bell, Activity } from 'lucide-react';
+import { Users, Activity, Loader2 } from 'lucide-react';
+import { serverUrl } from '@/lib/serverConfig';
 
 const AdminDashboard = () => {
   const location = useLocation();
   const currentPath = location.pathname;
+  const [dashboardData, setDashboardData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch dashboard data on component mount
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${serverUrl}/api/admin/dashboard`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch dashboard data');
+        }
+
+        const result = await response.json();
+        if (result.success) {
+          setDashboardData(result.data);
+          setError(null);
+        } else {
+          setError(result.message || 'Failed to fetch data');
+        }
+      } catch (err) {
+        console.error('Error fetching dashboard data:', err);
+        setError(err.message || 'Failed to load dashboard data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  // Format time ago from timestamp
+  const formatTimeAgo = (timestamp) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const seconds = Math.floor((now - date) / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (seconds < 60) return 'just now';
+    if (minutes < 60) return `${minutes} ${minutes === 1 ? 'min' : 'mins'} ago`;
+    if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+    if (days < 7) return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+    return date.toLocaleDateString();
+  };
+
+  // Get color for activity type
+  const getActivityColor = (type) => {
+    const colorMap = {
+      'success': 'bg-green-500',
+      'error': 'bg-red-500',
+      'warning': 'bg-amber-500',
+      'info': 'bg-blue-500',
+      'default': 'bg-purple-500'
+    };
+    return colorMap[type] || colorMap['default'];
+  };
 
   const renderContent = () => {
     switch (currentPath) {
@@ -24,8 +92,26 @@ const AdminDashboard = () => {
         return <AdminAlerts />;
       case '/admin/tributes':
         return <AdminTributes />;
-      /* Admin settings removed from dashboard navigation */
       default:
+        if (loading) {
+          return (
+            <div className="flex items-center justify-center h-96">
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-muted-foreground">Loading dashboard data...</p>
+              </div>
+            </div>
+          );
+        }
+
+        if (error) {
+          return (
+            <div className="bg-destructive/10 border border-destructive rounded-lg p-4">
+              <p className="text-destructive">Error: {error}</p>
+            </div>
+          );
+        }
+
         return (
           <div className="space-y-6">
             {/* Welcome Section */}
@@ -39,14 +125,14 @@ const AdminDashboard = () => {
               <AdminStatCard
                 title="Total Users"
                 subtitle="All registered users in system"
-                value="1,234"
+                value={dashboardData?.totalUsers?.toString() || '0'}
                 icon={Users}
                 variant="primary"
               />
               <AdminStatCard
                 title="System Health"
                 subtitle="Overall platform performance"
-                value="98%"
+                value={`${dashboardData?.systemHealth || 100}%`}
                 icon={Activity}
                 variant="success"
               />
@@ -62,36 +148,48 @@ const AdminDashboard = () => {
                     <span className="text-sm text-muted-foreground">Patients</span>
                     <div className="flex items-center gap-2">
                       <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-blue-500" style={{ width: '45%' }} />
+                        <div
+                          className="h-full bg-blue-500 transition-all duration-300"
+                          style={{ width: `${dashboardData?.userPercentages?.patients || 0}%` }}
+                        />
                       </div>
-                      <span className="text-sm font-medium">45%</span>
+                      <span className="text-sm font-medium">{dashboardData?.userPercentages?.patients || 0}%</span>
                     </div>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Donors</span>
                     <div className="flex items-center gap-2">
                       <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-purple-500" style={{ width: '30%' }} />
+                        <div
+                          className="h-full bg-purple-500 transition-all duration-300"
+                          style={{ width: `${dashboardData?.userPercentages?.donors || 0}%` }}
+                        />
                       </div>
-                      <span className="text-sm font-medium">30%</span>
+                      <span className="text-sm font-medium">{dashboardData?.userPercentages?.donors || 0}%</span>
                     </div>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Hospitals</span>
                     <div className="flex items-center gap-2">
                       <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-teal-500" style={{ width: '15%' }} />
+                        <div
+                          className="h-full bg-teal-500 transition-all duration-300"
+                          style={{ width: `${dashboardData?.userPercentages?.hospitals || 0}%` }}
+                        />
                       </div>
-                      <span className="text-sm font-medium">15%</span>
+                      <span className="text-sm font-medium">{dashboardData?.userPercentages?.hospitals || 0}%</span>
                     </div>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">NGOs</span>
                     <div className="flex items-center gap-2">
                       <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-orange-500" style={{ width: '10%' }} />
+                        <div
+                          className="h-full bg-orange-500 transition-all duration-300"
+                          style={{ width: `${dashboardData?.userPercentages?.ngos || 0}%` }}
+                        />
                       </div>
-                      <span className="text-sm font-medium">10%</span>
+                      <span className="text-sm font-medium">{dashboardData?.userPercentages?.ngos || 0}%</span>
                     </div>
                   </div>
                 </div>
@@ -101,34 +199,19 @@ const AdminDashboard = () => {
               <div className="rounded-xl border bg-card p-6">
                 <h3 className="text-lg font-semibold mb-4">Recent Activity</h3>
                 <div className="space-y-3">
-                  <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50">
-                    <div className="h-2 w-2 rounded-full bg-green-500 mt-2" />
-                    <div>
-                      <p className="text-sm">New hospital registered: Metro Life Hospital</p>
-                      <p className="text-xs text-muted-foreground">5 mins ago</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50">
-                    <div className="h-2 w-2 rounded-full bg-blue-500 mt-2" />
-                    <div>
-                      <p className="text-sm">User verification completed: Sunita Singh (Donor)</p>
-                      <p className="text-xs text-muted-foreground">15 mins ago</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50">
-                    <div className="h-2 w-2 rounded-full bg-amber-500 mt-2" />
-                    <div>
-                      <p className="text-sm">Alert resolved: Database backup complete</p>
-                      <p className="text-xs text-muted-foreground">1 hour ago</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50">
-                    <div className="h-2 w-2 rounded-full bg-purple-500 mt-2" />
-                    <div>
-                      <p className="text-sm">Tribute approved: Ramesh Kumar memorial</p>
-                      <p className="text-xs text-muted-foreground">2 hours ago</p>
-                    </div>
-                  </div>
+                  {dashboardData?.recentActivities && dashboardData.recentActivities.length > 0 ? (
+                    dashboardData.recentActivities.map((activity, index) => (
+                      <div key={activity.id || index} className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50">
+                        <div className={`h-2 w-2 rounded-full ${getActivityColor(activity.type)} mt-2`} />
+                        <div>
+                          <p className="text-sm">{activity.message}</p>
+                          <p className="text-xs text-muted-foreground">{formatTimeAgo(activity.timestamp)}</p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">No recent activities</p>
+                  )}
                 </div>
               </div>
             </div>

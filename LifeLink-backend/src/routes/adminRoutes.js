@@ -1,6 +1,6 @@
 import express from 'express'
 import { authenticate } from '../middleware/auth.js'
-import { getAdminDashboardData } from '../controllers/adminController.js'
+import { getAdminDashboardData, getAllUsers } from '../controllers/adminController.js'
 
 const router = express.Router()
 
@@ -10,5 +10,12 @@ const router = express.Router()
  * @access  Private (admin only)
  */
 router.get('/dashboard', authenticate, getAdminDashboardData)
+
+/**
+ * @route   GET /api/admin/users
+ * @desc    Get all users with optional filtering by role or search
+ * @access  Private (admin only)
+ */
+router.get('/users', authenticate, getAllUsers)
 
 export default router
