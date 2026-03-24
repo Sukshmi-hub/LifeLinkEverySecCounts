@@ -75,7 +75,10 @@ export const createSummary = async (req, res) => {
                 const already = donorDoc.certificateStatus === 'Certificate Issued' || (donorDoc.certificates && donorDoc.certificates.length > 0)
                 if (!already) {
                   const donorName = donorDoc.name || donorDoc.fullName || ''
-                  const organOrBlood = reqDoc.matchedDonor && (reqDoc.matchedDonor.bloodType || reqDoc.matchedDonor.organOffered) || reqDoc.bloodType || ''
+                    // Prefer the organ donated (organOffered/organType/organ) over blood type when available
+                    const organOrBlood = reqDoc.matchedDonor && (
+                      reqDoc.matchedDonor.organOffered || reqDoc.matchedDonor.organType || reqDoc.matchedDonor.organ || reqDoc.matchedDonor.bloodType
+                    ) || reqDoc.organType || reqDoc.bloodType || ''
                   const hospitalName = reqDoc.receivingHospitalName || reqDoc.patientHospitalName || ''
                   const cert = await createCertificateForDonor({ donorId: donorDoc._id, donorUserId: donorDoc.userId || null, donorName, organOrBlood, dateOfDonation: new Date(), hospitalName })
                   if (cert) {
