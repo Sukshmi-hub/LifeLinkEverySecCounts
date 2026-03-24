@@ -204,40 +204,7 @@ const AdminDashboard = () => {
               </div>
             </div>
 
-            {/* System Status */}
-            <div className="rounded-xl border bg-card p-6">
-              <h3 className="text-lg font-semibold mb-4">System Status</h3>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="p-4 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-sm font-medium text-green-700 dark:text-green-400">Database</span>
-                  </div>
-                  <p className="text-xs text-green-600 dark:text-green-500">Operational</p>
-                </div>
-                <div className="p-4 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-sm font-medium text-green-700 dark:text-green-400">Authentication</span>
-                  </div>
-                  <p className="text-xs text-green-600 dark:text-green-500">Operational</p>
-                </div>
-                <div className="p-4 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-sm font-medium text-green-700 dark:text-green-400">Notifications</span>
-                  </div>
-                  <p className="text-xs text-green-600 dark:text-green-500">Operational</p>
-                </div>
-                <div className="p-4 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-sm font-medium text-green-700 dark:text-green-400">File Storage</span>
-                  </div>
-                  <p className="text-xs text-green-600 dark:text-green-500">Operational</p>
-                </div>
-              </div>
-            </div>
+            {/* System Status removed per admin UI preference */}
           </div>
         );
     }

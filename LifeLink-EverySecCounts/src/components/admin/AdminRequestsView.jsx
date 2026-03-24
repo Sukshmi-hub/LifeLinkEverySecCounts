@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -19,67 +19,92 @@ import {
 } from '@/components/ui/table';
 import { Search, FileText, Eye } from 'lucide-react';
 
-/* ---------------- MOCK DATA (INDIAN CONTEXT) ---------------- */
+import { serverUrl } from '@/lib/serverConfig';
 
-const mockRequests = [
-  {
-    id: 'REQ001',
-    type: 'organ',
-    patientName: 'Amit Sharma',
-    description: 'Kidney Transplant',
-    status: 'pending',
-    createdAt: '2024-03-15',
-    hospitalName: 'City Care Hospital',
-  },
-  {
-    id: 'REQ002',
-    type: 'fund',
-    patientName: 'Neha Gupta',
-    description: 'Surgery Funding ₹80,000',
-    status: 'approved',
-    createdAt: '2024-03-14',
-    hospitalName: 'Metro Life Hospital',
-  },
-  {
-    id: 'REQ003',
-    type: 'organ',
-    patientName: 'Rohit Verma',
-    description: 'Liver Transplant',
-    status: 'completed',
-    createdAt: '2024-03-12',
-    hospitalName: 'Apollo Care Centre',
-  },
-  {
-    id: 'REQ004',
-    type: 'fund',
-    patientName: 'Sunita Singh',
-    description: 'Treatment Funding ₹50,000',
-    status: 'pending',
-    createdAt: '2024-03-11',
-    hospitalName: 'City Care Hospital',
-  },
-  {
-    id: 'REQ005',
-    type: 'organ',
-    patientName: 'Ankit Mishra',
-    description: 'Heart Valve Surgery',
-    status: 'rejected',
-    createdAt: '2024-03-10',
-    hospitalName: 'Metro Life Hospital',
-  },
-];
+// Requests will be loaded from the backend admin endpoint
 
 const AdminRequestsView = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
 
-  const filteredRequests = mockRequests.filter(req => {
+  useEffect(() => {
+    const loadRequests = async () => {
+      try {
+        setLoading(true);
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${serverUrl}/api/admin/requests`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : ''
+          }
+        });
+        if (!res.ok) {
+          const txt = await res.text();
+          const message = `Request failed: ${res.status} ${res.statusText} - ${txt}`;
+          console.error('Admin requests fetch error:', message);
+          setFetchError(message);
+          setRequests([]);
+          setLoading(false);
+          return;
+        }
+        const body = await res.json();
+        setRequests(body.data || []);
+        setFetchError(null);
+      } catch (err) {
+        console.error('Failed to load admin requests', err);
+        setFetchError(err.message || 'Failed to load requests');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadRequests();
+  }, []);
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>System Requests</CardTitle>
+          <CardDescription>Loading requests...</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">Please wait — fetching requests.</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (fetchError) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>System Requests</CardTitle>
+          <CardDescription>Error loading requests</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="bg-destructive/10 border border-destructive rounded-lg p-3">
+            <p className="text-destructive">{fetchError}</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const filteredRequests = requests.filter(req => {
+    const patientName = (req.patientName || req.patient?.name || '')
+    const id = req.id || req._id || '';
     const matchesSearch =
-      req.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      req.id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || req.status === statusFilter;
-    const matchesType = typeFilter === 'all' || req.type === typeFilter;
+      patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      id.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || String(req.status).toLowerCase() === statusFilter;
+    const reqType = req.type || req.requestType || (req.requestType === 'fund_request' ? 'fund' : req.requestType === 'organ_request' ? 'organ' : '');
+    const matchesType = typeFilter === 'all' || reqType === typeFilter;
     return matchesSearch && matchesStatus && matchesType;
   });
 
@@ -175,14 +200,14 @@ const AdminRequestsView = () => {
             </TableHeader>
             <TableBody>
               {filteredRequests.map((req) => (
-                <TableRow key={req.id}>
-                  <TableCell className="font-mono text-sm">{req.id}</TableCell>
-                  <TableCell>{getTypeBadge(req.type)}</TableCell>
-                  <TableCell className="font-medium">{req.patientName}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{req.description}</TableCell>
-                  <TableCell className="text-sm">{req.hospitalName}</TableCell>
+                <TableRow key={req.id || req._id}>
+                  <TableCell className="font-mono text-sm">{req.id || req._id}</TableCell>
+                  <TableCell>{getTypeBadge(req.type || (req.requestType === 'fund_request' ? 'fund' : 'organ'))}</TableCell>
+                  <TableCell className="font-medium">{req.patientName || (req.patient && req.patient.name)}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{req.description || req.message || ''}</TableCell>
+                  <TableCell className="text-sm">{req.hospitalName || (req.hospital && req.hospital.name) || req.patientHospitalName || ''}</TableCell>
                   <TableCell>{getStatusBadge(req.status)}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{req.createdAt}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{(req.createdAt && new Date(req.createdAt).toISOString().split('T')[0]) || ''}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -190,7 +215,7 @@ const AdminRequestsView = () => {
         </div>
 
         <p className="text-sm text-muted-foreground text-center">
-          Showing {filteredRequests.length} of {mockRequests.length} requests
+          Showing {filteredRequests.length} of {requests.length} requests
         </p>
       </CardContent>
     </Card>

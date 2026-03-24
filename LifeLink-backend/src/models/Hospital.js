@@ -64,6 +64,10 @@ const hospitalSchema = new mongoose.Schema(
       }],
       default: []
     },
+    // Moderation fields
+    status: { type: String, enum: ['active','suspended','blocked'], default: 'active' },
+    suspendedUntil: { type: Date, default: null },
+    reportCount: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

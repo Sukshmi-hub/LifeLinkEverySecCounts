@@ -29,6 +29,7 @@ const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const isAdminRoute = location.pathname.startsWith('/admin');
 
   const handleLogout = () => {
     logout();
@@ -51,10 +52,12 @@ const Header = () => {
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between">
         
-        {/* Logo */}
-        <Link to="/" className="transition-opacity hover:opacity-80">
-          <LifeLinkLogo size="sm" showSubtext={true} />
-        </Link>
+        {/* Logo (hide on admin pages) */}
+        {!isAdminRoute && (
+          <Link to="/" className="transition-opacity hover:opacity-80">
+            <LifeLinkLogo size="sm" showSubtext={true} />
+          </Link>
+        )}
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-1">

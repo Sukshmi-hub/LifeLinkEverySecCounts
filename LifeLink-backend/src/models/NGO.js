@@ -41,6 +41,10 @@ const ngoSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Moderation fields
+    status: { type: String, enum: ['active','suspended','blocked'], default: 'active' },
+    suspendedUntil: { type: Date, default: null },
+    reportCount: { type: Number, default: 0 },
     location: {
       city: { type: String, default: '' },
       state: { type: String, default: '' },

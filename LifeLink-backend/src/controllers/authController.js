@@ -155,6 +155,26 @@ export const register = async (req, res) => {
       existingUser = await User.findOne({ email });
     }
 
+    // Prevent registration if an account with this email/aadhaar is permanently blocked
+    if (existingUser && existingUser.status === 'blocked') {
+      return res.status(403).json({
+        success: false,
+        message: 'This account has been permanently blocked and cannot register again.'
+      });
+    }
+    // Also check phone-based block
+    if (phone) {
+      try {
+        const blockedByPhone = await User.findOne({ phone: phone });
+        if (blockedByPhone && blockedByPhone.status === 'blocked') {
+          return res.status(403).json({
+            success: false,
+            message: 'This account has been permanently blocked and cannot register again.'
+          });
+        }
+      } catch (e) {}
+    }
+
     let userToUse = null;
     if (existingUser) {
       if (existingUser.role === role) {
@@ -601,6 +621,28 @@ export const login = async (req, res) => {
         success: false,
         message: 'Invalid email or password'
       });
+    }
+
+    // Enforce blocked/suspended login rules
+    if (user.status === 'blocked') {
+      return res.status(403).json({
+        success: false,
+        message: 'Your account has been permanently blocked. Please contact support.'
+      });
+    }
+    if (user.status === 'suspended') {
+      if (user.suspendedUntil && user.suspendedUntil > Date.now()) {
+        const hoursLeft = Math.ceil((user.suspendedUntil - Date.now()) / (1000 * 60 * 60));
+        return res.status(403).json({
+          success: false,
+          message: `Your account is suspended for ${hoursLeft} more hours.`
+        });
+      } else {
+        // Auto lift suspension if time passed
+        user.status = 'active';
+        user.suspendedUntil = null;
+        await user.save();
+      }
     }
 
     // 4. Verify selected role matches user's database role (case-insensitive comparison)

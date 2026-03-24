@@ -196,3 +196,34 @@ export const getAllUsers = async (req, res) => {
     })
   }
 }
+
+/**
+ * Get recent requests for admin view
+ */
+export const getAdminRequests = async (req, res) => {
+  try {
+    // Return recent requests across the system (limit to 100)
+    const list = await Request.find({})
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .populate('patientId', 'name')
+      .populate('hospitalId', 'name')
+      .lean();
+
+    const formatted = list.map(r => ({
+      id: String(r._id),
+      patientName: r.patientName || (r.patientId && r.patientId.name) || '',
+      requestType: r.requestType || '',
+      type: r.requestType === 'fund_request' ? 'fund' : r.requestType === 'organ_request' ? 'organ' : (r.type || ''),
+      description: r.message || r.description || '',
+      status: r.status || '',
+      createdAt: r.createdAt,
+      hospitalName: r.hospitalId && r.hospitalId.name ? r.hospitalId.name : (r.patientHospitalName || '')
+    }));
+
+    return res.status(200).json({ success: true, data: formatted });
+  } catch (err) {
+    console.error('Error fetching admin requests:', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch requests' });
+  }
+}

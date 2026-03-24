@@ -37,8 +37,16 @@ const userSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['Active', 'Suspended', 'Blocked'],
-      default: 'Active',
+      enum: ['active', 'suspended', 'blocked'],
+      default: 'active',
+    },
+    suspendedUntil: {
+      type: Date,
+      default: null,
+    },
+    reportCount: {
+      type: Number,
+      default: 0,
     },
     is_verified: {
       type: Boolean,
