@@ -12,8 +12,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Mail } from 'lucide-react';
 import { serverUrl } from '@/lib/serverConfig';
-import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth'
-import { auth } from '@/firebase'
+// Using server-side OTP endpoints instead of Firebase
 
 const ForgotPasswordModal = ({ open, onOpenChange }) => {
   const [stage, setStage] = useState(1); // 1: phone, 2: otp, 3: reset
@@ -40,21 +39,24 @@ const ForgotPasswordModal = ({ open, onOpenChange }) => {
 
     setLoading(true);
     try {
-      window.recaptchaVerifier = new RecaptchaVerifier(
-        auth,
-        'recaptcha-container',
-        { size: 'invisible' }
-      );
-      const phoneWithCode = '+91' + phone;
-      const confirmation = await signInWithPhoneNumber(auth, phoneWithCode, window.recaptchaVerifier);
-      window.confirmationResult = confirmation;
-      setStage(2);
-      setOtp('');
-      setOtpTimer(30);
-      toast({ title: 'OTP Sent', description: 'Enter the 6-digit code received via SMS.' });
+      const res = await fetch(`${serverUrl}/api/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStage(2);
+        setOtp('');
+        setOtpTimer(30);
+        if (data.otp) toast({ title: 'OTP (dev)', description: `OTP: ${data.otp}` });
+        toast({ title: 'OTP Sent', description: 'Enter the 6-digit code received via SMS.' });
+      } else {
+        throw new Error(data.message || 'Failed to send OTP');
+      }
     } catch (err) {
       console.error('sendOTP error', err);
-      toast({ title: 'Error', description: 'Failed to send OTP. Check Firebase config and console.', variant: 'destructive' });
+      toast({ title: 'Error', description: err.message || 'Failed to send OTP.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -67,10 +69,17 @@ const ForgotPasswordModal = ({ open, onOpenChange }) => {
     }
     setLoading(true);
     try {
-      const result = await window.confirmationResult.confirm(otp);
-      if (result.user) {
+      const res = await fetch(`${serverUrl}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, otp })
+      });
+      const data = await res.json();
+      if (data.success) {
         setStage(3);
         toast({ title: 'OTP Verified', description: 'You may set a new password now.' });
+      } else {
+        throw new Error(data.message || 'OTP verification failed');
       }
     } catch (err) {
       console.error('verifyOTP error', err);
@@ -81,12 +90,6 @@ const ForgotPasswordModal = ({ open, onOpenChange }) => {
   };
 
   const resendOTP = async () => {
-    // Reset invisible reCAPTCHA and resend
-    try {
-      if (window.recaptchaVerifier) {
-        try { window.recaptchaVerifier.clear(); } catch (e) {}
-      }
-    } catch (e) {}
     await sendOTP();
   };
 

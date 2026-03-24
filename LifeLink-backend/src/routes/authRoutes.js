@@ -63,7 +63,7 @@ router.post('/verify-otp', verifyOTP)
 
 /**
  * @route   POST /api/auth/reset-password-phone
- * @desc    Reset password using phone (after client verifies OTP via Firebase)
+ * @desc    Reset password using phone (after client verifies OTP)
  * @access  Public
  */
 router.post('/reset-password-phone', resetPasswordPhone)
