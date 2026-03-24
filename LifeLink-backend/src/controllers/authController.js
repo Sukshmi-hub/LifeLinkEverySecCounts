@@ -8,6 +8,7 @@ import Admin from '../models/Admin.js';
 import Message from '../models/Message.js'
 import jwt from 'jsonwebtoken';
 import { sendPasswordResetEmail } from '../config/email.js';
+import bcrypt from 'bcryptjs'
 
 // In-memory OTP storage: { phone: { code, expiry, attempts } }
 const otpStore = {};
@@ -926,4 +927,29 @@ export const verifyOTP = async (req, res) => {
   }
 };
 
-export default { register, login, getMe, logout, forgotPassword, resetPassword, sendOTP, verifyOTP };
+export const resetPasswordPhone = async (req, res) => {
+  try {
+    const { phone, newPassword } = req.body;
+
+    if (!phone || !/^[0-9]{10}$/.test(phone)) {
+      return res.status(400).json({ success: false, message: 'Invalid phone number' });
+    }
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    }
+
+    const user = await User.findOne({ phone });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    user.password = hashed;
+    await user.save();
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('resetPasswordPhone error', error);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+}
+
+export default { register, login, getMe, logout, forgotPassword, resetPassword, sendOTP, verifyOTP, resetPasswordPhone };

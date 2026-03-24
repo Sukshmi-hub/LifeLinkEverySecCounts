@@ -1,6 +1,6 @@
 // src/routes/authRoutes.js - Authentication Routes
 import express from 'express'
-import { register, login, getMe, logout, forgotPassword, resetPassword, sendOTP, verifyOTP } from '../controllers/authController.js'
+import { register, login, getMe, logout, forgotPassword, resetPassword, sendOTP, verifyOTP, resetPasswordPhone } from '../controllers/authController.js'
 import { authenticate } from '../middleware/auth.js'
 
 const router = express.Router()
@@ -60,5 +60,12 @@ router.post('/send-otp', sendOTP)
  * @access  Public
  */
 router.post('/verify-otp', verifyOTP)
+
+/**
+ * @route   POST /api/auth/reset-password-phone
+ * @desc    Reset password using phone (after client verifies OTP via Firebase)
+ * @access  Public
+ */
+router.post('/reset-password-phone', resetPasswordPhone)
 
 export default router
