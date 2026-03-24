@@ -404,16 +404,33 @@ const ManageRequests = () => {
       };
 
       if (reportingUser.type === 'patient') {
-        // Get patient ID from request
-        payload.patient_id = raw.patientId?._id || raw.patientId?.id || raw.patientId;
-        console.log('Reporting patient with ID:', payload.patient_id);
+        // Get patient ID from request - handle both populated objects and IDs
+        const patientId = raw.patientId;
+        if (typeof patientId === 'object' && patientId) {
+          // If patientId is a populated object, send the entire object
+          // Backend will extract userId from it
+          payload.patient_id = patientId;
+        } else if (patientId) {
+          // If it's already an ID string/ObjectId, send it
+          payload.patient_id = patientId;
+        }
+        console.log('Reporting patient:', payload.patient_id);
       } else if (reportingUser.type === 'donor') {
-        // Get donor ID from request
-        payload.donor_id = raw.donorId?._id || raw.donorId?.id || raw.donorId;
-        console.log('Reporting donor with ID:', payload.donor_id);
+        // Get donor ID from request - handle both populated objects and IDs
+        const donorId = raw.donorId;
+        if (typeof donorId === 'object' && donorId) {
+          // If donorId is a populated object, send the entire object
+          // Backend will extract userId from it
+          payload.donor_id = donorId;
+        } else if (donorId) {
+          // If it's already an ID string/ObjectId, send it
+          payload.donor_id = donorId;
+        }
+        console.log('Reporting donor:', payload.donor_id);
       }
 
       if (!payload.patient_id && !payload.donor_id) {
+        console.log('Raw data:', raw);
         throw new Error('Could not identify patient/donor to report. Please refresh and try again.');
       }
 
@@ -600,7 +617,7 @@ const ManageRequests = () => {
                           variant="outline" 
                           className="text-warning hover:bg-warning/10"
                           title="Report this patient to admin"
-                          onClick={() => openReportModal(req.patientName, 'patient', req)}
+                          onClick={() => openReportModal(req.patientName, 'patient', req.raw)}
                         >
                           <AlertOctagon className="w-4 h-4" />
                         </Button>

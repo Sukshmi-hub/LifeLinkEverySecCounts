@@ -147,7 +147,7 @@ const AdminDashboard = () => {
             </div>
 
             {/* Quick Stats Grid */}
-            <div className="grid gap-6 lg:grid-cols-2">
+            <div className="grid gap-6 lg:grid-cols-1">
               {/* User Distribution */}
               <div className="rounded-xl border bg-card p-6">
                 <h3 className="text-lg font-semibold mb-4">User Distribution</h3>
@@ -200,26 +200,6 @@ const AdminDashboard = () => {
                       <span className="text-sm font-medium">{dashboardData?.userPercentages?.ngos || 0}%</span>
                     </div>
                   </div>
-                </div>
-              </div>
-
-              {/* Recent Activity */}
-              <div className="rounded-xl border bg-card p-6">
-                <h3 className="text-lg font-semibold mb-4">Recent Activity</h3>
-                <div className="space-y-3">
-                  {dashboardData?.recentActivities && dashboardData.recentActivities.length > 0 ? (
-                    dashboardData.recentActivities.map((activity, index) => (
-                      <div key={activity.id || index} className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50">
-                        <div className={`h-2 w-2 rounded-full ${getActivityColor(activity.type)} mt-2`} />
-                        <div>
-                          <p className="text-sm">{activity.message}</p>
-                          <p className="text-xs text-muted-foreground">{formatTimeAgo(activity.timestamp)}</p>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground text-center py-4">No recent activities</p>
-                  )}
                 </div>
               </div>
             </div>
