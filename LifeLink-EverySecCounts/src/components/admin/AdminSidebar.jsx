@@ -1,6 +1,7 @@
 import React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import LifeLinkLogo from "@/components/LifeLinkLogo";
 import {
   Sidebar,
   SidebarContent,
@@ -16,7 +17,6 @@ import {
   LayoutDashboard, 
   Users, 
   FileText, 
-  Bell, 
   LogOut 
 } from "lucide-react";
 
@@ -24,7 +24,6 @@ const items = [
   { title: "Overview", url: "/admin/dashboard", icon: LayoutDashboard },
   { title: "User Management", url: "/admin/users", icon: Users },
   { title: "Requests", url: "/admin/requests", icon: FileText },
-  { title: "System Alerts", url: "/admin/alerts", icon: Bell },
 ];
 
 const AdminSidebar = () => {
@@ -40,6 +39,11 @@ const AdminSidebar = () => {
   return (
     <Sidebar>
       <SidebarContent className="flex flex-col">
+        <SidebarGroup>
+          <div className="px-2 py-4">
+            <LifeLinkLogo size="md" showSubtext={true} />
+          </div>
+        </SidebarGroup>
         <SidebarGroup>
           <SidebarGroupLabel>Admin Panel</SidebarGroupLabel>
           <SidebarGroupContent>

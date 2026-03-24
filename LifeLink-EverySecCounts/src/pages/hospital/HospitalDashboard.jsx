@@ -6,6 +6,7 @@ import HospitalPayments from '@/components/hospital/HospitalPayments';
 import ManageRequests from '@/components/hospital/ManageRequests';
 import RedAlerts from '@/components/hospital/RedAlerts';
 import HospitalMessages from '@/components/hospital/HospitalMessages';
+import HospitalNotifications from '@/components/hospital/HospitalNotifications';
 import HospitalProfile from '@/components/hospital/HospitalProfile';
 
 const HospitalDashboard = () => {
@@ -77,6 +78,8 @@ const HospitalDashboard = () => {
         return <RedAlerts alerts={redAlerts} onResolve={handleResolveAlert} />;
       case 'messages':
         return <HospitalMessages />;
+      case 'notifications':
+        return <HospitalNotifications />;
       case 'profile':
         return <HospitalProfile />;
       default:

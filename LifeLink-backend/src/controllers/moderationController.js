@@ -26,18 +26,28 @@ export const reportUser = async (req, res) => {
     if (!finalUserId) {
       if (patient_id && user_type === 'patient') {
         try {
-          const patient = await Patient.findById(patient_id);
+          // Handle case where patient_id might be an object (with _id or userId)
+          const patientIdToUse = typeof patient_id === 'object' && patient_id._id ? patient_id._id : patient_id;
+          const patient = await Patient.findById(patientIdToUse);
           if (patient && patient.userId) {
             finalUserId = patient.userId;
+          } else if (typeof patient_id === 'object' && patient_id.userId) {
+            // If patient_id is already a populated object with userId, use it directly
+            finalUserId = patient_id.userId;
           }
         } catch (err) {
           console.error('Error looking up patient:', err);
         }
       } else if (donor_id && user_type === 'donor') {
         try {
-          const donor = await Donor.findById(donor_id);
+          // Handle case where donor_id might be an object (with _id or userId)
+          const donorIdToUse = typeof donor_id === 'object' && donor_id._id ? donor_id._id : donor_id;
+          const donor = await Donor.findById(donorIdToUse);
           if (donor && donor.userId) {
             finalUserId = donor.userId;
+          } else if (typeof donor_id === 'object' && donor_id.userId) {
+            // If donor_id is already a populated object with userId, use it directly
+            finalUserId = donor_id.userId;
           }
         } catch (err) {
           console.error('Error looking up donor:', err);
