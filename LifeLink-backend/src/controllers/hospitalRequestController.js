@@ -49,7 +49,7 @@ export const getPatientOrganRequests = async (req, res) => {
     if (!hospital) return res.status(404).json({ success: false, message: 'Hospital not found for user' });
 
     let requests = await Request.find({ requestType: 'organ_request', hospitalId: hospital._id })
-      .populate('patientId', 'name email age blood_type aadhaar_no location')
+      .populate('patientId', 'name email age blood_type aadhaar_no location userId')
       .sort({ createdAt: -1 });
 
     // Sort by urgency: critical, high, medium, low
@@ -79,7 +79,8 @@ export const getDonorRegistrationRequests = async (req, res) => {
     // Exclude donor registration requests that have already been matched so hospitals only see available donors
     const requests = await Request.find({ requestType: 'donor_registration', hospitalId: hospital._id, status: { $ne: 'Donor Matched' } })
       // include phone and aadhaar_no so frontend can display them in details
-      .populate('donorId', 'name email age blood_type donation_type address aadhaar_no phone location emergency_contact')
+      // ALSO include userId so frontend can report the donor to moderation system
+      .populate('donorId', 'name email age blood_type donation_type address aadhaar_no phone location emergency_contact userId')
       .sort({ createdAt: -1 });
 
     return res.status(200).json({ success: true, count: requests.length, data: requests });

@@ -7,6 +7,7 @@ import AdminUserManagement from '@/components/admin/AdminUserManagement';
 import AdminRequestsView from '@/components/admin/AdminRequestsView';
 import AdminAlerts from '@/components/admin/AdminAlerts';
 import AdminTributes from '@/components/admin/AdminTributes';
+import FlaggedUsers from '@/components/admin/FlaggedUsers';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { Users, Activity, Loader2 } from 'lucide-react';
 import { serverUrl } from '@/lib/serverConfig';
@@ -92,6 +93,8 @@ const AdminDashboard = () => {
         return <AdminAlerts />;
       case '/admin/tributes':
         return <AdminTributes />;
+      case '/admin/moderation':
+        return <FlaggedUsers />;
       default:
         if (loading) {
           return (
@@ -136,6 +139,11 @@ const AdminDashboard = () => {
                 icon={Activity}
                 variant="success"
               />
+            </div>
+
+            {/* Flagged Users Section */}
+            <div>
+              <FlaggedUsers />
             </div>
 
             {/* Quick Stats Grid */}
