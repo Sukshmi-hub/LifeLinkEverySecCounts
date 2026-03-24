@@ -35,6 +35,11 @@ const userSchema = new mongoose.Schema(
       enum: ['patient', 'donor', 'hospital', 'ngo', 'admin'],
       required: [true, 'Please specify a role'],
     },
+    status: {
+      type: String,
+      enum: ['Active', 'Suspended', 'Blocked'],
+      default: 'Active',
+    },
     is_verified: {
       type: Boolean,
       default: false,

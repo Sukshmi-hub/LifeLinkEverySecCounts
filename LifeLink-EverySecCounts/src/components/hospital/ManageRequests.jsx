@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Check, X, Play, User, Heart, Clock, Eye } from 'lucide-react';
+import { Check, X, Play, User, Heart, Clock, Eye, AlertOctagon } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import FundRequestDetails from '@/components/ngo/FundRequestDetails';
+import HospitalReportModal from '@/components/hospital/HospitalReportModal';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -32,6 +33,10 @@ const ManageRequests = () => {
   const [selectedDonorForMatch, setSelectedDonorForMatch] = useState(null);
   const [showNgoDetails, setShowNgoDetails] = useState(false);
   const [selectedNgoRequest, setSelectedNgoRequest] = useState(null);
+  
+  // Report modal state
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportingUser, setReportingUser] = useState(null); // { name, type, userId, raw }
 
   // Helper to robustly extract a person's name from possible backend shapes
   const getNameFromObject = (obj) => {
@@ -380,6 +385,87 @@ const ManageRequests = () => {
     }
   };
 
+  // Handle report submission for patient or donor
+  const handleSubmitReport = async (reportData) => {
+    if (!reportingUser) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) throw new Error('Not authenticated');
+
+      const raw = reportingUser.raw || {};
+      
+      // Simple approach: Send patient_id/donor_id + type to backend
+      // Backend will resolve the user ID from the Patient/Donor collection
+      const payload = {
+        reason: reportData.reason,
+        description: reportData.description || '',
+        user_type: reportingUser.type,
+      };
+
+      if (reportingUser.type === 'patient') {
+        // Get patient ID from request
+        payload.patient_id = raw.patientId?._id || raw.patientId?.id || raw.patientId;
+        console.log('Reporting patient with ID:', payload.patient_id);
+      } else if (reportingUser.type === 'donor') {
+        // Get donor ID from request
+        payload.donor_id = raw.donorId?._id || raw.donorId?.id || raw.donorId;
+        console.log('Reporting donor with ID:', payload.donor_id);
+      }
+
+      if (!payload.patient_id && !payload.donor_id) {
+        throw new Error('Could not identify patient/donor to report. Please refresh and try again.');
+      }
+
+      console.log('Submitting report with payload:', payload);
+
+      // Submit report to moderation API
+      const resp = await fetch('http://localhost:5000/api/moderation/report-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await resp.json();
+      console.log('Report response status:', resp.status, 'Message:', json.message);
+
+      if (!resp.ok) {
+        throw new Error(json.message || `Server error: ${json.error || 'Failed to submit report'}`);
+      }
+
+      // Show success toast
+      toast.success(
+        `${reportingUser.type === 'donor' ? 'Donor' : 'Patient'} reported successfully`,
+        {
+          description: 'Admins will review this report and take appropriate action.',
+        }
+      );
+
+      // Reset report state
+      setReportingUser(null);
+      setShowReportModal(false);
+    } catch (err) {
+      console.error('Report submission failed:', err);
+      toast.error('Failed to submit report', {
+        description: err.message || 'Please try again later.',
+      });
+      throw err;
+    }
+  };
+
+  // Helper to open report modal for a patient or donor
+  const openReportModal = (name, type, raw) => {
+    setReportingUser({
+      name,
+      type, // 'patient' or 'donor'
+      raw,
+    });
+    setShowReportModal(true);
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'Accepted': case 'Donor Matched': case 'approved': return 'bg-success/20 text-success';
@@ -508,6 +594,15 @@ const ManageRequests = () => {
                         </span>
                         <Button size="sm" variant="outline" onClick={() => { setOrganDetails(req); setShowOrganDetails(true); }}>
                           <Eye className="w-4 h-4 mr-1" /> Details
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="text-warning hover:bg-warning/10"
+                          title="Report this patient to admin"
+                          onClick={() => openReportModal(req.patientName, 'patient', req)}
+                        >
+                          <AlertOctagon className="w-4 h-4" />
                         </Button>
                         {req.status === 'pending' && (
                           <>
@@ -656,6 +751,15 @@ const ManageRequests = () => {
                               onClick={() => { setDetailsUser({ name: donor.name, details: donor.details, raw: donor.raw }); setShowDetailsOpen(true); }}
                             >
                               <Eye className="w-4 h-4" />
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="text-warning hover:bg-warning/10"
+                              title="Report this donor to admin"
+                              onClick={() => openReportModal(donor.name, 'donor', donor.raw)}
+                            >
+                              <AlertOctagon className="w-4 h-4" />
                             </Button>
                             <Button 
                               size="sm" 
@@ -981,6 +1085,15 @@ const ManageRequests = () => {
           setHospitalNgoFundRequests(prev => prev.map(r => (String(r.id) === String(id) ? { ...r, status: 'Rejected' } : r)));
           setShowNgoDetails(false);
         }}
+      />
+      
+      {/* Hospital Report Modal */}
+      <HospitalReportModal
+        open={showReportModal}
+        onOpenChange={setShowReportModal}
+        userName={reportingUser?.name || 'User'}
+        userType={reportingUser?.type || 'patient'}
+        onReport={handleSubmitReport}
       />
     </div>
   );
