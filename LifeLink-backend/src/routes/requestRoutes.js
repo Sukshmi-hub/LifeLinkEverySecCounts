@@ -238,6 +238,29 @@ router.put('/:id/send-matched-details', authenticate, async (req, res) => {
       console.error('Failed to resolve target hospital for matched details', e)
     }
 
+    // Attempt to mark any donor registration requests that relate to this donor as matched
+    try {
+      const donorReqId = donorDetails && (donorDetails._id || donorDetails.id || donorDetails.requestId || donorDetails.request_id)
+      const donorIdCandidate2 = donorDetails && (donorDetails.donorId || donorDetails.donor_id || donorDetails.userId || (donorDetails.user && donorDetails.user._id) || null)
+      const now = new Date()
+      if (donorReqId && typeof donorReqId === 'string' && mongoose.Types.ObjectId.isValid(donorReqId)) {
+        try {
+          await Request.findOneAndUpdate({ _id: donorReqId, requestType: 'donor_registration' }, { $set: { status: 'Donor Matched', matchedAt: now } })
+        } catch (e) {
+          // ignore individual failures
+        }
+      }
+      if (donorIdCandidate2 && typeof donorIdCandidate2 === 'string' && mongoose.Types.ObjectId.isValid(donorIdCandidate2)) {
+        try {
+          await Request.updateMany({ donorId: donorIdCandidate2, requestType: 'donor_registration', hospitalId: hospital._id }, { $set: { status: 'Donor Matched', matchedAt: now } })
+        } catch (e) {
+          // ignore
+        }
+      }
+    } catch (e) {
+      console.error('Failed to mark donor registration requests as matched', e)
+    }
+
     // Persist a compact snapshot of the matched donor to Patient and the target Hospital records
     try {
       const snapshot = { requestId: reqDoc._id, donor: sanitizedDonor, matchedAt: reqDoc.matchedAt }
@@ -281,27 +304,10 @@ router.put('/:id/send-matched-details', authenticate, async (req, res) => {
       console.error('Failed to create notification message for matched details', e)
     }
 
-    // Create canonical chat message entries for donor<->hospital and donor<->patient rooms so chat lists surface correctly
-    try {
-      const donorIdCandidate = donorDetails && (donorDetails._id || donorDetails.donorId || donorDetails.userId || donorDetails.id || (donorDetails.user && donorDetails.user._id))
-      const donorId = donorIdCandidate ? String(donorIdCandidate) : null
-      const patientIdForRoom = reqDoc.patientId || null
-      const MessageMod = (await import('../models/Message.js')).default
-
-      if (donorId && targetHospitalId) {
-        const roomHospitalDonor = `room_hospital_${targetHospitalId}_donor_${donorId}`
-        const m1 = new MessageMod({ senderId: req.user._id, senderRole: 'hospital', roomId: roomHospitalDonor, content: `Donor matched for request ${requestId}`, timestamp: new Date() })
-        await m1.save()
-
-        if (patientIdForRoom) {
-          const roomDonorPatient = `room_donor_${donorId}_patient_${patientIdForRoom}_hospital_${targetHospitalId}`
-          const m2 = new MessageMod({ senderId: req.user._id, senderRole: 'hospital', roomId: roomDonorPatient, content: `Donor matched for patient ${patientIdForRoom}`, timestamp: new Date() })
-          await m2.save()
-        }
-      }
-    } catch (e) {
-      console.error('Failed to create chat messages for donor/hospital rooms', e)
-    }
+    // Note: we intentionally avoid creating extra donor<->hospital or donor<->patient
+    // chat messages here to prevent duplicate/automated notifications appearing in
+    // donor chat threads when a match is sent by a hospital. A single notification
+    // message for the patient/hospital room is sufficient and already created above.
 
     // Log what we received and what we're saving so we can debug missing donor fields
     try {

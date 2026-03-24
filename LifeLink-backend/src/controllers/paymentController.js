@@ -129,7 +129,20 @@ export const getPaymentsForPatient = async (req, res) => {
 // Create a Razorpay order on the backend. This ensures secrets stay server-side.
 export const createRazorpayOrder = async (req, res) => {
   try {
-    const { amount /* in rupees */, hospitalId, patientId, patientName = '', requestId = null } = req.body
+    const { amount /* in rupees */, hospitalId, patientId: rawPatientId, patientName = '', requestId = null } = req.body
+    let patientId = rawPatientId
+    // Accept either a Patient._id or a User._id (patient.userId). Normalize to Patient._id so Payment.patientId matches queries.
+    try {
+      const PatientModel = (await import('../models/Patient.js')).default
+      if (patientId) {
+        // If patientId refers to a User._id, find corresponding Patient doc
+        const byUser = await PatientModel.findOne({ userId: patientId }).select('_id').lean()
+        if (byUser && byUser._id) patientId = String(byUser._id)
+      }
+    } catch (e) {
+      // ignore resolution errors; continue with provided id
+      console.warn('Could not normalize patientId for payment creation', e && e.message)
+    }
     if (!amount || Number(amount) <= 0) return res.status(400).json({ success: false, message: 'amount is required and must be > 0' })
     if (!hospitalId) return res.status(400).json({ success: false, message: 'hospitalId is required' })
 
