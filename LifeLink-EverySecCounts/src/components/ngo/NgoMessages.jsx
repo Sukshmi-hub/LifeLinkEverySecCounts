@@ -7,6 +7,7 @@ export default function NgoMessages() {
   const serverUrl = 'http://localhost:5000'
   const { socket, isConnected, connectionError, state, joinRoom, loadHistory, sendMessage } = useChat(serverUrl)
   const [rooms, setRooms] = useState([])
+  const [selectedRoomObj, setSelectedRoomObj] = useState(null)
 
   useEffect(() => {
     (async () => {
@@ -22,15 +23,31 @@ export default function NgoMessages() {
     })()
   }, [])
 
+  // If activeRoomId is already present (e.g., restored from socket or previous session),
+  // set the selectedRoomObj so the header shows the correct name on load.
+  useEffect(() => {
+    if (!state?.activeRoomId || !rooms || rooms.length === 0) return
+    const room = rooms.find(r => String(r.roomId) === String(state.activeRoomId)) || null
+    if (room) setSelectedRoomObj(room)
+  }, [state?.activeRoomId, rooms])
+
   const handleSelect = async (roomId) => {
     const res = await joinRoom(roomId)
-    if (res && res.success) await loadHistory(roomId)
+    if (res && res.success) {
+      // set selected room metadata so ChatWindow can display title/subtitle
+      const room = rooms.find(r => String(r.roomId) === String(roomId)) || null
+      setSelectedRoomObj(room)
+      await loadHistory(roomId)
+    }
   }
+
+  // Compose chat object with selected room metadata so header shows contact name
+  const chatWithMeta = { ...state, title: selectedRoomObj?.title, subtitle: selectedRoomObj?.subtitle }
 
   return (
     <div className="flex h-full">
       <ChatList rooms={rooms} activeRoomId={state.activeRoomId} onSelect={handleSelect} messages={state.messages} />
-      <ChatWindow roomId={state.activeRoomId} chat={state} onSend={sendMessage} />
+      <ChatWindow roomId={state.activeRoomId} chat={chatWithMeta} onSend={sendMessage} />
     </div>
   )
   }

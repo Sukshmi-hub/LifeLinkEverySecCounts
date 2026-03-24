@@ -63,8 +63,18 @@ export default function ChatWindow({ roomId, chat = { messages: [] }, onSend }) 
             )}
           </div>
           <div>
-            <div className="font-semibold">{user?.role === 'hospital' ? (chat?.title || chat?.subtitle || 'Conversation') : (chat?.title || 'Conversation')}</div>
-            <div className="text-xs text-muted-foreground">{user?.role === 'hospital' ? (chat?.subtitle || 'Patient') : 'Hospital / NGO'}</div>
+            <div className="font-semibold">
+              {user?.role === 'hospital'
+                ? (chat?.title || chat?.subtitle || 'Conversation')
+                : (user?.role === 'ngo'
+                  ? (chat?.subtitle || chat?.title || 'Conversation')
+                  : (chat?.title || 'Conversation'))}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {user?.role === 'hospital'
+                ? (chat?.subtitle || 'Patient')
+                : (user?.role === 'ngo' ? (chat?.title || 'Hospital / NGO') : 'Hospital / NGO')}
+            </div>
           </div>
         </div>
       </div>
