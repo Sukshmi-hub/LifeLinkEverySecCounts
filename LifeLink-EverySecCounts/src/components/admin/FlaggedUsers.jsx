@@ -128,12 +128,13 @@ const FlaggedUsers = () => {
   };
 
   const getStatusBadge = (status) => {
-    switch (status) {
-      case 'Active':
+    const s = String(status || '').toLowerCase();
+    switch (s) {
+      case 'active':
         return <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Active</Badge>;
-      case 'Suspended':
+      case 'suspended':
         return <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Suspended</Badge>;
-      case 'Blocked':
+      case 'blocked':
         return <Badge className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">Blocked</Badge>;
       default:
         return <Badge variant="secondary">{status}</Badge>;
@@ -228,21 +229,21 @@ const FlaggedUsers = () => {
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem 
                               onClick={() => handleStatusChange(user._id, 'Active')}
-                              disabled={user.status === 'Active' || actionLoading === user._id}
+                              disabled={String(user.status || '').toLowerCase() === 'active' || actionLoading === user._id}
                             >
                               <CheckCircle className="mr-2 h-4 w-4 text-green-600" />
                               Activate
                             </DropdownMenuItem>
                             <DropdownMenuItem 
                               onClick={() => handleStatusChange(user._id, 'Suspended')}
-                              disabled={user.status === 'Suspended' || actionLoading === user._id}
+                              disabled={String(user.status || '').toLowerCase() === 'suspended' || actionLoading === user._id}
                             >
                               <AlertTriangle className="mr-2 h-4 w-4 text-amber-600" />
                               Suspend
                             </DropdownMenuItem>
                             <DropdownMenuItem 
                               onClick={() => handleStatusChange(user._id, 'Blocked')}
-                              disabled={user.status === 'Blocked' || actionLoading === user._id}
+                              disabled={String(user.status || '').toLowerCase() === 'blocked' || actionLoading === user._id}
                             >
                               <Ban className="mr-2 h-4 w-4 text-red-600" />
                               Block

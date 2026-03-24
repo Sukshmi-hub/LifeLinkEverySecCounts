@@ -92,6 +92,10 @@ const donorSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Moderation fields
+    status: { type: String, enum: ['active','suspended','blocked'], default: 'active' },
+    suspendedUntil: { type: Date, default: null },
+    reportCount: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

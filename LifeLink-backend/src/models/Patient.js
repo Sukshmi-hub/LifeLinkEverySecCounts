@@ -77,9 +77,11 @@ const patientSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['active', 'inactive', 'deceased'],
+      enum: ['active', 'suspended', 'blocked', 'inactive', 'deceased'],
       default: 'active',
     },
+    suspendedUntil: { type: Date, default: null },
+    reportCount: { type: Number, default: 0 },
     // Keep a small history of matched donors for quick lookup in patient UI
     matchedDonors: {
       type: [{

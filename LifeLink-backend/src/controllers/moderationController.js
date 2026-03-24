@@ -112,6 +112,72 @@ export const reportUser = async (req, res) => {
       `Reported user ${reportedUser.name}`
     );
 
+    // Update reported user's reportCount and apply auto-suspend/block rules
+    try {
+      // Recalculate count to be canonical
+      const ReportModel = Report;
+      const cnt = await ReportModel.countDocuments({ reported_user_id: finalUserId });
+      reportedUser.reportCount = cnt;
+
+      // Auto-block if 3 or more reports
+      if (reportedUser.reportCount >= 3) {
+        reportedUser.status = 'blocked';
+        reportedUser.suspendedUntil = null;
+      } else if (reportedUser.reportCount === 2) {
+        // Auto-suspend for 48 hours
+        reportedUser.status = 'suspended';
+        reportedUser.suspendedUntil = new Date(Date.now() + 48 * 60 * 60 * 1000);
+      }
+
+      await reportedUser.save();
+
+      // Mirror moderation fields to role-specific document if present
+      try {
+        if (reportedUser.role === 'patient') {
+          const p = await Patient.findOne({ userId: reportedUser._id });
+          if (p) {
+            p.reportCount = reportedUser.reportCount || 0;
+            p.status = reportedUser.status || p.status;
+            p.suspendedUntil = reportedUser.suspendedUntil || p.suspendedUntil;
+            await p.save();
+          }
+        } else if (reportedUser.role === 'donor') {
+          const d = await Donor.findOne({ userId: reportedUser._id });
+          if (d) {
+            d.reportCount = reportedUser.reportCount || 0;
+            d.status = reportedUser.status || d.status;
+            d.suspendedUntil = reportedUser.suspendedUntil || d.suspendedUntil;
+            await d.save();
+          }
+        }
+        // Hospitals and NGOs may be handled elsewhere; attempt best-effort updates
+        const HospitalModel = (await import('../models/Hospital.js')).default;
+        const NGOModel = (await import('../models/NGO.js')).default;
+        try {
+          const h = await HospitalModel.findOne({ userId: reportedUser._id });
+          if (h) {
+            h.reportCount = reportedUser.reportCount || 0;
+            h.status = reportedUser.status || h.status;
+            h.suspendedUntil = reportedUser.suspendedUntil || h.suspendedUntil;
+            await h.save();
+          }
+        } catch (e) {}
+        try {
+          const n = await NGOModel.findOne({ userId: reportedUser._id });
+          if (n) {
+            n.reportCount = reportedUser.reportCount || 0;
+            n.status = reportedUser.status || n.status;
+            n.suspendedUntil = reportedUser.suspendedUntil || n.suspendedUntil;
+            await n.save();
+          }
+        } catch (e) {}
+      } catch (e) {
+        // non-critical
+      }
+    } catch (e) {
+      console.error('Failed to update reported user moderation fields:', e);
+    }
+
     res.status(201).json({
       success: true,
       message: 'Report submitted successfully',
@@ -299,11 +365,12 @@ export const changeUserStatus = async (req, res) => {
     const { userId } = req.params;
     const { status, reason } = req.body;
 
-    // Validation
-    if (!status || !['Active', 'Suspended', 'Blocked'].includes(status)) {
+    // Normalize status to lowercase for validation (accept case-insensitive input)
+    const normalizedStatus = String(status || '').toLowerCase();
+    if (!normalizedStatus || !['active', 'suspended', 'blocked'].includes(normalizedStatus)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid status. Must be Active, Suspended, or Blocked',
+        message: 'Invalid status. Must be active, suspended, or blocked',
       });
     }
 
@@ -325,13 +392,58 @@ export const changeUserStatus = async (req, res) => {
     }
 
     const oldStatus = user.status;
-    user.status = status;
+    user.status = normalizedStatus;
+    // If suspending, set suspendedUntil for 48 hours
+    if (normalizedStatus === 'suspended') {
+      user.suspendedUntil = new Date(Date.now() + 48 * 60 * 60 * 1000);
+    } else {
+      user.suspendedUntil = null;
+    }
     await user.save();
+
+    // Mirror to role-specific doc (best-effort)
+    try {
+      if (user.role === 'patient') {
+        const p = await Patient.findOne({ userId: user._id });
+        if (p) {
+          p.status = user.status || p.status;
+          p.suspendedUntil = user.suspendedUntil || p.suspendedUntil;
+          await p.save();
+        }
+      } else if (user.role === 'donor') {
+        const d = await Donor.findOne({ userId: user._id });
+        if (d) {
+          d.status = user.status || d.status;
+          d.suspendedUntil = user.suspendedUntil || d.suspendedUntil;
+          await d.save();
+        }
+      }
+      const HospitalModel = (await import('../models/Hospital.js')).default;
+      const NGOModel = (await import('../models/NGO.js')).default;
+      try {
+        const h = await HospitalModel.findOne({ userId: user._id });
+        if (h) {
+          h.status = user.status || h.status;
+          h.suspendedUntil = user.suspendedUntil || h.suspendedUntil;
+          await h.save();
+        }
+      } catch (e) {}
+      try {
+        const n = await NGOModel.findOne({ userId: user._id });
+        if (n) {
+          n.status = user.status || n.status;
+          n.suspendedUntil = user.suspendedUntil || n.suspendedUntil;
+          await n.save();
+        }
+      } catch (e) {}
+    } catch (e) {
+      // ignore
+    }
 
     // Log activity for both admin and user
     await logActivity(
       req.user._id,
-      'status_' + status.toLowerCase(),
+      'status_' + status,
       `Admin changed ${user.name}'s status from ${oldStatus} to ${status}. Reason: ${reason || 'No reason provided'}`
     );
 

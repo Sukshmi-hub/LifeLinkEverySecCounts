@@ -64,7 +64,7 @@ const AdminUserManagement = () => {
       const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             user.email.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesRole = roleFilter === 'all' || user.role === roleFilter;
-      const matchesStatus = statusFilter === 'all' || user.status === statusFilter;
+      const matchesStatus = statusFilter === 'all' || String(user.status || '').toLowerCase() === String(statusFilter || '').toLowerCase();
       return matchesSearch && matchesRole && matchesStatus;
     });
     setFilteredUsers(filtered);
@@ -145,12 +145,13 @@ const AdminUserManagement = () => {
   };
 
   const getStatusBadge = (status) => {
-    switch (status) {
-      case 'Active':
+    const s = String(status || '').toLowerCase();
+    switch (s) {
+      case 'active':
         return <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Active</Badge>;
-      case 'Suspended':
+      case 'suspended':
         return <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Suspended</Badge>;
-      case 'Blocked':
+      case 'blocked':
         return <Badge className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">Blocked</Badge>;
       default:
         return <Badge variant="secondary">{status}</Badge>;
