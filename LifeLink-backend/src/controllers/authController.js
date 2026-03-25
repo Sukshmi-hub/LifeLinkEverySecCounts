@@ -742,118 +742,80 @@ export const logout = async (req, res) => {
 export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
-    
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide an email address'
-      });
-    }
+    if (!email) return res.status(400).json({ success: false, message: 'Please provide an email address' });
 
     const user = await User.findOne({ email: email.toLowerCase() });
-    
+
+    // Always respond success to avoid user enumeration
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found with this email'
-      });
+      return res.status(200).json({ success: true, message: 'If that email exists, a reset link was sent' });
     }
 
-    // Generate reset token
-    const crypto = await import('crypto');
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour from now
+    // generate secure token and its SHA-256 hash for DB
+    const { randomBytes, createHash } = await import('node:crypto');
+    const resetToken = randomBytes(32).toString('hex');
+    const hashedToken = createHash('sha256').update(resetToken).digest('hex');
 
-    // Save reset token and expiry to user
-    user.resetToken = resetToken;
-    user.resetTokenExpiry = resetTokenExpiry;
+    // save hashed token + 15 minute expiry
+    user.resetToken = hashedToken;
+    user.resetTokenExpiry = Date.now() + 15 * 60 * 1000; // 15 minutes
     await user.save();
 
-    // Create reset link
-    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`;
-    
+    const resetLink = `${(process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '')}/reset-password?token=${resetToken}`;
+
     try {
-      // Send password reset email
-      await sendPasswordResetEmail(email, resetLink);
-      
-      res.status(200).json({
-        success: true,
-        message: 'Password reset link has been sent to your email. Please check your inbox.'
-      });
+      await sendPasswordResetEmail(user.email, resetLink);
+      return res.status(200).json({ success: true, message: 'If that email exists, a reset link was sent' });
     } catch (emailError) {
       console.error('Email sending failed:', emailError);
-      // Even if email fails, token is saved, so inform user to check console
-      res.status(200).json({
+      // Dev fallback: return resetLink so you can test
+      return res.status(200).json({
         success: true,
-        message: 'Password reset link generated. Email service unavailable. Reset link: ' + resetLink,
-        resetLink // Development fallback
+        message: 'Password reset link generated (email failed). Use resetLink from response.',
+        resetLink
       });
     }
   } catch (error) {
     console.error('Forgot Password Error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error processing forgot password request',
-      error: error.message
-    });
+    return res.status(500).json({ success: false, message: 'Error processing forgot password request' });
   }
 };
 
 export const resetPassword = async (req, res) => {
   try {
     const { token, password, confirmPassword } = req.body;
-
     if (!token || !password || !confirmPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'Token and password fields are required'
-      });
+      return res.status(400).json({ success: false, message: 'Token and password fields are required' });
     }
-
     if (password !== confirmPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'Passwords do not match'
-      });
+      return res.status(400).json({ success: false, message: 'Passwords do not match' });
     }
-
     if (password.length < 6) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must be at least 6 characters long'
-      });
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long' });
     }
 
-    // Find user with valid reset token
+    const { createHash } = await import('node:crypto');
+    const hashedToken = createHash('sha256').update(token).digest('hex');
+
     const user = await User.findOne({
-      resetToken: token,
-      resetTokenExpiry: { $gt: new Date() } // Token must not be expired
+      resetToken: hashedToken,
+      resetTokenExpiry: { $gt: Date.now() }
     });
 
     if (!user) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid or expired reset token'
-      });
+      return res.status(400).json({ success: false, message: 'Invalid or expired reset token' });
     }
 
-    // Update password and clear reset token
+    // Set new password (will be hashed by User model pre-save hook)
     user.password = password;
     user.resetToken = undefined;
     user.resetTokenExpiry = undefined;
     await user.save();
 
-    res.status(200).json({
-      success: true,
-      message: 'Password reset successful. You can now login with your new password.'
-    });
+    return res.status(200).json({ success: true, message: 'Password reset successful. You can now login.' });
   } catch (error) {
     console.error('Reset Password Error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error resetting password',
-      error: error.message
-    });
+    return res.status(500).json({ success: false, message: 'Error resetting password' });
   }
 };
 

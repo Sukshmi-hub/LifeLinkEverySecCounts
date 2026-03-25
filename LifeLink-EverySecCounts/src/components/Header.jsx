@@ -15,7 +15,6 @@ import {
   X,
   User,
   LogOut,
-  Settings,
   Home,
   Info,
   Award,
@@ -79,31 +78,7 @@ const Header = () => {
         <div className="flex items-center gap-2">
           {isAuthenticated && user ? (
             <>
-              {/* Settings Dropdown */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                    <Settings className="h-5 w-5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56 bg-background border border-border shadow-lg">
-                  <DropdownMenuLabel>Settings</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => navigate(getRoleBasedRedirect(user.role))}>
-                    <User className="mr-2 h-4 w-4" />
-                    Profile
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => {}}>
-                    <Lock className="mr-2 h-4 w-4" />
-                    Change Password
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout} className="text-destructive">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Logout
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {/* Settings removed to simplify dashboards */}
 
               {/* User Menu */}
               <DropdownMenu>
