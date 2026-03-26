@@ -20,7 +20,7 @@ const menuItems = [
   { icon: FileText, label: 'Request', path: '/patient/request', dotName: 'requests' },
   { icon: MessageCircle, label: 'Messages', path: '/patient/messages', dotName: 'messages' },
   { icon: CreditCard, label: 'Payments', path: '/patient/payment', dotName: 'payments' },
-  { icon: HandHeart, label: 'Request Funds', path: '/patient/request-funds', dotName: null },
+  { icon: HandHeart, label: 'Request Funds', path: '/patient/request-funds', dotName: 'alerts' },
   { icon: User, label: 'Profile', path: '/patient/profile', dotName: null },
 ];
 
@@ -96,9 +96,9 @@ const PatientSidebar = ({ isOpen, onToggle }) => {
                 {item.dotName && dots[item.dotName] && (
                   <span className={cn(
                     "w-2.5 h-2.5 rounded-full absolute right-3",
-                    isActive 
-                      ? "bg-white"  // White dot on primary (dark) button
-                      : "bg-red-500"  // Red dot on light button
+                    // Always show red dot for notifications; add a subtle ring when active
+                    "bg-red-500",
+                    isActive ? 'ring-2 ring-white' : ''
                   )} />
                 )}
               </Link>

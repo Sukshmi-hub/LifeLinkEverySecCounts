@@ -1,10 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import useSocket from '@/hooks/useSocket'
 
 const DotsContext = createContext(undefined);
 
 export const DotsProvider = ({ children }) => {
   const { user } = useAuth();
+  const userId = user?._id || user?.id || null
+  const { socket } = useSocket()
   const [dots, setDots] = useState({
     messages: false,
     requests: false,
@@ -17,12 +20,12 @@ export const DotsProvider = ({ children }) => {
 
   // Fetch dots from API
   const fetchDots = async () => {
-    if (!user?._id) return;
+    if (!userId) return;
 
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE}/api/dots/${user._id}`, {
+      const response = await fetch(`${API_BASE}/api/dots/${userId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
 
@@ -41,11 +44,11 @@ export const DotsProvider = ({ children }) => {
 
   // Clear a specific dot
   const clearDot = async (section) => {
-    if (!user?._id) return;
+    if (!userId) return;
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE}/api/dots/clear/${user._id}/${section}`, {
+      const response = await fetch(`${API_BASE}/api/dots/clear/${userId}/${section}`, {
         method: 'PUT',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -63,7 +66,7 @@ export const DotsProvider = ({ children }) => {
 
   // Poll dots every 15 seconds
   useEffect(() => {
-    if (!user?._id) return;
+    if (!userId) return;
 
     // Fetch immediately on mount
     fetchDots();
@@ -72,7 +75,17 @@ export const DotsProvider = ({ children }) => {
     const interval = setInterval(fetchDots, 15000); // 15 seconds
 
     return () => clearInterval(interval);
-  }, [user?._id]);
+  }, [userId]);
+
+  // Listen for realtime dot updates via socket and refetch
+  useEffect(() => {
+    if (!socket) return
+    const onDots = (payload) => {
+      fetchDots()
+    }
+    socket.on('dots_updated', onDots)
+    return () => socket.off('dots_updated', onDots)
+  }, [socket])
 
   return (
     <DotsContext.Provider value={{ dots, loading, clearDot, fetchDots }}>

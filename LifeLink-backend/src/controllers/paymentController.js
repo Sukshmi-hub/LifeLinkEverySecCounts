@@ -1,6 +1,7 @@
 import Payment from '../models/Payment.js'
 import Request from '../models/Request.js'
 import Donor from '../models/Donor.js'
+import Dots from '../models/Dots.js'
 import { createCertificateForDonor } from './certificateController.js'
 import crypto from 'crypto'
 import axios from 'axios'
@@ -31,6 +32,34 @@ export const createSummary = async (req, res) => {
       } catch (updateErr) {
         console.error('Failed to update request with payment info', updateErr)
         // continue - payment was created, but request update failed
+      }
+      // Set payments dot for the patient so sidebar shows updates
+      try {
+        let targetUserId = null
+        try {
+          const Patient = (await import('../models/Patient.js')).default
+          const p = await Patient.findById(patientId).lean()
+          if (p && p.userId) targetUserId = String(p.userId)
+        } catch (e) {
+          // fallback: patientId might already be a user id
+          targetUserId = String(patientId)
+        }
+        if (targetUserId) {
+          await Dots.findOneAndUpdate(
+            { userId: targetUserId },
+            { $set: { 'dots.payments': true }, $setOnInsert: { userType: 'patient' } },
+            { upsert: true }
+          )
+        try {
+          const map = global.__LIFELINK_USER_SOCKET_MAP
+          const ioRef = global.__LIFELINK_IO
+          if (map && ioRef && map.has(String(targetUserId))) {
+            ioRef.to(map.get(String(targetUserId))).emit('dots_updated', { section: 'payments' })
+          }
+        } catch (e) {}
+        }
+      } catch (e) {
+        console.warn('Failed to set payments dot after creating payment summary', e && e.message)
       }
       // Attempt to generate donation certificate for matched donor (only once)
       try {

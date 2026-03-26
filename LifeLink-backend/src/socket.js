@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken'
 import User from './models/User.js'
 import Message from './models/Message.js'
 import Patient from './models/Patient.js'
+import Dots from './models/Dots.js'
 import Donor from './models/Donor.js'
 import Hospital from './models/Hospital.js'
 import NGO from './models/NGO.js'
@@ -30,6 +31,10 @@ export function initSocket(server) {
     // only allow on https/localhost in production checks are enforced externally
   })
 
+  // Map of userId -> socketId for quick user-directed emits
+  const userSocketMap = new Map()
+  try { global.__LIFELINK_USER_SOCKET_MAP = userSocketMap } catch (e) {}
+
   io.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split(' ')[1]
@@ -47,6 +52,9 @@ export function initSocket(server) {
   io.on('connection', (socket) => {
     const { id: userId, role } = socket.user || {}
     console.log('socket connected', userId, role)
+    try {
+      if (userId) userSocketMap.set(String(userId), socket.id)
+    } catch (e) {}
 
     socket.on('join_room', async ({ roomId }, cb) => {
       try {
@@ -90,6 +98,32 @@ export function initSocket(server) {
         const msg = new Message({ senderId: userId, senderRole: role, roomId, content, timestamp: new Date() })
         await msg.save()
 
+        // Mark 'messages' dot for patient participants (if any) so sidebar shows unread indicator
+        try {
+          const m = roomId.match(/_patient_([0-9a-fA-F]{24})/)
+          if (m && m[1]) {
+            const patientId = m[1]
+            const p = await Patient.findById(patientId).lean()
+            const targetUserId = p && (p.userId || p.requestedBy) ? String(p.userId || p.requestedBy) : null
+            if (targetUserId && targetUserId !== String(userId)) {
+              await Dots.findOneAndUpdate(
+                { userId: targetUserId },
+                { $set: { 'dots.messages': true }, $setOnInsert: { userType: 'patient' } },
+                { upsert: true }
+              )
+              try {
+                const map = global.__LIFELINK_USER_SOCKET_MAP
+                const ioRef = global.__LIFELINK_IO
+                if (map && ioRef && map.has(String(targetUserId))) {
+                  ioRef.to(map.get(String(targetUserId))).emit('dots_updated', { section: 'messages' })
+                }
+              } catch (e) {}
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to set message dot for room participant', e && e.message)
+        }
+
         io.to(roomId).emit('receive_message', { message: msg })
         cb && cb({ success: true, data: msg })
       } catch (err) {
@@ -115,6 +149,7 @@ export function initSocket(server) {
 
     socket.on('disconnect', () => {
       console.log('socket disconnect', userId)
+      try { if (userId) userSocketMap.delete(String(userId)) } catch (e) {}
       // Broadcast offline presence to rooms if desired
       // Could iterate socket.rooms but keeping simple
       socket.broadcast.emit('user_offline', { userId })

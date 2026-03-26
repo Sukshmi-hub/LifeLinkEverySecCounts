@@ -50,6 +50,32 @@ router.put('/:id/send-to-hospital', authenticate, async (req, res) => {
     reqDoc.sentToHospitalAt = new Date()
     await reqDoc.save()
 
+    // Set the 'alerts' dot for the patient user so the sidebar shows an update
+    try {
+      let targetUserId = null
+      if (reqDoc.requestedBy) targetUserId = String(reqDoc.requestedBy)
+      else if (reqDoc.patientId) {
+        const p = await Patient.findById(reqDoc.patientId).lean()
+        if (p && p.userId) targetUserId = String(p.userId)
+      }
+      if (targetUserId) {
+        await Dots.findOneAndUpdate(
+          { userId: targetUserId },
+          { $set: { 'dots.alerts': true }, $setOnInsert: { userType: 'patient' } },
+          { upsert: true }
+        )
+        try {
+          const map = global.__LIFELINK_USER_SOCKET_MAP
+          const ioRef = global.__LIFELINK_IO
+          if (map && ioRef && map.has(String(targetUserId))) {
+            ioRef.to(map.get(String(targetUserId))).emit('dots_updated', { section: 'alerts' })
+          }
+        } catch (e) {}
+      }
+    } catch (e) {
+      console.warn('Failed to set alerts dot on send-to-hospital', e && e.message)
+    }
+
     return res.status(200).json({ success: true, message: 'Request sent to hospital', data: reqDoc })
   } catch (err) {
     console.error('Send to hospital failed:', err)
