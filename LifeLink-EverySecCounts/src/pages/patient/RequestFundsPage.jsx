@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { HandHeart, Plus, Clock, CheckCircle, XCircle, IndianRupee } from 'lucide-react';
+import { HandHeart, Plus, Clock, CheckCircle, Check, XCircle, IndianRupee } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -29,6 +29,14 @@ const RequestFundsPage = () => {
     switch (status) {
       case 'Approved':
         return <CheckCircle className="w-5 h-5 text-success" />;
+      case 'SentToHospital':
+        return (
+          <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center">
+            <div className="w-6 h-6 rounded-full bg-success/60 flex items-center justify-center border-2 border-success">
+              <Check className="w-4 h-4 text-white" />
+            </div>
+          </div>
+        );
       case 'Rejected':
         return <XCircle className="w-5 h-5 text-destructive" />;
       default:
@@ -39,6 +47,8 @@ const RequestFundsPage = () => {
   const getStatusColor = (status) => {
     switch (status) {
       case 'Approved':
+        return 'bg-success/20 text-success';
+      case 'SentToHospital':
         return 'bg-success/20 text-success';
       case 'Rejected':
         return 'bg-destructive/20 text-destructive';
