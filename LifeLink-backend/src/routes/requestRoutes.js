@@ -128,6 +128,15 @@ router.put('/:id/send-matched-details', authenticate, async (req, res) => {
       // compact JSON-safe snapshot
       raw: rawSnapshot,
     }
+    // If hospitalName looks like an ObjectId (frontend sent an id), try to resolve it to a friendly name
+    try {
+      if (sanitizedDonor.hospitalName && typeof sanitizedDonor.hospitalName === 'string' && /^[0-9a-fA-F]{24}$/.test(sanitizedDonor.hospitalName)) {
+        const resolvedHospital = await Hospital.findById(sanitizedDonor.hospitalName).lean()
+        if (resolvedHospital && resolvedHospital.name) sanitizedDonor.hospitalName = resolvedHospital.name
+      }
+    } catch (e) {
+      // ignore resolution errors
+    }
     // If name or bloodType missing, try to resolve from Donor model using common id fields
     try {
       const donorIdCandidate = donorDetails && (donorDetails._id || donorDetails.donorId || donorDetails.userId || donorDetails.id || (donorDetails.user && donorDetails.user._id))

@@ -225,7 +225,9 @@ function HospitalPayments() {
                       const patientName = r.patientName || (r.patient && (r.patient.name || r.patient.fullName)) || (r.patientId && (r.patientId.name || r.patientId.user?.name)) || '—'
                       const bloodGroup = (r.patient && (r.patient.blood_type || r.patient.bloodType)) || r.bloodGroup || (r.raw && r.raw.patientBlood) || (r.patientId && (r.patientId.blood_type || r.patientId.bloodType)) || '—'
                       const organ = r.organ || r.organRequired || r.organType || (r.raw && r.raw.organ) || '—'
-                      const receivedFrom = r.sentFromHospitalName || (r.matchedDonor && (r.matchedDonor.senderHospitalName || r.matchedDonor.hospitalName)) || (r.matchedDonor && r.matchedDonor.hospitalName) || '—'
+                      // Prefer the matched donor's hospital (or the sender hospital) when available.
+                      // Fall back to `sentFromHospitalName` (the hospital that forwarded the match) or other available names.
+                      const receivedFrom = (r.matchedDonor && (r.matchedDonor.hospitalName || r.matchedDonor.senderHospitalName)) || r.sentFromHospitalName || r.receivingHospitalName || r.patientHospitalName || '—'
                       const summarySent = !!r.summarySent || !!r.paymentSummarySent || !!r.summaryCreated || !!r.paymentSent || !!r.paymentId
                       const paymentCompleted = r.paymentId && String(r.paymentStatus || r.status || '').toLowerCase() !== 'pending'
 

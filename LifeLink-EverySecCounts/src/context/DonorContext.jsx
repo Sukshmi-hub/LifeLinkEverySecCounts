@@ -83,6 +83,14 @@ export const DonorProvider = ({ children }) => {
           willingToDonate: p.willing_organs || p.willingToDonate || prev.willingToDonate,
           lastDonationDate: p.last_donation_date || prev.lastDonationDate,
         }));
+
+        // If backend included donorMatches and donationIntents in the profile payload, set them here
+        try {
+          if (Array.isArray(json.data.user.donorMatches)) setDonorMatches(json.data.user.donorMatches || [])
+          if (Array.isArray(json.data.user.donationIntents)) setDonationIntents(json.data.user.donationIntents || [])
+        } catch (e) {
+          // ignore
+        }
         // fetch certificates for this donor account
         try {
           const resp2 = await fetch('http://localhost:5000/api/certificates/me', { headers: { Authorization: `Bearer ${token}` } })

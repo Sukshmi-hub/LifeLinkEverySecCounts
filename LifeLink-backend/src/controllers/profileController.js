@@ -45,6 +45,14 @@ export const getProfile = async (req, res) => {
         const donor = await Donor.findOne({ userId })
         if (!donor) return res.status(404).json({ success: false, message: 'Donor profile not found' })
         profileData = donor
+        try {
+          const Request = await (await import('../models/Request.js')).default
+          const intents = await Request.find({ donorId: donor._id, requestType: 'donor_registration' }).sort({ createdAt: -1 }).lean()
+          profileData = profileData.toObject ? profileData.toObject() : profileData
+          profileData.donationIntents = intents.map(i => ({ id: String(i._id), organType: i.organType || i.organ || '', status: i.status || 'Pending Verification', createdAt: i.createdAt, donorHospitalId: i.hospitalId || null }))
+        } catch (e) {
+          // ignore
+        }
         break
       }
       case 'hospital': {

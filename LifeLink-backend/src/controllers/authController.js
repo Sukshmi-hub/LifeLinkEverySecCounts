@@ -334,33 +334,38 @@ export const register = async (req, res) => {
               update.$set[`location.${lk}`] = roleData.location[lk];
             });
           }
-          // Set hospital reference if provided and denormalize hospital name if resolvable
+          // Set hospital reference if provided and denormalize hospital name when possible.
+          // Prefer any explicit hospital name sent by the frontend, but fall back to
+          // resolving the hospital document's `name` when available.
+          // Collect any explicit name variations from the request body first.
+          const explicitBodyHospitalName = pick(['patientHospitalName', 'patient_hospital_name', 'hospitalName', 'hospital_name', 'hospitalNameDisplay', 'admittedHospital', 'admitted_hospital', 'hospital_name_display']);
           if (roleData.hospital) {
             update.$set.hospital = roleData.hospital;
+            let resolvedName = undefined;
             try {
-              // attempt to resolve hospital name when frontend provided an id or name
               const hospCandidate = roleData.hospital;
-              let hospDoc = null;
               const isObjectIdLike = typeof hospCandidate === 'string' && hospCandidate.length === 24 && /^[0-9a-fA-F]+$/.test(hospCandidate);
+              let hospDoc = null;
               if (isObjectIdLike) hospDoc = await Hospital.findById(hospCandidate).lean();
               if (!hospDoc) hospDoc = await Hospital.findOne({ $or: [{ name: hospCandidate }, { legacyId: hospCandidate }, { externalId: hospCandidate }] }).lean();
-              if (hospDoc && hospDoc.name) update.$set.hospitalName = hospDoc.name;
+              if (hospDoc && hospDoc.name) resolvedName = hospDoc.name;
             } catch (e) {
               console.warn('Failed to resolve hospital name during registration update', e && e.message ? e.message : e);
             }
-            // Fallback: if hospital name could not be resolved from ID, accept a name sent by frontend
-            try {
-              if (!update.$set.hospitalName) {
-                const bodyHospitalName = pick(['patientHospitalName', 'patient_hospital_name', 'hospitalName', 'hospital_name', 'hospitalNameDisplay', 'admittedHospital', 'admitted_hospital']);
-                if (bodyHospitalName) update.$set.hospitalName = bodyHospitalName;
-              }
-            } catch (e) {
-              // ignore
-            }
+            // Prefer explicit name from body if present, otherwise use resolved name
+            if (explicitBodyHospitalName) update.$set.hospitalName = explicitBodyHospitalName;
+            else if (resolvedName) update.$set.hospitalName = resolvedName;
+
             // Mirror denormalized field to admit-friendly alias for compatibility
             try {
               if (update.$set.hospitalName) update.$set.admittedHospital = update.$set.hospitalName;
             } catch (e) {}
+          } else {
+            // No hospital id provided; if frontend still provided a hospital name, persist it
+            if (explicitBodyHospitalName) {
+              update.$set.hospitalName = explicitBodyHospitalName;
+              try { update.$set.admittedHospital = explicitBodyHospitalName; } catch (e) {}
+            }
           }
         // Donor additional fields
         if (role === 'donor') {

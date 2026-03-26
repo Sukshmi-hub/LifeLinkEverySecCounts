@@ -1,6 +1,7 @@
 // src/controllers/donorController.js
 import User from '../models/User.js'
 import Donor from '../models/Donor.js'
+import Request from '../models/Request.js'
 
 const isDigits = (v, len) => typeof v === 'string' && new RegExp(`^\\d{${len}}$`).test(v)
 
@@ -28,6 +29,57 @@ export const getMyDonorProfile = async (req, res) => {
       emergencyContactName: donor.emergency_contact?.name || '',
       emergencyPhone: donor.emergency_contact?.phone || '',
       donationType: donor.donation_type || []
+    }
+
+    // Fetch recent matches involving this donor (requests where this donor was matched)
+    try {
+      const donorIdStr = String(donor._id)
+      const matchedRequests = await Request.find({
+        requestType: 'organ_request',
+        $or: [
+          { donorId: donor._id },
+          { 'matchedDonor.raw._resolvedDonor.id': donorIdStr },
+          { 'matchedDonor.donorId': donorIdStr }
+        ]
+      })
+        .sort({ createdAt: -1 })
+        .populate('patientId', 'name')
+        .populate('hospitalId', 'name')
+        .lean()
+
+      // Map to a compact donorMatches shape used by frontend
+      const donorMatches = matchedRequests.map(r => ({
+        id: String(r._id),
+        patientId: r.patientId ? String(r.patientId._id) : null,
+        patientName: r.patientId ? (r.patientId.name || r.patientName) : (r.patientName || ''),
+        organType: r.organType || r.organ || r.organRequired || '',
+        hospitalName: r.matchedDonor && (r.matchedDonor.hospitalName || r.matchedDonor.senderHospitalName) || (r.hospitalId && r.hospitalId.name) || r.receivingHospitalName || r.patientHospitalName || '',
+        matchDate: r.matchedAt || r.sentToPatientHospitalAt || r.createdAt,
+        paymentCompleted: !!r.paymentId || !!r.paymentSent || (String(r.status || '').toLowerCase() === 'completed'),
+        status: r.status || (r.matchedDonor ? 'Donor Matched' : 'Pending')
+      }))
+
+      payload.donorMatches = donorMatches
+    } catch (e) {
+      // ignore match loading failures
+      payload.donorMatches = []
+    }
+    // Fetch donor's own donation intents (donor_registration requests)
+    try {
+      const intents = await Request.find({ donorId: donor._id, requestType: 'donor_registration' })
+        .sort({ createdAt: -1 })
+        .lean()
+      // map to minimal intent shape expected by frontend
+      payload.donationIntents = intents.map(i => ({
+        id: String(i._id),
+        organType: i.organType || i.organ || '',
+        status: i.status || 'Pending Verification',
+        createdAt: i.createdAt,
+        donorHospitalId: i.hospitalId || null,
+        donorHospitalName: i.hospitalId && i.hospitalId.name ? i.hospitalId.name : (i.hospitalName || '')
+      }))
+    } catch (e) {
+      payload.donationIntents = []
     }
 
     return res.json({ success: true, message: 'Profile fetched successfully', data: payload })

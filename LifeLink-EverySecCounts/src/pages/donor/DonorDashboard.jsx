@@ -37,6 +37,12 @@ const DonorDashboard = () => {
     }
   };
 
+  const formatDate = (d) => {
+    if (!d) return '—';
+    const date = d instanceof Date ? d : new Date(d);
+    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString();
+  };
+
   const handleViewCertificate = (match) => {
     setSelectedCertificate({
       organType: match.organType,
@@ -172,7 +178,7 @@ const DonorDashboard = () => {
                       <div>
                         <p className="font-medium">{intent.organType}</p>
                         <p className="text-sm text-muted-foreground">
-                          {intent.createdAt?.toLocaleDateString()}
+                          {formatDate(intent.createdAt)}
                         </p>
                       </div>
                     </div>
