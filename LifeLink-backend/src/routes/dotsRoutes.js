@@ -7,13 +7,9 @@ const router = express.Router()
 // GET /api/dots/:userId - returns which dots are active
 router.get('/:userId', authenticate, async (req, res) => {
   try {
-    const userId = req.params.userId
-    
-    // Verify user can only access their own dots
-    if (String(req.user._id) !== String(userId)) {
-      return res.status(403).json({ success: false, message: 'Forbidden' })
-    }
-    
+    // Use authenticated user id to look up dots (prevents mismatches between id shapes)
+    const userId = String(req.user._id)
+
     let dots = await Dots.findOne({ userId })
     
     // If dots don't exist, create them
@@ -40,21 +36,17 @@ router.get('/:userId', authenticate, async (req, res) => {
 // PUT /api/dots/clear/:userId/:section - clears a dot when user visits that section
 router.put('/clear/:userId/:section', authenticate, async (req, res) => {
   try {
-    const { userId, section } = req.params
-    
-    // Verify user can only modify their own dots
-    if (String(req.user._id) !== String(userId)) {
-      return res.status(403).json({ success: false, message: 'Forbidden' })
-    }
-    
+    const { section } = req.params
+    const userId = String(req.user._id)
+
     // Validate section
     const validSections = ['messages', 'requests', 'alerts', 'payments']
     if (!validSections.includes(section)) {
       return res.status(400).json({ success: false, message: 'Invalid section' })
     }
-    
+
     let dots = await Dots.findOne({ userId })
-    
+
     // If dots don't exist, create them
     if (!dots) {
       dots = await Dots.create({
@@ -72,7 +64,7 @@ router.put('/clear/:userId/:section', authenticate, async (req, res) => {
       dots.dots[section] = false
       await dots.save()
     }
-    
+
     return res.json({ success: true, data: dots.dots })
   } catch (err) {
     console.error('Failed to clear dot', err)

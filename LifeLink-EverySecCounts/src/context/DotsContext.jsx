@@ -81,6 +81,19 @@ export const DotsProvider = ({ children }) => {
   useEffect(() => {
     if (!socket) return
     const onDots = (payload) => {
+      try {
+        // Optimistically set the section dot so UI updates immediately even if fetch fails
+        const section = payload && payload.section ? String(payload.section) : null
+        if (section && ['messages', 'requests', 'alerts', 'payments'].includes(section)) {
+          setDots(prev => ({ ...prev, [section]: true }))
+        } else {
+          // If no specific section provided, set a generic messages/request indicator
+          setDots(prev => ({ ...prev, messages: true }))
+        }
+      } catch (e) {
+        // ignore optimistic set errors
+      }
+      // also attempt a full refresh from server
       fetchDots()
     }
     socket.on('dots_updated', onDots)

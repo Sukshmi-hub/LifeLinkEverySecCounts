@@ -117,6 +117,8 @@ export function initSocket(server) {
                 if (map && ioRef && map.has(String(targetUserId))) {
                   ioRef.to(map.get(String(targetUserId))).emit('dots_updated', { section: 'messages' })
                 }
+                // Also emit a global dots_updated with target id to ensure recipients receive the event
+                try { if (ioRef) ioRef.emit('dots_updated', { userId: String(targetUserId), section: 'messages' }) } catch (e) {}
               } catch (e) {}
             }
           }
@@ -139,6 +141,7 @@ export function initSocket(server) {
                   if (map && ioRef && map.has(String(ngoUserId))) {
                     ioRef.to(map.get(String(ngoUserId))).emit('dots_updated', { section: 'messages' })
                   }
+                  try { if (ioRef) ioRef.emit('dots_updated', { userId: String(ngoUserId), section: 'messages' }) } catch (e) {}
                 } catch (e) {}
               }
             } catch (e) {

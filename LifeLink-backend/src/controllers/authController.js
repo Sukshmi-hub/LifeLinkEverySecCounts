@@ -506,6 +506,20 @@ export const register = async (req, res) => {
 
               const welcomeMsg = new Message({ senderId, senderRole, roomId, content: `Verification request created and sent to hospital.`, timestamp: new Date() })
               await welcomeMsg.save()
+              // mark hospital messages dot so hospital user sees the incoming verification
+              try {
+                if (hospitalAccountUserId) {
+                  const tgt = String(hospitalAccountUserId)
+                  await Dots.findOneAndUpdate({ userId: tgt }, { $set: { 'dots.messages': true }, $setOnInsert: { userType: 'hospital' } }, { upsert: true })
+                  try {
+                    const map = global.__LIFELINK_USER_SOCKET_MAP
+                    const ioRef = global.__LIFELINK_IO
+                    if (map && ioRef && map.has(tgt)) ioRef.to(map.get(tgt)).emit('dots_updated', { section: 'messages' })
+                  } catch (e) {}
+                }
+              } catch (e) {
+                // ignore dot set errors
+              }
             } catch (e) {
               console.error('Failed to create initial chat message for verification request', e)
             }

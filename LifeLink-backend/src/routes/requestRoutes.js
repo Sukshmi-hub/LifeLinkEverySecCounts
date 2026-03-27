@@ -444,6 +444,20 @@ router.post('/', authenticate, upload.fields([
       const roomId = `room_hospital_${hospital}_patient_${patientIdForRoom}`
       const msg = new Message({ senderId: req.user._id, senderRole: 'patient', roomId, content: `Organ request: ${organType}. ${details || ''}`, timestamp: new Date() })
       await msg.save()
+      // Set hospital messages dot so hospital sidebar shows unread
+      try {
+        const hospDoc = await Hospital.findById(hospital).lean()
+        const hospUserId = hospDoc && hospDoc.userId ? String(hospDoc.userId) : null
+        if (hospUserId && hospUserId !== String(req.user._id)) {
+          await Dots.findOneAndUpdate({ userId: hospUserId }, { $set: { 'dots.messages': true }, $setOnInsert: { userType: 'hospital' } }, { upsert: true })
+          try {
+            const map = global.__LIFELINK_USER_SOCKET_MAP
+            const ioRef = global.__LIFELINK_IO
+            if (map && ioRef && map.has(String(hospUserId))) ioRef.to(map.get(String(hospUserId))).emit('dots_updated', { section: 'messages' })
+                try { if (ioRef) ioRef.emit('dots_updated', { userId: String(hospUserId), section: 'messages' }) } catch (e) {}
+          } catch (e) {}
+        }
+      } catch (e) {}
     } catch (e) {
       console.error('Failed to create chat message for organ request', e)
     }
@@ -610,6 +624,22 @@ router.post('/fund', authenticate, upload.fields([
         const roomId = `room_ngo_${reqDoc.ngoId}_patient_${patientIdForRoom}`
         const msg = new Message({ senderId: req.user._id, senderRole: 'patient', roomId, content: `Fund request: ₹${reqDoc.amount}. ${reqDoc.message || ''}`, timestamp: new Date() })
         await msg.save()
+        // Ensure NGO sees message dot
+        try {
+          const ngoDoc = await NGO.findById(reqDoc.ngoId).lean()
+          const ngoUserId = ngoDoc && ngoDoc.userId ? String(ngoDoc.userId) : null
+          if (ngoUserId && ngoUserId !== String(req.user._id)) {
+            await Dots.findOneAndUpdate({ userId: ngoUserId }, { $set: { 'dots.messages': true }, $setOnInsert: { userType: 'ngo' } }, { upsert: true })
+            try {
+              const map = global.__LIFELINK_USER_SOCKET_MAP
+              const ioRef = global.__LIFELINK_IO
+              if (map && ioRef && map.has(String(ngoUserId))) ioRef.to(map.get(String(ngoUserId))).emit('dots_updated', { section: 'messages' })
+                try { if (ioRef) ioRef.emit('dots_updated', { userId: String(ngoUserId), section: 'messages' }) } catch (e) {}
+            } catch (e) {}
+          }
+        } catch (e) {
+          // ignore NGO dot errors
+        }
       }
     } catch (e) {
       console.error('Failed to create chat message for fund request', e)
@@ -631,6 +661,7 @@ router.post('/fund', authenticate, upload.fields([
             if (map && ioRef && map.has(String(targetUserId))) {
               ioRef.to(map.get(String(targetUserId))).emit('dots_updated', { section: 'requests' })
             }
+                try { if (ioRef) ioRef.emit('dots_updated', { userId: String(targetUserId), section: 'requests' }) } catch (e) {}
           } catch (e) {}
         }
       }
