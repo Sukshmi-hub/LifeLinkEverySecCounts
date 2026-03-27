@@ -532,17 +532,20 @@ const FundRequestDetails = ({
                   {sendingToHos ? 'Sending...' : 'Verify by Hos'}
                 </Button>
               )}
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  onReject(request.id);
-                  onClose();
-                }}
-                className="gap-2"
-              >
-                <XCircle className="w-4 h-4" />
-                Reject Request
-              </Button>
+              {/* Only allow rejection when payment hasn't been sent / completed */}
+              {!(request.paymentSent || String(request.status) === 'SentToHospital') && (
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    onReject(request.id);
+                    onClose();
+                  }}
+                  className="gap-2"
+                >
+                  <XCircle className="w-4 h-4" />
+                  Reject Request
+                </Button>
+              )}
               {/* Approve button removed from modal per NGO UX - approval remains available from requests list */}
                 {/* Allow patient to pay hospital from this modal when hospital id is known */}
                 {hospitalDbId && (

@@ -120,6 +120,31 @@ export function initSocket(server) {
               } catch (e) {}
             }
           }
+          // If room is an NGO room, set messages dot for NGO user
+          const n = roomId.match(/room_ngo_([0-9a-fA-F]{24})_patient_([0-9a-fA-F]{24})/)
+          if (n && n[1]) {
+            try {
+              const ngoId = n[1]
+              const ngoDoc = await NGO.findById(ngoId).lean()
+              const ngoUserId = ngoDoc && ngoDoc.userId ? String(ngoDoc.userId) : null
+              if (ngoUserId && ngoUserId !== String(userId)) {
+                await Dots.findOneAndUpdate(
+                  { userId: ngoUserId },
+                  { $set: { 'dots.messages': true }, $setOnInsert: { userType: 'ngo' } },
+                  { upsert: true }
+                )
+                try {
+                  const map = global.__LIFELINK_USER_SOCKET_MAP
+                  const ioRef = global.__LIFELINK_IO
+                  if (map && ioRef && map.has(String(ngoUserId))) {
+                    ioRef.to(map.get(String(ngoUserId))).emit('dots_updated', { section: 'messages' })
+                  }
+                } catch (e) {}
+              }
+            } catch (e) {
+              // ignore NGO dot on errors
+            }
+          }
         } catch (e) {
           console.warn('Failed to set message dot for room participant', e && e.message)
         }

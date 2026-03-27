@@ -32,8 +32,10 @@ const NgoDashboard = () => {
   // Calculate stats
   const totalRequests = fundRequests.length;
   const pendingRequests = fundRequests.filter(r => String(r.status || '').toLowerCase().startsWith('pending')).length;
-  const approvedRequests = fundRequests.filter(r => String(r.status || '').toLowerCase() === 'approved').length;
-  const disbursedAmount = fundRequests.filter(r => String(r.status || '').toLowerCase() === 'approved').reduce((sum, r) => sum + r.amount, 0);
+  // Approved Supports: count of patients for whom NGO payment has been completed (paymentSent or SentToHospital)
+  const approvedRequests = fundRequests.filter(r => (r.paymentSent === true) || String(r.status) === 'SentToHospital' || String(r.status).toLowerCase() === 'paid').length;
+  // Disbursed Amount: total amount actually paid by NGO (sum of paymentSent requests or SentToHospital)
+  const disbursedAmount = fundRequests.filter(r => (r.paymentSent === true) || String(r.status) === 'SentToHospital' || String(r.status).toLowerCase() === 'paid').reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 
   const handleViewDetails = (request) => {
     // If the mapped request includes the original server response as `raw`, prefer that for detail view
@@ -141,6 +143,7 @@ const NgoDashboard = () => {
                         className={cn(
                           "text-xs",
                           request.status === 'Approved' ? 'bg-success/20 text-success' :
+                          request.status === 'SentToHospital' ? 'bg-success/10 text-success' :
                           (request.status === 'Rejected' || request.status === 'Dennied') ? 'bg-destructive/20 text-destructive' :
                           'bg-warning/20 text-warning-foreground'
                         )}
@@ -238,6 +241,7 @@ const NgoDashboard = () => {
                       <Badge
                         className={cn(
                           request.status === 'Approved' ? 'bg-success/20 text-success' :
+                          request.status === 'SentToHospital' ? 'bg-success/10 text-success' :
                           (request.status === 'Rejected' || request.status === 'Dennied') ? 'bg-destructive/20 text-destructive' :
                           'bg-warning/20 text-warning-foreground'
                         )}

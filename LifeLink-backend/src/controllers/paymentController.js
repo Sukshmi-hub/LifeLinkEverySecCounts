@@ -378,7 +378,55 @@ export const verifyRazorpayPayment = async (req, res) => {
     // Also update the related Request (if any) to mark payment received
     if (payment && payment._id) {
       try {
-        await Request.findOneAndUpdate({ paymentId: payment._id }, { $set: { paymentSent: true } })
+        const reqUpdate = await Request.findOneAndUpdate({ paymentId: payment._id }, { $set: { paymentSent: true } }, { new: true })
+        // If we found the request, mark it as SentToHospital so NGO/hospital UI reflects payment
+        if (reqUpdate) {
+          try {
+            reqUpdate.status = 'SentToHospital'
+            reqUpdate.sentToHospitalAt = new Date()
+            await reqUpdate.save()
+            // Notify patient + NGO + hospital via dots and realtime socket
+            try {
+              const map = global.__LIFELINK_USER_SOCKET_MAP
+              const ioRef = global.__LIFELINK_IO
+              // Patient user
+              try {
+                const p = await (await import('../models/Patient.js')).default.findById(reqUpdate.patientId).lean()
+                const patientUserId = p && (p.userId || p.requestedBy) ? String(p.userId || p.requestedBy) : null
+                if (patientUserId) {
+                  await Dots.findOneAndUpdate({ userId: patientUserId }, { $set: { 'dots.alerts': true } }, { upsert: true })
+                  if (map && ioRef && map.has(String(patientUserId))) ioRef.to(map.get(String(patientUserId))).emit('dots_updated', { section: 'alerts' })
+                }
+              } catch (e) {}
+              // NGO user
+              try {
+                if (reqUpdate.ngoId) {
+                  const NGOModel = (await import('../models/NGO.js')).default
+                  const ngoDoc = await NGOModel.findById(reqUpdate.ngoId).lean()
+                  const ngoUserId = ngoDoc && (ngoDoc.userId || ngoDoc._id) ? String(ngoDoc.userId || ngoDoc._id) : null
+                  if (ngoUserId) {
+                    await Dots.findOneAndUpdate({ userId: ngoUserId }, { $set: { 'dots.requests': true } }, { upsert: true })
+                    if (map && ioRef && map.has(String(ngoUserId))) ioRef.to(map.get(String(ngoUserId))).emit('dots_updated', { section: 'requests' })
+                  }
+                }
+              } catch (e) {}
+              // Hospital user (if any)
+              try {
+                if (reqUpdate.hospitalId) {
+                  const Hospital = (await import('../models/Hospital.js')).default
+                  const hosp = await Hospital.findById(reqUpdate.hospitalId).lean()
+                  const hospUserId = hosp && hosp.userId ? String(hosp.userId) : null
+                  if (hospUserId) {
+                    await Dots.findOneAndUpdate({ userId: hospUserId }, { $set: { 'dots.payments': true } }, { upsert: true })
+                    if (map && ioRef && map.has(String(hospUserId))) ioRef.to(map.get(String(hospUserId))).emit('dots_updated', { section: 'payments' })
+                  }
+                }
+              } catch (e) {}
+            } catch (e) {}
+          } catch (e) {
+            console.error('Failed to mark request SentToHospital after payment', e)
+          }
+        }
       } catch (reqErr) {
         console.error('Failed to update related request after payment verify', reqErr)
       }

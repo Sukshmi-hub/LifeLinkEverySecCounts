@@ -614,6 +614,29 @@ router.post('/fund', authenticate, upload.fields([
     } catch (e) {
       console.error('Failed to create chat message for fund request', e)
     }
+    // Notify NGO user (set dots.requests = true) if ngoId provided
+    try {
+      if (reqDoc.ngoId) {
+        const ngoDoc = await NGO.findById(reqDoc.ngoId).lean()
+        const targetUserId = ngoDoc && (ngoDoc.userId || ngoDoc._id) ? String(ngoDoc.userId || ngoDoc._id) : null
+        if (targetUserId) {
+          await Dots.findOneAndUpdate(
+            { userId: targetUserId },
+            { $set: { 'dots.requests': true }, $setOnInsert: { userType: 'ngo' } },
+            { upsert: true }
+          )
+          try {
+            const map = global.__LIFELINK_USER_SOCKET_MAP
+            const ioRef = global.__LIFELINK_IO
+            if (map && ioRef && map.has(String(targetUserId))) {
+              ioRef.to(map.get(String(targetUserId))).emit('dots_updated', { section: 'requests' })
+            }
+          } catch (e) {}
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to set NGO requests dot for new fund request', e && e.message)
+    }
     return res.status(201).json({ success: true, data: reqDoc })
   } catch (err) {
     console.error('Create fund request failed:', err)
@@ -869,6 +892,30 @@ router.get('/:id', authenticate, async (req, res) => {
       reqDoc.verifiedByHospitalAt = new Date()
       reqDoc.verifiedByHospitalId = hospital._id
       await reqDoc.save()
+
+      // If this request was assigned to an NGO, notify the NGO via dots (requests)
+      try {
+        if (reqDoc.ngoId) {
+          const ngoDoc = await NGO.findById(reqDoc.ngoId).lean()
+          const targetUserId = ngoDoc && (ngoDoc.userId || ngoDoc._id) ? String(ngoDoc.userId || ngoDoc._id) : null
+          if (targetUserId) {
+            await Dots.findOneAndUpdate(
+              { userId: targetUserId },
+              { $set: { 'dots.requests': true }, $setOnInsert: { userType: 'ngo' } },
+              { upsert: true }
+            )
+            try {
+              const map = global.__LIFELINK_USER_SOCKET_MAP
+              const ioRef = global.__LIFELINK_IO
+              if (map && ioRef && map.has(String(targetUserId))) {
+                ioRef.to(map.get(String(targetUserId))).emit('dots_updated', { section: 'requests' })
+              }
+            } catch (e) {}
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to set NGO requests dot on hospital verify', e && e.message)
+      }
 
       return res.status(200).json({ success: true, message: 'Request verified by hospital', data: reqDoc })
     } catch (err) {
