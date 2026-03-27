@@ -149,13 +149,16 @@ const DonateModal = ({ isOpen, onClose }) => {
       }
 
       const json = await res.json();
-      if (json && json.success && json.data) {
+        if (json && json.success && json.data) {
         const req = json.data;
+        // Use local chosen organ to ensure UI shows correct label immediately
+        const chosenOrganName = selectedOrgan === 'blood' ? null : (organ?.name || null);
+        const chosenBloodType = selectedOrgan === 'blood' ? (donorProfile?.bloodGroup || 'Blood') : null;
         addDonationIntent({
           donorId: user?._id || user?.id || 'donor_1',
           donorName: donorProfile?.fullName || user?.name || 'Anonymous Donor',
-          organType: req.organType || null,
-          bloodType: req.bloodType || null,
+          organType: chosenOrganName,
+          bloodType: chosenBloodType,
           donorHospitalId: req.hospitalId || selectedHospitalId,
           donorHospitalName: chosenHospital?.organizationName || chosenHospital?.name || 'Selected Hospital',
         });

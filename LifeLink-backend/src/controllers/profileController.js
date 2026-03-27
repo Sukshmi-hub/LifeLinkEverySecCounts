@@ -49,7 +49,13 @@ export const getProfile = async (req, res) => {
           const Request = await (await import('../models/Request.js')).default
           const intents = await Request.find({ donorId: donor._id, requestType: 'donor_registration' }).sort({ createdAt: -1 }).lean()
           profileData = profileData.toObject ? profileData.toObject() : profileData
-          profileData.donationIntents = intents.map(i => ({ id: String(i._id), organType: i.organType || i.organ || '', status: i.status || 'Pending Verification', createdAt: i.createdAt, donorHospitalId: i.hospitalId || null }))
+          profileData.donationIntents = intents.map(i => ({
+            id: String(i._id),
+            organType: i.organType || i.organ || i.bloodType || i.organOrBlood || '',
+            status: i.status || 'Pending Verification',
+            createdAt: i.createdAt,
+            donorHospitalId: i.hospitalId || null
+          }))
         } catch (e) {
           // ignore
         }

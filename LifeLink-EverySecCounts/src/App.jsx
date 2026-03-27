@@ -32,7 +32,6 @@ import PatientMessagesPage from "./pages/patient/PatientMessagesPage";
 import PatientPaymentDemo from "./components/patient/PatientPaymentDemo";
 import DonorDashboard from "./pages/donor/DonorDashboard";
 import DonorRegister from "./pages/donor/DonorRegister";
-import DonorAlerts from "./pages/donor/DonorAlerts";
 import DonorChat from "./pages/donor/DonorChat";
 import DonorMessagesPage from "./pages/donor/DonorMessagesPage";
 import DonorProfilePage from "./pages/donor/DonorProfilePage";
@@ -83,7 +82,6 @@ const App = () => (
                     {/* ========================================== */}
                     <Route path="/donor/dashboard" element={<ProtectedRoute allowedRoles={['donor']}><DonorDashboard /></ProtectedRoute>} />
                     <Route path="/donor/register" element={<ProtectedRoute allowedRoles={['donor']}><DonorRegister /></ProtectedRoute>} />
-                    <Route path="/donor/alerts" element={<ProtectedRoute allowedRoles={['donor']}><DonorAlerts /></ProtectedRoute>} />
                     <Route path="/donor/chat" element={<ProtectedRoute allowedRoles={['donor']}><DonorChat /></ProtectedRoute>} />
                     <Route path="/donor/messages" element={<ProtectedRoute allowedRoles={['donor']}><DonorMessagesPage /></ProtectedRoute>} />
                     <Route path="/donor/profile" element={<ProtectedRoute allowedRoles={['donor']}><DonorProfilePage /></ProtectedRoute>} />

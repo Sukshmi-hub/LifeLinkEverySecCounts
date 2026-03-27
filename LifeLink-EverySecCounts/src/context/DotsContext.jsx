@@ -97,7 +97,21 @@ export const DotsProvider = ({ children }) => {
       fetchDots()
     }
     socket.on('dots_updated', onDots)
-    return () => socket.off('dots_updated', onDots)
+    // Also listen for local incoming-message events from chat layer
+    const onIncoming = (e) => {
+      try {
+        const section = e && e.detail && e.detail.section ? String(e.detail.section) : 'messages'
+        if (section && ['messages', 'requests', 'alerts', 'payments'].includes(section)) {
+          setDots(prev => ({ ...prev, [section]: true }))
+        }
+      } catch (e) {}
+    }
+    window.addEventListener('ll:incoming-message', onIncoming)
+
+    return () => {
+      socket.off('dots_updated', onDots)
+      window.removeEventListener('ll:incoming-message', onIncoming)
+    }
   }, [socket])
 
   return (

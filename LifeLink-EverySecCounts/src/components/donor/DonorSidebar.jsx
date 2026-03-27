@@ -29,7 +29,6 @@ const DonorSidebar = ({ isOpen, onToggle }) => {
   };
 
   const navItems = [
-    { path: '/donor/alerts', icon: AlertTriangle, label: 'Alerts', dotName: 'alerts' },
     { path: '/donor/messages', icon: MessageCircle, label: 'Messages', dotName: 'messages' },
     { path: '/donor/profile', icon: User, label: 'Profile', dotName: null },
   ];

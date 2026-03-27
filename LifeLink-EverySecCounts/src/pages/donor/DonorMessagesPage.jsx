@@ -1,9 +1,17 @@
 import React, { useState } from 'react';
 import DonorSidebar from '@/components/donor/DonorSidebar';
 import DonorMessages from '@/components/donor/DonorMessages';
+import { useDots } from '@/context/DotsContext';
+import { useEffect } from 'react';
 
 const DonorMessagesPage = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { clearDot } = useDots();
+
+  useEffect(() => {
+    // clear the messages dot when opening messages page
+    try { clearDot('messages') } catch (e) {}
+  }, [])
 
   return (
     <div className="min-h-screen bg-background">

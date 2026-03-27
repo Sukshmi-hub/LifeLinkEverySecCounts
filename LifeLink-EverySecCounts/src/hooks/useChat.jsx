@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useCallback } from 'react'
 import { useSocket } from './useSocket'
+import { useAuth } from '@/context/AuthContext'
 
 const initialState = {
   messages: [],
@@ -42,6 +43,7 @@ function reducer(state, action) {
 
 export function useChat(serverUrl) {
   const { socket, isConnected, connectionError, connect } = useSocket(serverUrl)
+  const { user } = useAuth()
   const [state, dispatch] = useReducer(reducer, initialState)
 
   useEffect(() => {
@@ -49,6 +51,14 @@ export function useChat(serverUrl) {
 
     const onReceive = ({ message }) => {
       dispatch({ type: 'RECEIVE_MESSAGE', message, roomId: message.roomId })
+      try {
+        // If message is for another room (not active) and not from current user, notify Dots system
+        const myId = String(user?._id || user?.id || '')
+        const senderId = String(message?.senderId || message?.sender_id || '')
+        if (senderId && senderId !== myId && state.activeRoomId !== message.roomId) {
+          window.dispatchEvent(new CustomEvent('ll:incoming-message', { detail: { section: 'messages' } }))
+        }
+      } catch (e) {}
     }
     const onTyping = ({ userId }) => dispatch({ type: 'SET_TYPING', userId, isTyping: true })
     const onStopTyping = ({ userId }) => dispatch({ type: 'SET_TYPING', userId, isTyping: false })

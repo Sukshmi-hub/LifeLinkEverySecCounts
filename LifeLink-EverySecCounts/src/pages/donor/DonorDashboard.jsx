@@ -6,6 +6,7 @@ import DonorSidebar from '@/components/donor/DonorSidebar';
 import DonateModal from '@/components/donor/DonateModal';
 import DonationCertificate from '@/components/donor/DonationCertificate';
 import DashboardCard from '@/components/DashboardCard';
+import { useDots } from '@/context/DotsContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,12 +20,18 @@ const DonorDashboard = () => {
   const [showDonateModal, setShowDonateModal] = useState(false);
   const [showCertificate, setShowCertificate] = useState(false);
   const [selectedCertificate, setSelectedCertificate] = useState(null);
+  const { clearDot } = useDots();
 
   // Logic with safe fallbacks
   const currentStatus = donationIntents.length > 0 ? donationIntents[0].status : 'Registered';
   const activeMatch = donorMatches.find(m => m.status !== 'Completed' && m.donorName === donorProfile?.fullName);
-  const completedCount = donorMatches.filter(m => m.status === 'Completed').length;
-  const pendingIntents = donationIntents.filter(i => i.status === 'Pending Verification').length;
+  // Completed donations count should reflect certificates generated
+  const completedCount = donationCertificates.length || donorMatches.filter(m => m.status === 'Completed').length;
+  // Pending verification = intents marked as 'Available...' or 'Pending'
+  const pendingIntents = donationIntents.filter(i => {
+    const s = (i.status || '').toString().toLowerCase();
+    return s.includes('available') || s.includes('pending');
+  }).length;
   const verifiedIntents = donationIntents.filter(i => i.status === 'Verified').length;
 
   const getStatusColor = (status) => {
@@ -95,7 +102,7 @@ const DonorDashboard = () => {
           )}
 
           {/* Stats Grid */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <DashboardCard 
               icon={Heart} 
               title="Donations Completed" 
@@ -111,16 +118,9 @@ const DonorDashboard = () => {
               subtitle="Hospital review"
             />
             <DashboardCard 
-              icon={CheckCircle} 
-              title="Verified Intents" 
-              value={String(verifiedIntents)} 
-              variant="primary"
-              subtitle="Ready for matching"
-            />
-            <DashboardCard 
               icon={Award} 
               title="Certificates" 
-              value={String(completedCount)} 
+              value={String(donationCertificates.length)} 
               variant="primary"
               subtitle="Earned awards"
             />
@@ -144,14 +144,9 @@ const DonorDashboard = () => {
                   <span className="font-semibold">Donate Organ</span>
                 </Button>
                 
-                <Link to="/donor/alerts">
-                  <Button variant="outline" className="w-full h-24 flex-col gap-2 border-warning/50">
-                    <AlertTriangle className="h-8 w-8 text-warning" />
-                    <span className="font-semibold">View Alerts</span>
-                  </Button>
-                </Link>
+                {/* Alerts removed for donors */}
 
-                <Link to="/donor/messages">
+                <Link to="/donor/messages" onClick={() => { try { clearDot('messages') } catch (e) {} }}>
                   <Button variant="outline" className="w-full h-24 flex-col gap-2 border-primary/50">
                     <MessageCircle className="h-8 w-8 text-primary" />
                     <span className="font-semibold">Messages</span>
@@ -176,7 +171,7 @@ const DonorDashboard = () => {
                     <div className="flex items-center gap-3">
                       <Heart className="h-5 w-5 text-destructive" />
                       <div>
-                        <p className="font-medium">{intent.organType}</p>
+                        <p className="font-medium">{intent.organType || intent.organ || intent.organOrBlood || (intent.bloodType ? 'Blood' : '—')}</p>
                         <p className="text-sm text-muted-foreground">
                           {formatDate(intent.createdAt)}
                         </p>
