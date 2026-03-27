@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNotifications } from './NotificationContext';
 import { useAuth } from './AuthContext';
+import useSocket from '@/hooks/useSocket';
 
 const defaultProfile = {
   fullName: 'Sunita Singh',
@@ -29,6 +30,7 @@ export const DonorProvider = ({ children }) => {
   const [donationCertificates, setDonationCertificates] = useState([]);
 
   const { user } = useAuth();
+  const { socket } = useSocket()
 
   // Sync donor profile from authenticated user when available
   useEffect(() => {
@@ -99,11 +101,30 @@ export const DonorProvider = ({ children }) => {
         } catch (e) {
           // ignore
         }
+        
       } catch (err) {
         // ignore
       }
     })();
   }, [user]);
+
+  // Listen for certificate updates via socket and refresh certificates when notified
+  useEffect(() => {
+    if (!socket) return
+    const token = localStorage.getItem('token')
+    if (!token) return
+    const handler = async (payload) => {
+      try {
+        const resp = await fetch('http://localhost:5000/api/certificates/me', { headers: { Authorization: `Bearer ${token}` } })
+        const j = await resp.json().catch(() => ({}))
+        if (resp.ok && Array.isArray(j.data)) setDonationCertificates(j.data || [])
+      } catch (e) {}
+    }
+    socket.on('certificates_updated', handler)
+    return () => {
+      try { socket.off('certificates_updated', handler) } catch (e) {}
+    }
+  }, [socket])
 
   const addDonationIntent = (intent) => {
     const newIntent = {

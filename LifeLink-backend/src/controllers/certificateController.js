@@ -52,6 +52,21 @@ export const createCertificateForDonor = async ({ donorId, donorUserId, donorNam
   } catch (e) {
     // ignore
   }
+  // emit socket event to donor user to notify new certificate
+  try {
+    if (donorUserId && global.__LIFELINK_IO) {
+      const ioRef = global.__LIFELINK_IO
+      const map = global.__LIFELINK_USER_SOCKET_MAP
+      try {
+        if (map && map.has(String(donorUserId))) {
+          ioRef.to(map.get(String(donorUserId))).emit('certificates_updated', { certificateId: String(cert._id) })
+        } else {
+          // fallback broadcast to ensure clients pick up update
+          ioRef.emit('certificates_updated', { userId: String(donorUserId), certificateId: String(cert._id) })
+        }
+      } catch (e) {}
+    }
+  } catch (e) {}
   return cert
 }
 
