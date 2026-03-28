@@ -136,28 +136,7 @@ const Home = () => {
         </div>
       </section>
 
-      {/* Stats Section */}
-      <section className="border-y border-border bg-muted/30 py-12">
-        <div className="container">
-          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-            {stats.map((stat, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-4 animate-fade-in"
-                style={{ animationDelay: `${index * 100}ms` }}
-              >
-                <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10">
-                  <stat.icon className="h-7 w-7 text-primary" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-foreground">{stat.value}</p>
-                  <p className="text-sm text-muted-foreground">{stat.label}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* Stats section removed per request */}
 
       {/* Features Section */}
       <section className="py-20">

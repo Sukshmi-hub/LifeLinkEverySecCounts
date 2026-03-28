@@ -1,20 +1,31 @@
-import React, { useState } from 'react';
+import ErrorBoundary from '@/components/ErrorBoundary';
+import React, { useState, useEffect } from 'react';
 import PatientSidebar from '@/components/patient/PatientSidebar';
 import FundRequestModal from '@/components/patient/FundRequestModal';
-import ErrorBoundary from '@/components/ErrorBoundary';
+
 import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationContext';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { HandHeart, Plus, Clock, CheckCircle, Check, XCircle, IndianRupee } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 
+import { useLocation } from 'react-router-dom';
+
 const RequestFundsPage = () => {
   const { user } = useAuth();
   const { fundRequests, loadFundRequests } = useNotifications();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showFundModal, setShowFundModal] = useState(false);
+  const { state } = useLocation();
+
+  useEffect(() => {
+    if (state && state.prefill) {
+      setShowFundModal(true);
+    }
+  }, [state]);
 
   React.useEffect(() => {
     if (user?.id) {
@@ -182,6 +193,8 @@ const RequestFundsPage = () => {
       <FundRequestModal 
         isOpen={showFundModal} 
         onClose={() => setShowFundModal(false)} 
+        initialData={state?.prefill}
+        fixed={Boolean(state?.fixed)}
       />
     </div>
     </ErrorBoundary>

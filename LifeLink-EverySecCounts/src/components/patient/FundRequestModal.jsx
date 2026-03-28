@@ -31,7 +31,7 @@ const reasons = [
   'Other',
 ];
 
-const FundRequestModal = ({ isOpen, onClose }) => {
+const FundRequestModal = ({ isOpen, onClose, initialData = null, fixed = false }) => {
   const { user } = useAuth();
   const { addFundRequest } = useNotifications();
   const [amount, setAmount] = useState('');
@@ -104,6 +104,21 @@ const FundRequestModal = ({ isOpen, onClose }) => {
       }
     })();
   }, []);
+
+  // If initial data provided (from Payment -> Ask NGO), prefill and optionally lock fields
+  useEffect(() => {
+    if (initialData) {
+      if (initialData.totalAmount !== undefined) setAmount(String(initialData.totalAmount));
+      if (initialData.transplantFee !== undefined) setTransplantFee(String(initialData.transplantFee));
+      if (initialData.hospitalCharges !== undefined) setHospitalChargesFee(String(initialData.hospitalCharges));
+      if (initialData.processingFee !== undefined) setProcessingFee(String(initialData.processingFee));
+      if (initialData.hospitalId) setSelectedHospital(String(initialData.hospitalId));
+      if (initialData.hospitalName && !initialData.hospitalId) {
+        // try to find hospital by name after hospitals load
+        setSelectedHospital('prefill_hospital_name:' + initialData.hospitalName);
+      }
+    }
+  }, [initialData]);
 
   // render guard to avoid hydration/runtime issues when opening modal
   const [mounted, setMounted] = useState(false);
@@ -223,6 +238,7 @@ const FundRequestModal = ({ isOpen, onClose }) => {
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   min="1"
+                  disabled={fixed}
                 />
               </div>
 
@@ -242,25 +258,25 @@ const FundRequestModal = ({ isOpen, onClose }) => {
                 </Select>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="transplantFee">Transplant Surgery Fee</Label>
-                  <Input id="transplantFee" type="number" min="0" placeholder="0" value={transplantFee} onChange={e => setTransplantFee(e.target.value)} />
+                  <Input id="transplantFee" type="number" min="0" placeholder="0" value={transplantFee} onChange={e => setTransplantFee(e.target.value)} disabled={fixed} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="hospitalCharges">Hospital Charges</Label>
-                  <Input id="hospitalCharges" type="number" min="0" placeholder="0" value={hospitalChargesFee} onChange={e => setHospitalChargesFee(e.target.value)} />
+                  <Input id="hospitalCharges" type="number" min="0" placeholder="0" value={hospitalChargesFee} onChange={e => setHospitalChargesFee(e.target.value)} disabled={fixed} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="processingFee">Processing Fee</Label>
-                  <Input id="processingFee" type="number" min="0" placeholder="0" value={processingFee} onChange={e => setProcessingFee(e.target.value)} />
+                  <Input id="processingFee" type="number" min="0" placeholder="0" value={processingFee} onChange={e => setProcessingFee(e.target.value)} disabled={fixed} />
                 </div>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="hospital">Select Hospital *</Label>
                 <Select value={selectedHospital} onValueChange={setSelectedHospital}>
-                  <SelectTrigger id="hospital" className="bg-background">
+                  <SelectTrigger id="hospital" className="bg-background" disabled={fixed}>
                     <SelectValue placeholder="Choose hospital" />
                   </SelectTrigger>
                   <SelectContent className="bg-popover">

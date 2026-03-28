@@ -4,8 +4,9 @@ import RazorpayModal from '@/components/patient/RazorpayModal';
 import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CreditCard, Clock, User, Heart, Building2, Eye, CheckCircle } from 'lucide-react';
+import { CreditCard, Clock, User, Heart, Building2, Eye, CheckCircle, HandHeart } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 const PaymentPage = () => {
@@ -74,6 +75,8 @@ const PaymentPage = () => {
 
     return isMatched && matchesUser;
   });
+
+  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-background">
@@ -172,10 +175,30 @@ const PaymentPage = () => {
                         DONE
                       </Button>
                     ) : (
-                      <Button onClick={() => setShowPaymentModal(true)} className="flex-1 h-12 text-base">
-                        <CreditCard className="w-5 h-5 mr-2" />
-                        Proceed to Payment
-                      </Button>
+                      <>
+                        <Button onClick={() => setShowPaymentModal(true)} className="flex-1 h-12 text-base">
+                          <CreditCard className="w-5 h-5 mr-2" />
+                          Proceed to Payment
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            const prefill = {
+                              totalAmount: paymentSummary?.totalAmount || 0,
+                              transplantFee: paymentSummary?.surgeryFee || paymentSummary?.transplantFee || 0,
+                              hospitalCharges: paymentSummary?.hospitalCharges || 0,
+                              processingFee: paymentSummary?.processingFee || 0,
+                              hospitalId: paymentSummary?.hospitalId || matchedRequest?.hospitalId || null,
+                              hospitalName: paymentSummary?.hospitalName || matchedRequest?.hospitalName || ''
+                            };
+                            navigate('/patient/request-funds', { state: { prefill, fixed: true } });
+                          }}
+                          variant="secondary"
+                          className="h-12 flex items-center gap-2"
+                        >
+                          <img src="/src/assets/ngo_logo.png" alt="NGO Logo" style={{ width: 24, height: 24, marginRight: 8 }} />
+                          Ask NGO
+                        </Button>
+                      </>
                     )}
                   </div>
                 </CardContent>
