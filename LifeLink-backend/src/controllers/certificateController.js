@@ -40,11 +40,15 @@ const buildCertificateHTML = ({ donorName, donorId, organOrBlood, dateOfDonation
   </style></head><body><div class="frame"><div class="container"><div class="logo"><div class="mark"><svg viewBox="0 0 24 24" width="28" height="28"><path d="M12 21s-7-4.35-9-7.2C-1 7 6 3 12 8c6-5 13  -1 9 5.8C19 16.65 12 21 12 21z"></path></svg></div><div class="brand">LifeLink</div><div class="tag">EVERY SECOND COUNTS</div></div><div class="divider"></div><div class="subtle">THIS CERTIFICATE IS PRESENTED TO</div><div class="title"><div class="a">Certificate of</div><div class="b">Donation</div></div><div class="subtle" style="text-transform:uppercase;letter-spacing:4px">DONOR</div><div class="donorName">${donorName}</div><div class="donorId">ID: ${donorId}</div><div class="bodyText">In recognition of your selfless and generous act of donation, your gift has given someone a second chance at life.</div><div class="divider"></div><div class="three"><div class="col"><div class="label">Organ</div><div class="val">${organOrBlood || ''}</div></div><div class="col"><div class="label">Date</div><div class="val">${dateStr}</div></div><div class="col"><div class="label">Hospital</div><div class="val">${hospitalName || ''}</div></div></div><div class="stamp"><div class="heart">❤</div><div style="font-weight:700;margin-top:6px">LIFELINK</div><div style="font-size:10px">Official</div></div></div></div></body></html>`
 }
 
-export const createCertificateForDonor = async ({ donorId, donorUserId, donorName, organOrBlood, dateOfDonation, hospitalName }) => {
+export const createCertificateForDonor = async ({ donorId, donorUserId, donorName, organOrBlood, dateOfDonation, hospitalName, sourceRequestId = null }) => {
   if (!donorId) return null
+  if (sourceRequestId) {
+    const existing = await Certificate.findOne({ donorId, sourceRequestId }).lean()
+    if (existing) return existing
+  }
   const certNumber = await generateCertificateNumber()
   const html = buildCertificateHTML({ donorName, donorId: `LL-${String(donorId).slice(-6).toUpperCase()}`, organOrBlood, dateOfDonation, hospitalName, certificateNumber: certNumber })
-  const cert = new Certificate({ donorId, donorUserId: donorUserId || null, donorName, organOrBlood, dateOfDonation: dateOfDonation || new Date(), hospitalName, certificateNumber: certNumber, html })
+  const cert = new Certificate({ donorId, donorUserId: donorUserId || null, donorName, organOrBlood, dateOfDonation: dateOfDonation || new Date(), hospitalName, sourceRequestId: sourceRequestId || null, certificateNumber: certNumber, html })
   await cert.save()
   // attach to donor
   try {

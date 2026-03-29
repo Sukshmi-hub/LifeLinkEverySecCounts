@@ -78,9 +78,18 @@ export const DonorProvider = ({ children }) => {
   const mergeCertificates = (existing = [], fallback = []) => {
     const seen = new Set();
     const merged = [];
+    const buildKey = (cert) => {
+      if (!cert) return '';
+      const organ = String(cert.organOrBlood || cert.organType || cert.organ || cert.bloodType || '').trim().toLowerCase();
+      const hospital = String(cert.hospitalName || cert.donorHospitalName || cert.receivingHospitalName || cert.senderHospitalName || '').trim().toLowerCase();
+      const donorName = String(cert.donorName || '').trim().toLowerCase();
+      const date = String(cert.dateOfDonation || cert.createdAt || cert.completedAt || cert.issuedAt || '').trim();
+      const semantic = [donorName, organ, hospital, date].filter(Boolean).join('|');
+      return semantic || String(cert._id || cert.id || cert.certificateNumber || '');
+    };
     const pushUnique = (cert) => {
       if (!cert) return;
-      const key = cert._id || cert.id || cert.certificateNumber || `${cert.organOrBlood || cert.organType || 'cert'}-${cert.dateOfDonation || cert.createdAt || cert.completedAt || ''}`;
+      const key = buildKey(cert);
       if (seen.has(String(key))) return;
       seen.add(String(key));
       merged.push(cert);
@@ -101,15 +110,11 @@ export const DonorProvider = ({ children }) => {
       const json = await resp.json().catch(() => ({}));
       if (resp.ok && Array.isArray(json.data)) {
         const realCertificates = Array.isArray(json.data) ? json.data : [];
-        if (hasRealCertificates(realCertificates)) {
-          setDonationCertificates(mergeCertificates(realCertificates, []));
-        } else {
-          const fallback = buildFallbackCertificates(donationIntents, donorMatches);
-          setDonationCertificates(mergeCertificates(realCertificates, fallback));
-        }
+        const fallback = buildFallbackCertificates(donationIntents, donorMatches);
+        setDonationCertificates(mergeCertificates(realCertificates, fallback));
       }
     } catch (e) {
-      setDonationCertificates(prev => (hasRealCertificates(prev) ? mergeCertificates(prev, []) : mergeCertificates(prev, buildFallbackCertificates(donationIntents, donorMatches))));
+      setDonationCertificates(prev => mergeCertificates(prev, buildFallbackCertificates(donationIntents, donorMatches)));
     }
   };
 

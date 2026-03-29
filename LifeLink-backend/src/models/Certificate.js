@@ -7,6 +7,7 @@ const CertificateSchema = new mongoose.Schema({
   organOrBlood: { type: String, default: '' },
   dateOfDonation: { type: Date },
   hospitalName: { type: String, default: '' },
+  sourceRequestId: { type: mongoose.Schema.Types.ObjectId, ref: 'Request', required: false },
   certificateNumber: { type: String, required: true, unique: true },
   issuedAt: { type: Date, default: () => new Date() },
   // store HTML snapshot for easy download/viewing

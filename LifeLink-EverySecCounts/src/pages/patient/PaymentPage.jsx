@@ -17,6 +17,14 @@ const PaymentPage = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentSummary, setPaymentSummary] = useState(null);
 
+  const hasDetailedSummary = (payment) => {
+    if (!payment) return false;
+    return Number(payment.surgeryFee || payment.transplantFee || payment.hospitalCharges || payment.processingFee || 0) > 0
+      || !!payment.donorName
+      || !!payment.organType
+      || !!payment.hospitalName;
+  };
+
   const refreshPaymentStatus = async () => {
     try {
       if (!user?.id) {
@@ -37,11 +45,22 @@ const PaymentPage = () => {
           return dateB - dateA;
         });
         const latest = sorted[0] || null;
+        const detailed = sorted.find(hasDetailedSummary) || null;
         console.log('Latest Payment Found:', latest);
         if (latest) {
           console.log('Payment Status:', latest.status);
         }
-        setPaymentSummary(latest);
+        if (detailed && latest && detailed !== latest) {
+          setPaymentSummary({
+            ...detailed,
+            status: latest.status || detailed.status,
+            paymentId: latest.paymentId || detailed.paymentId,
+            orderId: latest.orderId || detailed.orderId,
+            createdAt: latest.createdAt || detailed.createdAt,
+          });
+        } else {
+          setPaymentSummary(latest);
+        }
       }
     } catch (e) {
       console.error('Failed to refresh payment status:', e);
@@ -56,7 +75,12 @@ const PaymentPage = () => {
   const matchedRequest = (organRequests || []).find((r) => {
     if (!r) return false;
     const rs = String(r.status || '').toLowerCase();
-    const isMatched = rs.includes('donor') || rs.includes('matched') || rs.includes('accept');
+    const isMatched =
+      rs.includes('donor') ||
+      rs.includes('matched') ||
+      rs.includes('accept') ||
+      rs.includes('verified');
+    const hasOrganInfo = Boolean(r.organType || r.organ || r.organRequired);
 
     const uid = String(user?.id || user?._id || '');
     const uname = String(user?.name || user?.fullName || '');
@@ -73,8 +97,26 @@ const PaymentPage = () => {
       (pemail && uemail && pemail.toLowerCase() === uemail.toLowerCase())
     );
 
-    return isMatched && matchesUser;
+    return isMatched && hasOrganInfo && matchesUser;
   });
+
+  const displayDonorName =
+    paymentSummary?.donorName ||
+    matchedRequest?.patientName ||
+    ((matchedDonor?.name && matchedDonor.name !== 'Anonymous Donor') ? matchedDonor.name : '') ||
+    'Anonymous Donor';
+
+  const displayOrganType =
+    paymentSummary?.organType ||
+    matchedRequest?.organType ||
+    matchedDonor?.organType ||
+    '';
+
+  const displayHospitalName =
+    paymentSummary?.hospitalName ||
+    matchedRequest?.hospitalName ||
+    ((matchedDonor?.hospitalName && matchedDonor.hospitalName !== 'City General Hospital') ? matchedDonor.hospitalName : '') ||
+    'City General Hospital';
 
   const navigate = useNavigate();
 
@@ -126,7 +168,7 @@ const PaymentPage = () => {
                       <div>
                         <p className="text-xs text-muted-foreground">Donor Name</p>
                         <p className="font-medium">
-                          {matchedDonor?.name || paymentSummary?.donorName || matchedRequest?.donorName || (matchedRequest?.patientName || '').trim() || 'Anonymous Donor'}
+                          {displayDonorName}
                         </p>
                       </div>
                     </div>
@@ -134,14 +176,14 @@ const PaymentPage = () => {
                       <Heart className="w-5 h-5 text-muted-foreground" />
                       <div>
                         <p className="text-xs text-muted-foreground">Organ Type</p>
-                        <p className="font-medium">{matchedDonor?.organType || paymentSummary?.organType || matchedRequest?.organType}</p>
+                        <p className="font-medium">{displayOrganType}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg sm:col-span-2">
                       <Building2 className="w-5 h-5 text-muted-foreground" />
                       <div>
                         <p className="text-xs text-muted-foreground">Hospital</p>
-                        <p className="font-medium">{matchedDonor?.hospitalName || paymentSummary?.hospitalName || matchedRequest?.hospitalName || 'City General Hospital'}</p>
+                        <p className="font-medium">{displayHospitalName}</p>
                       </div>
                     </div>
                   </div>

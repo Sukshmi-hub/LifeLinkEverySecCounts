@@ -112,18 +112,10 @@ const DonorDashboard = () => {
       });
   };
 
-  const hasRealCertificates = Array.isArray(donationCertificates) && donationCertificates.some(cert => !cert?.synthetic);
   const displayCertificates = (() => {
-    const merged = hasRealCertificates
-      ? [...(Array.isArray(donationCertificates) ? donationCertificates : [])]
-      : [...(Array.isArray(donationCertificates) ? donationCertificates : []), ...buildSyntheticCertificates()];
-    const seen = new Set();
-    return merged.filter((cert) => {
-      const key = cert?._id || cert?.id || cert?.certificateNumber || `${cert?.organOrBlood || cert?.organType || 'cert'}-${cert?.dateOfDonation || cert?.createdAt || cert?.completedAt || ''}`;
-      if (seen.has(String(key))) return false;
-      seen.add(String(key));
-      return true;
-    });
+    const base = Array.isArray(donationCertificates) ? donationCertificates : [];
+    if (base.length > 0) return base;
+    return buildSyntheticCertificates();
   })();
 
   // Completed donations count should reflect certificates generated

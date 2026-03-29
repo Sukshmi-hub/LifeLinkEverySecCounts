@@ -297,27 +297,24 @@ router.put('/:id/send-matched-details', authenticate, async (req, res) => {
           }
 
           if (donorDoc) {
-            const already = donorDoc.certificateStatus === 'Certificate Issued' || (donorDoc.certificates && donorDoc.certificates.length > 0);
-            if (!already) {
-              const donorName = donorDoc.name || donorDoc.fullName || '';
-              const organOrBlood = reqSnapshot.matchedDonor && (reqSnapshot.matchedDonor.organOffered || reqSnapshot.matchedDonor.organType || reqSnapshot.matchedDonor.organ || reqSnapshot.matchedDonor.bloodType) || reqSnapshot.organType || reqSnapshot.bloodType || '';
-              // Prefer hospital name sent inside matchedDonor snapshot (senderHospitalName / hospitalName),
-              // then fall back to sentFrom/receiving/patient hospital fields or donor.hospital resolution.
-              let hospitalName = (reqSnapshot.matchedDonor && (reqSnapshot.matchedDonor.senderHospitalName || reqSnapshot.matchedDonor.hospitalName)) || reqSnapshot.sentFromHospitalName || reqSnapshot.receivingHospitalName || reqSnapshot.patientHospitalName || '';
-              if (!hospitalName && reqSnapshot.hospitalId) {
-                try {
-                  const hospitalDoc = await Hospital.findById(reqSnapshot.hospitalId).lean();
-                  hospitalName = hospitalDoc?.name || hospitalName;
-                } catch (e) {}
-              }
-              if (!hospitalName && donorDoc.hospital) {
-                try {
-                  const hospitalDoc = await Hospital.findById(donorDoc.hospital).lean();
-                  hospitalName = hospitalDoc?.name || hospitalName;
-                } catch (e) {}
-              }
-              await createCertificateForDonor({ donorId: donorDoc._id, donorUserId: donorDoc.userId || null, donorName, organOrBlood, dateOfDonation: new Date(), hospitalName });
+            const donorName = donorDoc.name || donorDoc.fullName || '';
+            const organOrBlood = reqSnapshot.matchedDonor && (reqSnapshot.matchedDonor.organOffered || reqSnapshot.matchedDonor.organType || reqSnapshot.matchedDonor.organ || reqSnapshot.matchedDonor.bloodType) || reqSnapshot.organType || reqSnapshot.bloodType || '';
+            // Prefer hospital name sent inside matchedDonor snapshot (senderHospitalName / hospitalName),
+            // then fall back to sentFrom/receiving/patient hospital fields or donor.hospital resolution.
+            let hospitalName = (reqSnapshot.matchedDonor && (reqSnapshot.matchedDonor.senderHospitalName || reqSnapshot.matchedDonor.hospitalName)) || reqSnapshot.sentFromHospitalName || reqSnapshot.receivingHospitalName || reqSnapshot.patientHospitalName || '';
+            if (!hospitalName && reqSnapshot.hospitalId) {
+              try {
+                const hospitalDoc = await Hospital.findById(reqSnapshot.hospitalId).lean();
+                hospitalName = hospitalDoc?.name || hospitalName;
+              } catch (e) {}
             }
+            if (!hospitalName && donorDoc.hospital) {
+              try {
+                const hospitalDoc = await Hospital.findById(donorDoc.hospital).lean();
+                hospitalName = hospitalDoc?.name || hospitalName;
+              } catch (e) {}
+            }
+            await createCertificateForDonor({ donorId: donorDoc._id, donorUserId: donorDoc.userId || null, donorName, organOrBlood, dateOfDonation: new Date(), hospitalName, sourceRequestId: reqSnapshot._id || requestId || null });
           }
         }
       } catch (e) {

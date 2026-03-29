@@ -101,27 +101,23 @@ export const createSummary = async (req, res) => {
             try {
               const donorDoc = await Donor.findById(donorId).lean()
               if (donorDoc) {
-                // ensure we only generate once: check donor certificateStatus or existing certificates
-                const already = donorDoc.certificateStatus === 'Certificate Issued' || (donorDoc.certificates && donorDoc.certificates.length > 0)
-                if (!already) {
-                  const donorName = donorDoc.name || donorDoc.fullName || ''
-                    // Prefer the organ donated (organOffered/organType/organ) over blood type when available
-                    const organOrBlood = reqDoc.matchedDonor && (
-                        reqDoc.matchedDonor.organOffered || reqDoc.matchedDonor.organType || reqDoc.matchedDonor.organ || reqDoc.matchedDonor.bloodType
-                      ) || reqDoc.organType || reqDoc.bloodType || ''
-                    // Prefer hospital name from matchedDonor snapshot (senderHospitalName / hospitalName),
-                    // then fall back to receiving/patient or donor.hospital resolution.
-                    let hospitalName = (reqDoc.matchedDonor && (reqDoc.matchedDonor.senderHospitalName || reqDoc.matchedDonor.hospitalName)) || reqDoc.receivingHospitalName || reqDoc.patientHospitalName || ''
-                    if (!hospitalName && donorDoc.hospital) {
-                    try {
-                      const hospitalDoc = await Hospital.findById(donorDoc.hospital).lean()
-                      hospitalName = hospitalDoc?.name || hospitalName
-                    } catch (e) {}
-                  }
-                  const cert = await createCertificateForDonor({ donorId: donorDoc._id, donorUserId: donorDoc.userId || null, donorName, organOrBlood, dateOfDonation: new Date(), hospitalName })
-                  if (cert) {
-                    console.debug('Certificate created for donor', { donorId: donorDoc._id, certId: cert._id })
-                  }
+                const donorName = donorDoc.name || donorDoc.fullName || ''
+                  // Prefer the organ donated (organOffered/organType/organ) over blood type when available
+                  const organOrBlood = reqDoc.matchedDonor && (
+                      reqDoc.matchedDonor.organOffered || reqDoc.matchedDonor.organType || reqDoc.matchedDonor.organ || reqDoc.matchedDonor.bloodType
+                    ) || reqDoc.organType || reqDoc.bloodType || ''
+                  // Prefer hospital name from matchedDonor snapshot (senderHospitalName / hospitalName),
+                  // then fall back to receiving/patient or donor.hospital resolution.
+                  let hospitalName = (reqDoc.matchedDonor && (reqDoc.matchedDonor.senderHospitalName || reqDoc.matchedDonor.hospitalName)) || reqDoc.receivingHospitalName || reqDoc.patientHospitalName || ''
+                  if (!hospitalName && donorDoc.hospital) {
+                  try {
+                    const hospitalDoc = await Hospital.findById(donorDoc.hospital).lean()
+                    hospitalName = hospitalDoc?.name || hospitalName
+                  } catch (e) {}
+                }
+                const cert = await createCertificateForDonor({ donorId: donorDoc._id, donorUserId: donorDoc.userId || null, donorName, organOrBlood, dateOfDonation: new Date(), hospitalName, sourceRequestId: requestId || reqDoc._id || null })
+                if (cert) {
+                  console.debug('Certificate created for donor', { donorId: donorDoc._id, certId: cert._id })
                 }
               }
             } catch (e) {
