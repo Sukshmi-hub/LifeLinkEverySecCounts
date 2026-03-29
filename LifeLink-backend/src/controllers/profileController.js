@@ -23,6 +23,7 @@ export const getProfile = async (req, res) => {
         // Compose frontend-friendly patient profile
         profileData = {
           id: user._id,
+          patientId: String(patient._id),
           fullName: patient.name || '',
           email: user.email || '',
           phone: patient.phone || user.phone || '',
@@ -37,6 +38,9 @@ export const getProfile = async (req, res) => {
           accountId: user._id,
           status: (patient.status || 'Active').charAt(0).toUpperCase() + (patient.status || 'Active').slice(1),
           verified: user.is_verified ? 'Yes' : 'No',
+          hospital: patient.hospital ? (patient.hospital.toObject ? patient.hospital.toObject() : patient.hospital) : null,
+          hospitalName: patient.hospital?.name || patient.hospitalName || '',
+          admittedHospital: patient.hospital?.name || patient.admittedHospital || patient.hospitalName || '',
           // Add more fields as needed for your UI
         }
         break

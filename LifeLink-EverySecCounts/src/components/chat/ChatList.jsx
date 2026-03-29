@@ -1,7 +1,7 @@
 import React from 'react'
 import { useAuth } from '@/context/AuthContext'
 
-export default function ChatList({ rooms = [], activeRoomId, onSelect, messages = [] }) {
+export default function ChatList({ rooms = [], activeRoomId, onSelect, messages = [], heading = 'Active Chats' }) {
   const { user } = useAuth() || {}
 
   const getMyId = () => String(user?.id || user?._id || '')
@@ -19,8 +19,8 @@ export default function ChatList({ rooms = [], activeRoomId, onSelect, messages 
     }
   }
   return (
-    <div className="w-64 border-r p-4 overflow-auto h-full">
-      <h4 className="font-semibold mb-2">Active Chats</h4>
+    <div className="w-64 border-r p-4 overflow-auto">
+      <h4 className="text-xl font-semibold mb-2">{heading}</h4>
       {rooms.length === 0 && <div className="text-sm text-muted-foreground">No conversations</div>}
       <ul>
         {(() => {

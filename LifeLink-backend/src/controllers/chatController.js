@@ -46,12 +46,35 @@ export const getRoomsForUser = async (req, res) => {
       const patient = await Patient.findOne({ userId: userId })
       if (patient) {
         const pid = String(patient._id)
-        if (patient.hospital) addRoom(`room_hospital_${String(patient.hospital)}_patient_${pid}`)
+        let primaryHospitalId = patient.hospital ? String(patient.hospital) : null
+        try {
+          if (!primaryHospitalId && (patient.hospitalName || patient.admittedHospital)) {
+            const primaryHospitalDoc = await Hospital.findOne({
+              $or: [
+                { name: patient.hospitalName },
+                { name: patient.admittedHospital },
+                { organizationName: patient.hospitalName },
+                { organizationName: patient.admittedHospital }
+              ]
+            }).lean()
+            if (primaryHospitalDoc && primaryHospitalDoc._id) {
+              primaryHospitalId = String(primaryHospitalDoc._id)
+            }
+          }
+        } catch (e) {}
 
-        // Requests by patient -> include rooms where messages may be/ngo related
-        const requests = await (await import('../models/Request.js')).default.find({ patientId: patient._id })
+        if (primaryHospitalId) addRoom(`room_hospital_${primaryHospitalId}_patient_${pid}`)
+
+        // Requests by patient -> include all hospital and NGO threads tied to the patient's requests
+        const RequestModel = (await import('../models/Request.js')).default
+        const requests = await RequestModel.find({ patientId: patient._id }).lean()
         for (const r of requests) {
-          if (r.hospitalId) addRoom(`room_hospital_${String(r.hospitalId)}_patient_${pid}`)
+          if (r.requestType === 'organ_request' && r.hospitalId) {
+            addRoom(`room_hospital_${String(r.hospitalId)}_patient_${pid}`)
+          }
+          if (r.requestType === 'fund_request' && r.ngoId) {
+            addRoom(`room_ngo_${String(r.ngoId)}_patient_${pid}`)
+          }
           if (r.donorId) addRoom(`room_donor_${String(r.donorId)}_patient_${pid}_hospital_${String(r.hospitalId || '')}`)
         }
 
@@ -126,7 +149,7 @@ export const getRoomsForUser = async (req, res) => {
       let title = rid
       let subtitle = ''
 
-      try {
+        try {
         if (rid.startsWith('room_hospital_') && rid.includes('_patient_')) {
           const parts = rid.split('_')
           const hIndex = parts.indexOf('hospital')
@@ -137,6 +160,11 @@ export const getRoomsForUser = async (req, res) => {
           const pat = await Patient.findById(pid).lean()
           title = hosp ? hosp.name : `Hospital ${hid}`
           subtitle = pat ? (pat.name || pat.fullName || 'Patient') : `Patient ${pid}`
+          if (pat && (String(pat.hospital || '') === String(hid) || String(hid) === String(pat.hospital || ''))) {
+            subtitle = 'Primary Hospital'
+          } else if (r.lastMessage && /organ request/i.test(String(r.lastMessage.content || ''))) {
+            subtitle = 'Recent Request Hospital'
+          }
         } else if (rid.startsWith('room_hospital_') && rid.includes('_donor_')) {
           const parts = rid.split('_')
           const hIndex = parts.indexOf('hospital')
