@@ -264,7 +264,9 @@ router.put('/:id/send-matched-details', authenticate, async (req, res) => {
             if (!already) {
               const donorName = donorDoc.name || donorDoc.fullName || '';
               const organOrBlood = reqSnapshot.matchedDonor && (reqSnapshot.matchedDonor.organOffered || reqSnapshot.matchedDonor.organType || reqSnapshot.matchedDonor.organ || reqSnapshot.matchedDonor.bloodType) || reqSnapshot.organType || reqSnapshot.bloodType || '';
-              let hospitalName = reqSnapshot.receivingHospitalName || reqSnapshot.patientHospitalName || reqSnapshot.sentFromHospitalName || '';
+              // Prefer hospital name sent inside matchedDonor snapshot (senderHospitalName / hospitalName),
+              // then fall back to sentFrom/receiving/patient hospital fields or donor.hospital resolution.
+              let hospitalName = (reqSnapshot.matchedDonor && (reqSnapshot.matchedDonor.senderHospitalName || reqSnapshot.matchedDonor.hospitalName)) || reqSnapshot.sentFromHospitalName || reqSnapshot.receivingHospitalName || reqSnapshot.patientHospitalName || '';
               if (!hospitalName && reqSnapshot.hospitalId) {
                 try {
                   const hospitalDoc = await Hospital.findById(reqSnapshot.hospitalId).lean();

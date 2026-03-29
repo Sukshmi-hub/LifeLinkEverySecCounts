@@ -52,7 +52,7 @@ const run = async () => {
 
         const donorName = donorDoc.name || donorDoc.fullName || ''
         const organOrBlood = r.matchedDonor && (r.matchedDonor.organOffered || r.matchedDonor.organType || r.matchedDonor.organ || r.matchedDonor.bloodType) || r.organType || r.bloodType || ''
-        const hospitalName = r.receivingHospitalName || r.patientHospitalName || r.sentFromHospitalName || ''
+        const hospitalName = (r.matchedDonor && (r.matchedDonor.senderHospitalName || r.matchedDonor.hospitalName)) || r.sentFromHospitalName || r.receivingHospitalName || r.patientHospitalName || ''
 
         const cert = await createCertificateForDonor({ donorId: donorDoc._id, donorUserId: donorDoc.userId || null, donorName, organOrBlood, dateOfDonation: new Date(), hospitalName })
         if (cert) {

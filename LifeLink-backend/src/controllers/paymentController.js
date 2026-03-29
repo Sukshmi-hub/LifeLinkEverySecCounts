@@ -107,10 +107,12 @@ export const createSummary = async (req, res) => {
                   const donorName = donorDoc.name || donorDoc.fullName || ''
                     // Prefer the organ donated (organOffered/organType/organ) over blood type when available
                     const organOrBlood = reqDoc.matchedDonor && (
-                      reqDoc.matchedDonor.organOffered || reqDoc.matchedDonor.organType || reqDoc.matchedDonor.organ || reqDoc.matchedDonor.bloodType
-                    ) || reqDoc.organType || reqDoc.bloodType || ''
-                  let hospitalName = reqDoc.receivingHospitalName || reqDoc.patientHospitalName || ''
-                  if (!hospitalName && donorDoc.hospital) {
+                        reqDoc.matchedDonor.organOffered || reqDoc.matchedDonor.organType || reqDoc.matchedDonor.organ || reqDoc.matchedDonor.bloodType
+                      ) || reqDoc.organType || reqDoc.bloodType || ''
+                    // Prefer hospital name from matchedDonor snapshot (senderHospitalName / hospitalName),
+                    // then fall back to receiving/patient or donor.hospital resolution.
+                    let hospitalName = (reqDoc.matchedDonor && (reqDoc.matchedDonor.senderHospitalName || reqDoc.matchedDonor.hospitalName)) || reqDoc.receivingHospitalName || reqDoc.patientHospitalName || ''
+                    if (!hospitalName && donorDoc.hospital) {
                     try {
                       const hospitalDoc = await Hospital.findById(donorDoc.hospital).lean()
                       hospitalName = hospitalDoc?.name || hospitalName
