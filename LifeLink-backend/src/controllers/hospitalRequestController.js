@@ -47,10 +47,27 @@ export const getPatientOrganRequests = async (req, res) => {
 
     const hospital = await Hospital.findOne({ userId: req.user._id });
     if (!hospital) return res.status(404).json({ success: false, message: 'Hospital not found for user' });
+    const hospitalIdStr = String(hospital._id);
 
-    let requests = await Request.find({ requestType: 'organ_request', hospitalId: hospital._id })
+    let requests = await Request.find({
+      requestType: 'organ_request',
+      $or: [
+        { hospitalId: hospital._id },
+        { sentFromHospitalId: hospital._id },
+      ],
+    })
       .populate('patientId', 'name email age blood_type aadhaar_no location userId')
       .sort({ createdAt: -1 });
+
+    // Keep matched requests visible only to the hospital that originated the match.
+    requests = requests.filter((request) => {
+      const targetHospitalId = String(request.hospitalId || '');
+      const sourceHospitalId = String(request.sentFromHospitalId || '');
+      if (request.detailsSentToPatientHospital) {
+        return sourceHospitalId === hospitalIdStr || (!sourceHospitalId && targetHospitalId === hospitalIdStr);
+      }
+      return targetHospitalId === hospitalIdStr || sourceHospitalId === hospitalIdStr;
+    });
 
     // Sort by urgency: critical, high, medium, low
     const priority = { critical: 0, high: 1, medium: 2, low: 3 };
