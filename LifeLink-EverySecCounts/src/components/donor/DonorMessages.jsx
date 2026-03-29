@@ -22,6 +22,7 @@ function ChatSystem({ className = "" }) {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [acceptedHospitalIds, setAcceptedHospitalIds] = useState([]);
 
   const messagesEndRef = useRef(null);
 
@@ -30,49 +31,65 @@ function ChatSystem({ className = "" }) {
     (async () => {
       try {
         const token = localStorage.getItem('token')
-        const res = await fetch('/api/chat/rooms', { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+        const profileRes = await fetch(`${serverUrl}/api/profile`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+        let acceptedIds = []
+        if (profileRes.ok) {
+          const profileJson = await profileRes.json()
+          const intents = Array.isArray(profileJson?.data?.user?.donationIntents) ? profileJson.data.user.donationIntents : []
+          acceptedIds = intents
+            .filter((intent) => {
+              const status = String(intent?.status || '').toLowerCase()
+              return status === 'approved' || status === 'donor matched' || status === 'completed'
+            })
+            .map((intent) => String(intent?.donorHospitalId || intent?.hospitalId || intent?.hospital || ''))
+            .filter(Boolean)
+          setAcceptedHospitalIds(acceptedIds)
+        }
+
+        const res = await fetch(`${serverUrl}/api/chat/rooms`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
         if (!res.ok) return
         const json = await res.json()
-          if (json && json.success && Array.isArray(json.data)) {
-            // transform rooms into contact list used by the UI
-            // Deduplicate by stable id parsed from roomId (prefer donor > patient > hospital)
-            const map = new Map()
-            for (const r of json.data) {
-              let key = null
-              try {
-                const rid = String(r.roomId || '')
-                const donorMatch = rid.match(/(?:_|^)donor_([0-9a-fA-F]{6,24})(?:_|$)/)
-                const patientMatch = rid.match(/(?:_|^)patient_([0-9a-fA-F]{6,24})(?:_|$)/)
-                const hospitalMatch = rid.match(/(?:_|^)hospital_([0-9a-fA-F]{6,24})(?:_|$)/)
-                if (donorMatch) key = `donor:${donorMatch[1]}`
-                else if (patientMatch) key = `patient:${patientMatch[1]}`
-                else if (hospitalMatch) key = `hospital:${hospitalMatch[1]}`
-              } catch (e) {}
-
-              const display = (r.title || r.subtitle || r.roomId || '').toString()
-              const lastMsg = r.lastMessage && (r.lastMessage.content || r.lastMessage.message) ? (r.lastMessage.content || r.lastMessage.message) : ''
-              const lastTs = r.lastMessage && (r.lastMessage.timestamp || r.lastMessage.createdAt) ? new Date(r.lastMessage.timestamp || r.lastMessage.createdAt).getTime() : 0
-              const unread = r.unreadCount || 0
-
-              const mapKey = key || display.trim().toLowerCase() || r.roomId
-              if (!map.has(mapKey)) {
-                map.set(mapKey, { id: r.roomId, name: display, lastMessage: lastMsg, lastTs, unread, subtitle: r.subtitle || '' })
-              } else {
-                const existing = map.get(mapKey)
-                // prefer the room with newer last message
-                if ((lastTs || 0) > (existing.lastTs || 0)) {
-                  map.set(mapKey, { id: r.roomId, name: display, lastMessage: lastMsg, lastTs, unread: (existing.unread || 0) + unread, subtitle: r.subtitle || '' })
-                } else {
-                  existing.unread = (existing.unread || 0) + unread
-                  map.set(mapKey, existing)
-                }
-              }
+        if (json && json.success && Array.isArray(json.data)) {
+          // transform rooms into contact list used by the UI
+          // Only show hospital chats that correspond to accepted donation intents
+          const acceptedSet = new Set(acceptedIds)
+          const map = new Map()
+          for (const r of json.data) {
+            const rid = String(r.roomId || '')
+            if (!rid.includes('_donor_')) continue
+            if (acceptedSet.size > 0) {
+              const matchesAcceptedHospital = acceptedIds.some((hid) => hid && rid.includes(`hospital_${hid}_donor_`))
+              if (!matchesAcceptedHospital) continue
             }
 
-            const contacts = Array.from(map.values()).map(c => ({ id: c.id, name: c.name, lastMessage: c.lastMessage, unread: c.unread, subtitle: c.subtitle }))
-            // sort by recency
-            contacts.sort((a, b) => (b.lastMessage && a.lastMessage) ? 0 : 0)
-            setContacts(contacts)
+            let key = null
+            try {
+              const hospitalMatch = rid.match(/(?:_|^)hospital_([0-9a-fA-F]{6,24})(?:_|$)/)
+              if (hospitalMatch) key = `hospital:${hospitalMatch[1]}`
+            } catch (e) {}
+
+            const display = (r.title || r.subtitle || r.roomId || '').toString()
+            const lastMsg = r.lastMessage && (r.lastMessage.content || r.lastMessage.message) ? (r.lastMessage.content || r.lastMessage.message) : ''
+            const lastTs = r.lastMessage && (r.lastMessage.timestamp || r.lastMessage.createdAt) ? new Date(r.lastMessage.timestamp || r.lastMessage.createdAt).getTime() : 0
+            const unread = r.unreadCount || 0
+
+            const mapKey = key || display.trim().toLowerCase() || r.roomId
+            if (!map.has(mapKey)) {
+              map.set(mapKey, { id: r.roomId, name: display, lastMessage: lastMsg, lastTs, unread, subtitle: r.subtitle || '' })
+            } else {
+              const existing = map.get(mapKey)
+              if ((lastTs || 0) > (existing.lastTs || 0)) {
+                map.set(mapKey, { id: r.roomId, name: display, lastMessage: lastMsg, lastTs, unread: (existing.unread || 0) + unread, subtitle: r.subtitle || '' })
+              } else {
+                existing.unread = (existing.unread || 0) + unread
+                map.set(mapKey, existing)
+              }
+            }
+          }
+
+          const contacts = Array.from(map.values()).map(c => ({ id: c.id, name: c.name, lastMessage: c.lastMessage, unread: c.unread, subtitle: c.subtitle }))
+          contacts.sort((a, b) => (b.lastMessage && a.lastMessage) ? 0 : 0)
+          setContacts(contacts)
         }
       } catch (e) {
         console.error('Failed to fetch chat rooms for donor', e)
