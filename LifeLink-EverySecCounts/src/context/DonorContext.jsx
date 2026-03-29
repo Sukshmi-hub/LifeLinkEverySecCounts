@@ -89,6 +89,8 @@ export const DonorProvider = ({ children }) => {
     return merged;
   };
 
+  const hasRealCertificates = (certs = []) => Array.isArray(certs) && certs.some(cert => !cert?.synthetic);
+
   const refreshDonationCertificates = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -98,11 +100,16 @@ export const DonorProvider = ({ children }) => {
       });
       const json = await resp.json().catch(() => ({}));
       if (resp.ok && Array.isArray(json.data)) {
-        const fallback = buildFallbackCertificates(donationIntents, donorMatches);
-        setDonationCertificates(mergeCertificates(json.data || [], fallback));
+        const realCertificates = Array.isArray(json.data) ? json.data : [];
+        if (hasRealCertificates(realCertificates)) {
+          setDonationCertificates(mergeCertificates(realCertificates, []));
+        } else {
+          const fallback = buildFallbackCertificates(donationIntents, donorMatches);
+          setDonationCertificates(mergeCertificates(realCertificates, fallback));
+        }
       }
     } catch (e) {
-      setDonationCertificates(prev => mergeCertificates(prev, buildFallbackCertificates(donationIntents, donorMatches)));
+      setDonationCertificates(prev => (hasRealCertificates(prev) ? mergeCertificates(prev, []) : mergeCertificates(prev, buildFallbackCertificates(donationIntents, donorMatches))));
     }
   };
 
@@ -196,7 +203,7 @@ export const DonorProvider = ({ children }) => {
     if (role !== 'donor') return;
     const fallback = buildFallbackCertificates(donationIntents, donorMatches);
     if (fallback.length > 0) {
-      setDonationCertificates(prev => mergeCertificates(prev, fallback));
+      setDonationCertificates(prev => (hasRealCertificates(prev) ? prev : mergeCertificates(prev, fallback)));
     }
   }, [user, donationIntents, donorMatches]);
 

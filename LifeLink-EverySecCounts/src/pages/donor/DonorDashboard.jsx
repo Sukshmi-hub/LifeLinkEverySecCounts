@@ -112,8 +112,11 @@ const DonorDashboard = () => {
       });
   };
 
+  const hasRealCertificates = Array.isArray(donationCertificates) && donationCertificates.some(cert => !cert?.synthetic);
   const displayCertificates = (() => {
-    const merged = [...(Array.isArray(donationCertificates) ? donationCertificates : []), ...buildSyntheticCertificates()];
+    const merged = hasRealCertificates
+      ? [...(Array.isArray(donationCertificates) ? donationCertificates : [])]
+      : [...(Array.isArray(donationCertificates) ? donationCertificates : []), ...buildSyntheticCertificates()];
     const seen = new Set();
     return merged.filter((cert) => {
       const key = cert?._id || cert?.id || cert?.certificateNumber || `${cert?.organOrBlood || cert?.organType || 'cert'}-${cert?.dateOfDonation || cert?.createdAt || cert?.completedAt || ''}`;

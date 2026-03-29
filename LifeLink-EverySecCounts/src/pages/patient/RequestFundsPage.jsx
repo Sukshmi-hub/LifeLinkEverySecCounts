@@ -36,8 +36,23 @@ const RequestFundsPage = () => {
   const safeFundRequests = Array.isArray(fundRequests) ? fundRequests : [];
   const patientFundRequests = safeFundRequests.filter(r => r && (r.patientId === user?.id || r.patientName === user?.name));
 
-  const getStatusIcon = (status) => {
+  const isPaymentDone = (request) => Boolean(request?.paymentReceived) || String(request?.paymentStatus || '').toLowerCase() === 'success';
+  const getDisplayStatus = (request) => {
+    if (isPaymentDone(request)) return 'paymentDone';
+    return request?.status || 'Pending';
+  };
+
+  const getStatusIcon = (request) => {
+    const status = getDisplayStatus(request);
     switch (status) {
+      case 'paymentDone':
+        return (
+          <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center">
+            <div className="w-6 h-6 rounded-full bg-success/20 flex items-center justify-center border-2 border-success">
+              <Check className="w-4 h-4 text-success" />
+            </div>
+          </div>
+        );
       case 'Approved':
         return <CheckCircle className="w-5 h-5 text-success" />;
       case 'SentToHospital':
@@ -55,8 +70,11 @@ const RequestFundsPage = () => {
     }
   };
 
-  const getStatusColor = (status) => {
+  const getStatusColor = (request) => {
+    const status = getDisplayStatus(request);
     switch (status) {
+      case 'paymentDone':
+        return 'bg-success/20 text-success';
       case 'Approved':
         return 'bg-success/20 text-success';
       case 'SentToHospital':
@@ -83,12 +101,6 @@ const RequestFundsPage = () => {
         </header>
 
         <div className="p-6">
-          {/* New Request Button */}
-          <Button onClick={() => setShowFundModal(true)} className="mb-6">
-            <Plus className="w-4 h-4 mr-2" />
-            Request Funds
-          </Button>
-
           {/* Stats */}
           <div className="grid gap-4 sm:grid-cols-3 mb-8">
             <Card>
@@ -111,7 +123,7 @@ const RequestFundsPage = () => {
                 </div>
                 <div>
                   <p className="text-2xl font-bold">
-                    {patientFundRequests.filter(r => r.status === 'Pending').length}
+                    {patientFundRequests.filter(r => !isPaymentDone(r)).length}
                   </p>
                   <p className="text-muted-foreground text-sm">Pending</p>
                 </div>
@@ -124,7 +136,7 @@ const RequestFundsPage = () => {
                 </div>
                 <div>
                   <p className="text-2xl font-bold">
-                    ₹{patientFundRequests.filter(r => r.status === 'Approved').reduce((sum, r) => sum + (Number(r?.amount) || 0), 0).toLocaleString()}
+                    {patientFundRequests.filter(r => isPaymentDone(r)).length}
                   </p>
                   <p className="text-muted-foreground text-sm">Approved</p>
                 </div>
@@ -161,7 +173,7 @@ const RequestFundsPage = () => {
                         className="flex items-center justify-between p-4 bg-muted/30 rounded-lg"
                       >
                         <div className="flex items-center gap-4">
-                          {getStatusIcon(request.status)}
+                          {getStatusIcon(request)}
                           <div>
                             <h4 className="font-medium">₹{amountDisplay.toLocaleString()}</h4>
                             <p className="text-sm text-muted-foreground">
@@ -173,8 +185,8 @@ const RequestFundsPage = () => {
                           </div>
                         </div>
                         <div className="text-right">
-                          <span className={cn("px-3 py-1 rounded-full text-xs font-medium", getStatusColor(request.status))}>
-                            {request.status}
+                          <span className={cn("px-3 py-1 rounded-full text-xs font-medium", getStatusColor(request))}>
+                            {getDisplayStatus(request)}
                           </span>
                           <p className="text-xs text-muted-foreground mt-2">
                             {formatDistanceToNow(createdAt, { addSuffix: true })}
