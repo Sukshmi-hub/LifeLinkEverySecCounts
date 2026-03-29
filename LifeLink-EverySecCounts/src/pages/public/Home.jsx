@@ -195,7 +195,7 @@ const Home = () => {
               <span className="text-lg font-bold text-foreground">LifeLink</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              © 2024 LifeLink. Every Second Counts. Made with ❤️ for humanity.
+              © LifeLink. Every Second Counts. Made with ❤️ for humanity.
             </p>
             <div className="flex gap-4">
               <Link to="/about" className="text-sm text-muted-foreground hover:text-primary">

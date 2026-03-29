@@ -166,7 +166,7 @@ const PaymentPage = () => {
                     <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg">
                       <User className="w-5 h-5 text-muted-foreground" />
                       <div>
-                        <p className="text-xs text-muted-foreground">Donor Name</p>
+                        <p className="text-xs text-muted-foreground">Patient Name</p>
                         <p className="font-medium">
                           {displayDonorName}
                         </p>
