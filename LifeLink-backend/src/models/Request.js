@@ -106,7 +106,8 @@ RequestSchema.add({
   receivingHospitalName: { type: String, default: '' },
   receivingHospitalId: { type: Schema.Types.ObjectId, ref: 'Hospital', default: null },
   sentFromHospitalName: { type: String, default: '' },
-  sentFromHospitalId: { type: Schema.Types.ObjectId, ref: 'Hospital', default: null }
+  sentFromHospitalId: { type: Schema.Types.ObjectId, ref: 'Hospital', default: null },
+  inventoryAdjustedAt: { type: Date, default: null }
 });
 
 export default mongoose.models.Request || mongoose.model('Request', RequestSchema);

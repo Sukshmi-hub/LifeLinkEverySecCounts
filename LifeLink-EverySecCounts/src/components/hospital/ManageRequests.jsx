@@ -958,9 +958,9 @@ const ManageRequests = () => {
             <div className="p-3 bg-muted/30 rounded">
               <p className="text-xs text-muted-foreground">Select Donor</p>
               <div className="mt-2 space-y-2 max-h-64 overflow-auto">
-                {donorRequests.filter(d => d.status !== 'Donor Matched').length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No donor registrations available</p>
-                ) : donorRequests.filter(d => d.status !== 'Donor Matched').map(d => (
+                {donorRequests.filter(d => String(d.status || '').toLowerCase() === 'approved').length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No approved donor registrations available</p>
+                ) : donorRequests.filter(d => String(d.status || '').toLowerCase() === 'approved').map(d => (
                   <div key={d.id} className={cn('p-2 rounded border', selectedDonorForMatch && selectedDonorForMatch.id === d.id ? 'border-primary bg-primary/10' : 'border-border')}>
                     <div className="flex items-start justify-between gap-2">
                       <div>

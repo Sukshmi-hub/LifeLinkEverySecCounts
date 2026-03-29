@@ -220,6 +220,43 @@ router.put('/:id/send-matched-details', authenticate, async (req, res) => {
     } catch (e) {}
     await reqDoc.save()
 
+    // When the matched donor details are sent to the patient's hospital, consume
+    // one unit from the sending hospital's inventory exactly once.
+    try {
+      if (!reqDoc.inventoryAdjustedAt) {
+        const Inventory = (await import('../models/Inventory.js')).default
+        const organLabel = String(
+          (reqDoc.matchedDonor && (
+            reqDoc.matchedDonor.organOffered ||
+            reqDoc.matchedDonor.organType ||
+            reqDoc.matchedDonor.organ ||
+            reqDoc.matchedDonor.bloodType
+          )) || reqDoc.organType || reqDoc.bloodType || ''
+        ).trim()
+
+        if (organLabel) {
+          const isBlood = Boolean(reqDoc.bloodType) && !reqDoc.organType && !(reqDoc.matchedDonor && (reqDoc.matchedDonor.organOffered || reqDoc.matchedDonor.organType || reqDoc.matchedDonor.organ))
+          const query = { hospitalId: hospital._id, itemType: isBlood ? 'blood' : 'organ' }
+          if (isBlood) {
+            query.bloodType = organLabel.toUpperCase()
+          } else {
+            query.organType = organLabel.toUpperCase()
+          }
+
+          const inventoryItem = await Inventory.findOne(query)
+          if (inventoryItem) {
+            inventoryItem.count = Math.max(0, Number(inventoryItem.count || 0) - 1)
+            await inventoryItem.save()
+          }
+        }
+
+        reqDoc.inventoryAdjustedAt = new Date()
+        await reqDoc.save()
+      }
+    } catch (invErr) {
+      console.error('Failed to reduce inventory after sending matched details:', invErr)
+    }
+
       // Attempt to generate donation certificate for matched donor (best-effort, only once)
       try {
         const reqSnapshot = await Request.findById(reqDoc._id).lean();
