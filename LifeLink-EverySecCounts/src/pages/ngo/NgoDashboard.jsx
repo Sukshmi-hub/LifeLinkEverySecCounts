@@ -21,7 +21,28 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const displayRequestStatus = (status) => (String(status || '') === 'VerifiedByHospital' ? 'SentToHospital' : status);
+const isPaymentDone = (request) => Boolean(request?.paymentReceived) || String(request?.paymentStatus || '').toLowerCase() === 'success';
+
+const getRequestBadgeMeta = (request) => {
+  if (isPaymentDone(request)) {
+    return { label: 'Payment Done', className: 'bg-success/20 text-success' };
+  }
+
+  const status = String(request?.status || '');
+  if (status === 'VerifiedByHospital') {
+    return { label: 'verifiedByHospital', className: 'bg-yellow-100 text-yellow-700' };
+  }
+  if (status === 'SentToHospital') {
+    return { label: 'SentToHospital', className: 'bg-amber-100 text-amber-700' };
+  }
+  if (status === 'Approved') {
+    return { label: 'Approved', className: 'bg-success/20 text-success' };
+  }
+  if (status === 'Rejected' || status === 'Dennied') {
+    return { label: status, className: 'bg-destructive/20 text-destructive' };
+  }
+  return { label: status || 'Pending', className: 'bg-warning/20 text-warning-foreground' };
+};
 
 const NgoDashboard = () => {
   const { user } = useAuth();
@@ -33,7 +54,7 @@ const NgoDashboard = () => {
 
   // Calculate stats
   const totalRequests = fundRequests.length;
-  const paymentCompleted = (r) => Boolean(r.paymentReceived) || String(r.paymentStatus || '').toLowerCase() === 'success' || String(r.status) === 'SentToHospital';
+  const paymentCompleted = (r) => isPaymentDone(r);
   const completedRequests = fundRequests.filter(paymentCompleted);
   const pendingRequests = fundRequests.filter(r => !paymentCompleted(r)).length;
   // Approved Supports: total number of donations done
@@ -135,7 +156,9 @@ const NgoDashboard = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              {fundRequests.map((request) => (
+              {fundRequests.map((request) => {
+                const badge = getRequestBadgeMeta(request);
+                return (
                 <div
                   key={request.id}
                   className="flex items-center justify-between p-4 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
@@ -143,16 +166,8 @@ const NgoDashboard = () => {
                   <div className="flex-1">
                     <div className="flex items-center gap-3">
                       <h4 className="font-semibold">{request.patientName}</h4>
-                      <Badge
-                        className={cn(
-                          "text-xs",
-                          request.status === 'Approved' ? 'bg-success/20 text-success' :
-                          request.status === 'SentToHospital' ? 'bg-success/10 text-success' :
-                          (request.status === 'Rejected' || request.status === 'Dennied') ? 'bg-destructive/20 text-destructive' :
-                          'bg-warning/20 text-warning-foreground'
-                        )}
-                      >
-                        {displayRequestStatus(request.status)}
+                      <Badge className={cn("text-xs", badge.className)}>
+                        {badge.label}
                       </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">
@@ -172,7 +187,7 @@ const NgoDashboard = () => {
                     View Details
                   </Button>
                 </div>
-              ))}
+              )})}
             </div>
           )}
         </CardContent>
@@ -235,22 +250,17 @@ const NgoDashboard = () => {
         </Card>
       ) : (
         <div className="space-y-4">
-          {fundRequests.map((request) => (
+          {fundRequests.map((request) => {
+            const badge = getRequestBadgeMeta(request);
+            return (
             <Card key={request.id} className="hover:shadow-md transition-shadow">
               <CardContent className="p-6">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
                       <h3 className="font-semibold text-lg">{request.patientName}</h3>
-                      <Badge
-                        className={cn(
-                          request.status === 'Approved' ? 'bg-success/20 text-success' :
-                          request.status === 'SentToHospital' ? 'bg-success/10 text-success' :
-                          (request.status === 'Rejected' || request.status === 'Dennied') ? 'bg-destructive/20 text-destructive' :
-                          'bg-warning/20 text-warning-foreground'
-                        )}
-                      >
-                        {displayRequestStatus(request.status)}
+                      <Badge className={cn(badge.className)}>
+                        {badge.label}
                       </Badge>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
@@ -327,7 +337,7 @@ const NgoDashboard = () => {
                 </div>
               </CardContent>
             </Card>
-          ))}
+          )})}
         </div>
       )}
     </div>
@@ -378,6 +388,17 @@ const NgoDashboard = () => {
               paymentStatus: 'success',
               status: 'VerifiedByHospital',
             } : prev)
+            setFundRequests(prev => prev.map(r => (
+              String(r.id) === String(selectedRequest?.id || '')
+                ? {
+                    ...r,
+                    paymentSent: true,
+                    paymentReceived: true,
+                    paymentStatus: 'success',
+                    status: 'VerifiedByHospital',
+                  }
+                : r
+            )))
             if (user?.id) {
               loadNgoFundRequests(user.id)
             }

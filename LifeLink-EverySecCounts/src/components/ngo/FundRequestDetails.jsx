@@ -298,7 +298,7 @@ const FundRequestDetails = ({
     return extractId(candidate) || extractId(request.hospitalId) || null;
   }, [fetchedHospital, request]);
   const paymentCompleted = Boolean(request.paymentReceived) || String(request.paymentStatus || '').toLowerCase() === 'success';
-  const displayStatus = String(request.status || '') === 'VerifiedByHospital' ? 'SentToHospital' : request.status;
+  const displayStatus = request.status;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
