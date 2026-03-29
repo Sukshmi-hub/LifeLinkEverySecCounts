@@ -23,7 +23,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { CheckCircle, Loader2, Upload, FileText, Image as ImageIcon, CreditCard, X } from 'lucide-react';
 import { toast } from 'sonner';
 
-const organTypes = ['Kidney', 'Liver', 'Heart', 'Lung', 'Pancreas', 'Cornea', 'Bone Marrow', 'Other'];
+const organTypes = ['Kidney', 'Liver', 'Heart', 'Lung', 'Pancreas', 'Cornea', 'Bone Marrow', 'Blood'];
 const urgencyLevels = ['Low', 'Medium', 'High'];
 
 const OrganRequestModal = ({ isOpen, onClose }) => {

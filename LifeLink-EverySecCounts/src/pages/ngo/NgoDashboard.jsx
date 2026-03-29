@@ -388,17 +388,6 @@ const NgoDashboard = () => {
               paymentStatus: 'success',
               status: 'VerifiedByHospital',
             } : prev)
-            setFundRequests(prev => prev.map(r => (
-              String(r.id) === String(selectedRequest?.id || '')
-                ? {
-                    ...r,
-                    paymentSent: true,
-                    paymentReceived: true,
-                    paymentStatus: 'success',
-                    status: 'VerifiedByHospital',
-                  }
-                : r
-            )))
             if (user?.id) {
               loadNgoFundRequests(user.id)
             }
