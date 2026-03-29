@@ -51,7 +51,7 @@ const DonorDashboard = () => {
   const handleViewCertificate = (match) => {
     setSelectedCertificate({
       organType: match.organType,
-      hospitalName: match.hospitalName,
+      hospitalName: getCertificateHospital(match),
       patientName: match.patientName,
       date: match.matchDate,
     });
@@ -80,43 +80,20 @@ const DonorDashboard = () => {
     return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString();
   };
 
-  const buildSyntheticCertificates = () => {
-    const sources = [...(Array.isArray(donorMatches) ? donorMatches : []), ...(Array.isArray(donationIntents) ? donationIntents : [])];
-    return sources
-      .filter((item) => {
-        const status = String(item?.status || '').toLowerCase();
-        return status.includes('matched') || status.includes('completed') || status.includes('certificate');
-      })
-      .map((item, index) => {
-        const rawDate = item.completedAt || item.matchDate || item.createdAt || new Date();
-        const certDate = new Date(rawDate);
-        const safeDate = Number.isNaN(certDate.getTime()) ? new Date() : certDate;
-        const organOrBlood = item.organType || item.organ || item.organOrBlood || item.bloodType || 'Organ';
-        const certId = item.certificateNumber || item._id || item.id || `SYN-${index + 1}`;
-        return {
-          _id: String(certId),
-          id: String(certId),
-          certificateNumber: String(certId),
-          donorName: donorProfile?.fullName || item.donorName || user?.name || 'Anonymous Donor',
-          organOrBlood,
-          organType: organOrBlood,
-          dateOfDonation: safeDate.toISOString(),
-          issuedAt: safeDate.toISOString(),
-          createdAt: safeDate.toISOString(),
-          completedAt: safeDate.toISOString(),
-          donorHospitalName: item.donorHospitalName || item.hospitalName || item.receivingHospitalName || item.senderHospitalName || 'City General Hospital',
-          hospitalName: item.donorHospitalName || item.hospitalName || item.receivingHospitalName || item.senderHospitalName || 'City General Hospital',
-          patientName: item.patientName || item.recipientName || 'Recipient',
-          synthetic: true,
-        };
-      });
+  const getCertificateHospital = (certificate) => {
+    const candidates = [
+      certificate?.donorHospitalName,
+      certificate?.hospitalName,
+      certificate?.receivingHospitalName,
+      certificate?.senderHospitalName,
+      certificate?.patientHospitalName,
+    ]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean);
+    return candidates.find((value) => value.toLowerCase() !== 'city general hospital') || candidates[0] || 'City General Hospital';
   };
 
-  const displayCertificates = (() => {
-    const base = Array.isArray(donationCertificates) ? donationCertificates : [];
-    if (base.length > 0) return base;
-    return buildSyntheticCertificates();
-  })();
+  const displayCertificates = Array.isArray(donationCertificates) ? donationCertificates : [];
 
   // Completed donations count should reflect certificates generated
   const completedCount = displayCertificates.length;
@@ -124,7 +101,7 @@ const DonorDashboard = () => {
   const buildCertificateHTML = (certificate) => {
     const donorName = donorProfile?.fullName || certificate?.donorName || user?.name || 'Anonymous Donor';
     const organType = getCertificateOrgan(certificate);
-    const hospitalName = certificate?.donorHospitalName || certificate?.hospitalName || certificate?.receivingHospitalName || certificate?.senderHospitalName || 'City General Hospital';
+    const hospitalName = getCertificateHospital(certificate);
     const patientName = certificate?.patientName || 'Recipient';
     const dateText = getCertificateDate(certificate);
     const certificateId = certificate?.certificateNumber || certificate?._id || certificate?.id || 'CERT-UNKNOWN';
@@ -391,15 +368,15 @@ const DonorDashboard = () => {
       <DonateModal isOpen={showDonateModal} onClose={() => setShowDonateModal(false)} />
       
       {showCertificate && selectedCertificate && (
-        <DonationCertificate
-          donorName={donorProfile?.fullName}
-          organType={selectedCertificate.organType}
-          hospitalName={selectedCertificate.hospitalName}
-          patientName={selectedCertificate.patientName}
-          donationDate={selectedCertificate.date}
-          certificateId={`CERT-${Date.now().toString(36).toUpperCase()}`}
-          onClose={() => setShowCertificate(false)}
-        />
+      <DonationCertificate
+        donorName={donorProfile?.fullName}
+        organType={selectedCertificate.organType}
+        hospitalName={getCertificateHospital(selectedCertificate)}
+        patientName={selectedCertificate.patientName}
+        donationDate={selectedCertificate.date}
+        certificateId={`CERT-${Date.now().toString(36).toUpperCase()}`}
+        onClose={() => setShowCertificate(false)}
+      />
       )}
     </div>
   );

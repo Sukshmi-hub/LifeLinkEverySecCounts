@@ -43,6 +43,28 @@ export const DonorProvider = ({ children }) => {
     return Number.isNaN(date.getTime()) ? new Date() : date;
   };
 
+  const resolveFallbackHospitalName = (item) => {
+    const candidates = [
+      item?.hospitalName,
+      item?.receivingHospitalName,
+      item?.senderHospitalName,
+      item?.sentFromHospitalName,
+      item?.patientHospitalName,
+      item?.donorHospitalName,
+    ];
+    const normalized = candidates
+      .map((value) => String(value || '').trim())
+      .filter(Boolean);
+    const resolved =
+      normalized.find((value) => value.toLowerCase() !== 'city general hospital') ||
+      normalized[0] ||
+      '';
+    return {
+      name: normalizeText(resolved || '', 'City General Hospital'),
+      hasExplicitValue: Boolean(resolved),
+    };
+  };
+
   const buildFallbackCertificates = (intents = [], matches = []) => {
     const source = [...(Array.isArray(matches) ? matches : []), ...(Array.isArray(intents) ? intents : [])];
     const matched = source.filter((item) => {
@@ -54,6 +76,8 @@ export const DonorProvider = ({ children }) => {
       const organOrBlood = item.organType || item.organ || item.organOrBlood || item.bloodType || 'Organ';
       const donationDate = formatDonationDate(item.completedAt || item.matchDate || item.createdAt);
       const certificateNumber = item.certificateNumber || `LL-CERT-SYN-${String(index + 1).padStart(4, '0')}`;
+      const sourceRequestId = item.sourceRequestId || item.requestId || item._id || item.id || null;
+      const hospitalInfo = resolveFallbackHospitalName(item);
       return {
         _id: item._id || item.id || `synthetic_${certificateNumber}`,
         id: item._id || item.id || `synthetic_${certificateNumber}`,
@@ -63,16 +87,17 @@ export const DonorProvider = ({ children }) => {
         organOrBlood,
         organType: item.organType || organOrBlood,
         dateOfDonation: donationDate.toISOString(),
-        hospitalName: normalizeText(item.hospitalName || item.receivingHospitalName || item.senderHospitalName || 'City General Hospital', 'City General Hospital'),
+        hospitalName: hospitalInfo.name,
         patientName: normalizeText(item.patientName || item.recipientName || 'Recipient'),
         certificateNumber,
+        sourceRequestId,
         issuedAt: donationDate.toISOString(),
         createdAt: donationDate.toISOString(),
         completedAt: donationDate.toISOString(),
         html: '',
         synthetic: true,
       };
-    });
+    }).filter(Boolean);
   };
 
   const mergeCertificates = (existing = [], fallback = []) => {
@@ -80,6 +105,8 @@ export const DonorProvider = ({ children }) => {
     const merged = [];
     const buildKey = (cert) => {
       if (!cert) return '';
+      const sourceRequestId = String(cert.sourceRequestId || '').trim();
+      if (sourceRequestId) return `request:${sourceRequestId}`;
       const organ = String(cert.organOrBlood || cert.organType || cert.organ || cert.bloodType || '').trim().toLowerCase();
       const hospital = String(cert.hospitalName || cert.donorHospitalName || cert.receivingHospitalName || cert.senderHospitalName || '').trim().toLowerCase();
       const donorName = String(cert.donorName || '').trim().toLowerCase();
@@ -111,10 +138,26 @@ export const DonorProvider = ({ children }) => {
       if (resp.ok && Array.isArray(json.data)) {
         const realCertificates = Array.isArray(json.data) ? json.data : [];
         const fallback = buildFallbackCertificates(donationIntents, donorMatches);
-        setDonationCertificates(mergeCertificates(realCertificates, fallback));
+        const realMatchKeys = new Set(
+          realCertificates
+            .filter(cert => !cert?.synthetic)
+            .map((cert) => {
+              const donorName = normalizeText(cert?.donorName || '', '').toLowerCase();
+              const organ = normalizeText(cert?.organOrBlood || cert?.organType || cert?.organ || cert?.bloodType || '', '').toLowerCase();
+              return donorName || organ ? `${donorName}|${organ}` : '';
+            })
+            .filter(Boolean)
+        );
+        const filteredFallback = fallback.filter((cert) => {
+          const donorName = normalizeText(cert?.donorName || '', '').toLowerCase();
+          const organ = normalizeText(cert?.organOrBlood || cert?.organType || cert?.organ || cert?.bloodType || '', '').toLowerCase();
+          const key = donorName || organ ? `${donorName}|${organ}` : '';
+          return !key || !realMatchKeys.has(key);
+        });
+        setDonationCertificates(mergeCertificates(realCertificates.filter(cert => !cert?.synthetic), filteredFallback));
       }
     } catch (e) {
-      setDonationCertificates(prev => mergeCertificates(prev, buildFallbackCertificates(donationIntents, donorMatches)));
+      setDonationCertificates(buildFallbackCertificates(donationIntents, donorMatches));
     }
   };
 
@@ -206,10 +249,7 @@ export const DonorProvider = ({ children }) => {
     if (!user) return;
     const role = String(user.role || '').toLowerCase();
     if (role !== 'donor') return;
-    const fallback = buildFallbackCertificates(donationIntents, donorMatches);
-    if (fallback.length > 0) {
-      setDonationCertificates(prev => (hasRealCertificates(prev) ? prev : mergeCertificates(prev, fallback)));
-    }
+    refreshDonationCertificates();
   }, [user, donationIntents, donorMatches]);
 
   const addDonationIntent = (intent) => {

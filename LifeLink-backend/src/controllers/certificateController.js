@@ -1,5 +1,8 @@
 import Certificate from '../models/Certificate.js'
 import Donor from '../models/Donor.js'
+import Request from '../models/Request.js'
+import Patient from '../models/Patient.js'
+import Hospital from '../models/Hospital.js'
 import mongoose from 'mongoose'
 
 // Generate next certificate number for year
@@ -9,6 +12,109 @@ const generateCertificateNumber = async () => {
   const count = await Certificate.countDocuments({ certificateNumber: { $regex: `^${prefix}-` } })
   const seq = String(count + 1).padStart(5, '0')
   return `${prefix}-${seq}`
+}
+
+const normalizeHospitalName = (value) => {
+  const text = String(value || '').trim()
+  if (!text) return ''
+  if (text.toLowerCase() === 'city general hospital') return ''
+  return text
+}
+
+const resolveBestHospitalName = async ({ hospitalName, sourceRequestId = null, donorId = null, organOrBlood = '' }) => {
+  const explicit = normalizeHospitalName(hospitalName)
+  if (explicit) return explicit
+
+  const tryResolveFromRequest = async (req) => {
+    if (!req) return ''
+
+    const candidates = [
+      req.matchedDonor && req.matchedDonor.senderHospitalName,
+      req.matchedDonor && req.matchedDonor.hospitalName,
+      req.receivingHospitalName,
+      req.patientHospitalName,
+      req.hospitalName,
+      req.sentFromHospitalName,
+      req.matchedDonor && req.matchedDonor.patientHospitalName,
+    ]
+      .map(normalizeHospitalName)
+      .filter(Boolean)
+
+    if (candidates.length) return candidates[0]
+
+    const hospitalIds = [
+      req.receivingHospitalId,
+      req.sentFromHospitalId,
+      req.hospitalId,
+      req.matchedDonor && req.matchedDonor.hospitalId,
+    ].filter(Boolean)
+
+    for (const hospitalId of hospitalIds) {
+      try {
+        const hospitalDoc = await Hospital.findById(hospitalId).lean()
+        const hospitalResolved = normalizeHospitalName(hospitalDoc && (hospitalDoc.name || hospitalDoc.organizationName))
+        if (hospitalResolved) return hospitalResolved
+      } catch (err) {}
+    }
+
+    if (req.patientId) {
+      try {
+        const patientDoc = await Patient.findById(req.patientId).lean()
+        const patientResolved = normalizeHospitalName(
+          patientDoc && (
+            patientDoc.hospitalName ||
+            patientDoc.admittedHospital ||
+            (patientDoc.hospital && (patientDoc.hospital.name || patientDoc.hospital.organizationName))
+          )
+        )
+        if (patientResolved) return patientResolved
+      } catch (err) {}
+    }
+
+    return ''
+  }
+
+  try {
+    if (sourceRequestId) {
+      const req = await Request.findById(sourceRequestId).lean()
+      const resolved = await tryResolveFromRequest(req)
+      if (resolved) return resolved
+    }
+
+    if (donorId) {
+      const organNeedle = String(organOrBlood || '').trim()
+      const requestQuery = {
+        requestType: 'organ_request',
+        matchedDonor: { $ne: null },
+        $or: [
+          { donorId },
+          { 'matchedDonor.donorId': donorId },
+          { 'matchedDonor.raw._resolvedDonor.id': donorId },
+        ],
+      }
+      if (organNeedle) {
+        requestQuery.$and = [
+          {
+            $or: [
+              { organType: new RegExp(`^${organNeedle}$`, 'i') },
+              { bloodType: new RegExp(`^${organNeedle}$`, 'i') },
+              { 'matchedDonor.organType': new RegExp(`^${organNeedle}$`, 'i') },
+              { 'matchedDonor.organOffered': new RegExp(`^${organNeedle}$`, 'i') },
+              { 'matchedDonor.organ': new RegExp(`^${organNeedle}$`, 'i') },
+              { 'matchedDonor.bloodType': new RegExp(`^${organNeedle}$`, 'i') },
+            ],
+          },
+        ]
+      }
+      const req = await Request.findOne(requestQuery).sort({ updatedAt: -1, createdAt: -1 }).lean()
+      const resolved = await tryResolveFromRequest(req)
+      if (resolved) return resolved
+    }
+
+    return 'City General Hospital'
+  } catch (err) {
+    return 'City General Hospital'
+  }
 }
 
 // Build HTML for certificate using provided data
@@ -47,8 +153,9 @@ export const createCertificateForDonor = async ({ donorId, donorUserId, donorNam
     if (existing) return existing
   }
   const certNumber = await generateCertificateNumber()
-  const html = buildCertificateHTML({ donorName, donorId: `LL-${String(donorId).slice(-6).toUpperCase()}`, organOrBlood, dateOfDonation, hospitalName, certificateNumber: certNumber })
-  const cert = new Certificate({ donorId, donorUserId: donorUserId || null, donorName, organOrBlood, dateOfDonation: dateOfDonation || new Date(), hospitalName, sourceRequestId: sourceRequestId || null, certificateNumber: certNumber, html })
+  const resolvedHospitalName = await resolveBestHospitalName({ hospitalName, sourceRequestId, donorId, organOrBlood })
+  const html = buildCertificateHTML({ donorName, donorId: `LL-${String(donorId).slice(-6).toUpperCase()}`, organOrBlood, dateOfDonation, hospitalName: resolvedHospitalName, certificateNumber: certNumber })
+  const cert = new Certificate({ donorId, donorUserId: donorUserId || null, donorName, organOrBlood, dateOfDonation: dateOfDonation || new Date(), hospitalName: resolvedHospitalName, sourceRequestId: sourceRequestId || null, certificateNumber: certNumber, html })
   await cert.save()
   // attach to donor
   try {
@@ -140,7 +247,21 @@ export const downloadCertificate = async (req, res) => {
       if (!donor || String(donor._id) !== String(cert.donorId)) return res.status(403).json({ success: false, message: 'Forbidden' })
     }
     res.setHeader('Content-Type', 'text/html')
-    return res.send(cert.html || '')
+    const resolvedHospitalName = await resolveBestHospitalName({
+      hospitalName: cert.hospitalName,
+      sourceRequestId: cert.sourceRequestId,
+      donorId: cert.donorId,
+      organOrBlood: cert.organOrBlood,
+    })
+    const html = buildCertificateHTML({
+      donorName: cert.donorName,
+      donorId: `LL-${String(cert.donorId).slice(-6).toUpperCase()}`,
+      organOrBlood: cert.organOrBlood,
+      dateOfDonation: cert.dateOfDonation || cert.issuedAt || cert.createdAt,
+      hospitalName: resolvedHospitalName,
+      certificateNumber: cert.certificateNumber,
+    })
+    return res.send(html || cert.html || '')
   } catch (err) {
     console.error('downloadCertificate failed', err)
     return res.status(500).json({ success: false, message: 'Server error' })
