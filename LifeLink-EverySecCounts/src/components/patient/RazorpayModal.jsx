@@ -182,7 +182,7 @@ const RazorpayModal = ({
             </p>
             <div className="bg-muted p-4 rounded-lg w-full text-left space-y-2">
               <p className="text-sm"><span className="text-muted-foreground">Amount:</span> <span className="font-medium">₹{(receipt && receipt.amount) ? receipt.amount.toLocaleString() : amount.toLocaleString()}</span></p>
-              <p className="text-sm"><span className="text-muted-foreground">Donor:</span> <span className="font-medium">{donorName}</span></p>
+              <p className="text-sm"><span className="text-muted-foreground">Patient:</span> <span className="font-medium">{donorName}</span></p>
               <p className="text-sm"><span className="text-muted-foreground">Organ:</span> <span className="font-medium">{organType}</span></p>
               <p className="text-sm"><span className="text-muted-foreground">Hospital:</span> <span className="font-medium">{hospitalName}</span></p>
               <p className="text-sm"><span className="text-muted-foreground">Transaction ID:</span> <span className="font-medium">{(receipt && receipt.transactionId) || '—'}</span></p>
@@ -234,7 +234,7 @@ const RazorpayModal = ({
                   <span className="font-medium">₹{amount.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Donor: {donorName}</span>
+                  <span className="text-muted-foreground">Patient: {donorName}</span>
                   <span className="text-muted-foreground">{organType}</span>
                 </div>
                 <div className="border-t border-border pt-2 mt-2 flex justify-between">
