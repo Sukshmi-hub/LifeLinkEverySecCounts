@@ -431,20 +431,8 @@ router.put('/:id/send-matched-details', authenticate, async (req, res) => {
       console.error('Failed to set requests dot', e && e.stack ? e.stack : e)
     }
 
-    // Create a lightweight message/notification so patient-hospital staff can see it in their chat/feeds
-    try {
-      const MessageMod = (await import('../models/Message.js')).default
-      const roomId = `room_hospital_${targetHospitalId || reqDoc.hospitalId}_patient_${reqDoc.patientId || 'unknown'}`
-      const msg = new MessageMod({ senderId: req.user._id, senderRole: 'hospital', roomId, content: `Matched donor details sent for request ${requestId}`, timestamp: new Date() })
-      await msg.save()
-    } catch (e) {
-      console.error('Failed to create notification message for matched details', e)
-    }
-
-    // Note: we intentionally avoid creating extra donor<->hospital or donor<->patient
-    // chat messages here to prevent duplicate/automated notifications appearing in
-    // donor chat threads when a match is sent by a hospital. A single notification
-    // message for the patient/hospital room is sufficient and already created above.
+    // Do not create an automatic chat message here.
+    // The donor match should update request state without injecting a visible chat bubble.
 
     // Log what we received and what we're saving so we can debug missing donor fields
     try {
