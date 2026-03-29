@@ -25,8 +25,6 @@ const DonorDashboard = () => {
   // Logic with safe fallbacks
   const currentStatus = donationIntents.length > 0 ? donationIntents[0].status : 'Registered';
   const activeMatch = donorMatches.find(m => m.status !== 'Completed' && m.donorName === donorProfile?.fullName);
-  // Completed donations count should reflect certificates generated
-  const completedCount = donationCertificates.length || donorMatches.filter(m => m.status === 'Completed').length;
   // Pending verification = intents marked as 'Available...' or 'Pending'
   const pendingIntents = donationIntents.filter(i => {
     const s = (i.status || '').toString().toLowerCase();
@@ -58,6 +56,150 @@ const DonorDashboard = () => {
       date: match.matchDate,
     });
     setShowCertificate(true);
+  };
+
+  const getCertificateKey = (certificate, index) => (
+    certificate?._id ||
+    certificate?.id ||
+    certificate?.certificateNumber ||
+    `${certificate?.organOrBlood || certificate?.organType || 'certificate'}-${certificate?.dateOfDonation || certificate?.issuedAt || index}`
+  );
+
+  const getCertificateOrgan = (certificate) => (
+    certificate?.organOrBlood ||
+    certificate?.organType ||
+    certificate?.organ ||
+    certificate?.bloodType ||
+    '—'
+  );
+
+  const getCertificateDate = (certificate) => {
+    const rawDate = certificate?.dateOfDonation || certificate?.issuedAt || certificate?.createdAt || certificate?.completedAt;
+    if (!rawDate) return '—';
+    const date = new Date(rawDate);
+    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString();
+  };
+
+  const buildSyntheticCertificates = () => {
+    const sources = [...(Array.isArray(donorMatches) ? donorMatches : []), ...(Array.isArray(donationIntents) ? donationIntents : [])];
+    return sources
+      .filter((item) => {
+        const status = String(item?.status || '').toLowerCase();
+        return status.includes('matched') || status.includes('completed') || status.includes('certificate');
+      })
+      .map((item, index) => {
+        const rawDate = item.completedAt || item.matchDate || item.createdAt || new Date();
+        const certDate = new Date(rawDate);
+        const safeDate = Number.isNaN(certDate.getTime()) ? new Date() : certDate;
+        const organOrBlood = item.organType || item.organ || item.organOrBlood || item.bloodType || 'Organ';
+        const certId = item.certificateNumber || item._id || item.id || `SYN-${index + 1}`;
+        return {
+          _id: String(certId),
+          id: String(certId),
+          certificateNumber: String(certId),
+          donorName: donorProfile?.fullName || item.donorName || user?.name || 'Anonymous Donor',
+          organOrBlood,
+          organType: organOrBlood,
+          dateOfDonation: safeDate.toISOString(),
+          issuedAt: safeDate.toISOString(),
+          createdAt: safeDate.toISOString(),
+          completedAt: safeDate.toISOString(),
+          donorHospitalName: item.donorHospitalName || item.hospitalName || item.receivingHospitalName || item.senderHospitalName || 'City General Hospital',
+          hospitalName: item.donorHospitalName || item.hospitalName || item.receivingHospitalName || item.senderHospitalName || 'City General Hospital',
+          patientName: item.patientName || item.recipientName || 'Recipient',
+          synthetic: true,
+        };
+      });
+  };
+
+  const displayCertificates = (() => {
+    const merged = [...(Array.isArray(donationCertificates) ? donationCertificates : []), ...buildSyntheticCertificates()];
+    const seen = new Set();
+    return merged.filter((cert) => {
+      const key = cert?._id || cert?.id || cert?.certificateNumber || `${cert?.organOrBlood || cert?.organType || 'cert'}-${cert?.dateOfDonation || cert?.createdAt || cert?.completedAt || ''}`;
+      if (seen.has(String(key))) return false;
+      seen.add(String(key));
+      return true;
+    });
+  })();
+
+  // Completed donations count should reflect certificates generated
+  const completedCount = displayCertificates.length;
+
+  const buildCertificateHTML = (certificate) => {
+    const donorName = donorProfile?.fullName || certificate?.donorName || user?.name || 'Anonymous Donor';
+    const organType = getCertificateOrgan(certificate);
+    const hospitalName = certificate?.donorHospitalName || certificate?.hospitalName || certificate?.receivingHospitalName || certificate?.senderHospitalName || 'City General Hospital';
+    const patientName = certificate?.patientName || 'Recipient';
+    const dateText = getCertificateDate(certificate);
+    const certificateId = certificate?.certificateNumber || certificate?._id || certificate?.id || 'CERT-UNKNOWN';
+
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Donation Certificate</title>
+    <style>
+      body { font-family: Georgia, serif; margin: 0; padding: 32px; background: #fff; }
+      .frame { border: 8px solid #e11d2d; padding: 28px; min-height: 100vh; box-sizing: border-box; }
+      .logo { text-align: center; margin-bottom: 28px; }
+      .mark { width: 56px; height: 56px; margin: 0 auto 8px; background: #e11d2d; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-size: 28px; }
+      .brand { font-weight: 700; font-size: 24px; }
+      .tag { color: #777; font-size: 11px; letter-spacing: 2px; }
+      .divider { height: 1px; background: #ddd; margin: 20px 0; }
+      .subtle { color: #888; font-size: 12px; letter-spacing: 4px; text-align: center; }
+      .title { text-align: center; font-size: 28px; font-weight: 700; margin: 10px 0 20px; }
+      .name { text-align: center; font-size: 36px; font-style: italic; margin: 18px 0; }
+      .bodyText { text-align: center; color: #666; font-style: italic; font-size: 18px; }
+      .grid { display: flex; justify-content: space-between; gap: 16px; margin-top: 24px; }
+      .cell { flex: 1; text-align: center; }
+      .label { color: #e11d2d; text-transform: uppercase; font-size: 12px; letter-spacing: 2px; }
+      .value { font-weight: 700; font-size: 18px; margin-top: 6px; }
+      .stamp { position: absolute; right: 48px; bottom: 48px; width: 120px; height: 120px; border-radius: 999px; border: 4px solid #e11d2d; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #e11d2d; font-size: 12px; }
+      .stamp .heart { font-size: 24px; }
+      .container { position: relative; }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <div class="container">
+        <div class="logo">
+          <div class="mark">❤</div>
+          <div class="brand">LifeLink</div>
+          <div class="tag">EVERY SECOND COUNTS</div>
+        </div>
+        <div class="divider"></div>
+        <div class="subtle">THIS CERTIFICATE IS PRESENTED TO</div>
+        <div class="title">Certificate of Donation</div>
+        <div class="subtle">DONOR</div>
+        <div class="name">${donorName}</div>
+        <div style="text-align:center;color:#888;margin-bottom:18px;">ID: ${certificateId}</div>
+        <div class="bodyText">In recognition of your selfless and generous act of donation, your gift has given someone a second chance at life.</div>
+        <div class="divider"></div>
+        <div class="grid">
+          <div class="cell">
+            <div class="label">Organ</div>
+            <div class="value">${organType}</div>
+          </div>
+          <div class="cell">
+            <div class="label">Date</div>
+            <div class="value">${dateText}</div>
+          </div>
+          <div class="cell">
+            <div class="label">Hospital</div>
+            <div class="value">${hospitalName}</div>
+          </div>
+        </div>
+        <div class="stamp">
+          <div class="heart">❤</div>
+          <div style="font-weight:700;margin-top:6px">LIFELINK</div>
+          <div style="font-size:10px">Official</div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>`;
   };
 
   return (
@@ -120,7 +262,7 @@ const DonorDashboard = () => {
             <DashboardCard 
               icon={Award} 
               title="Certificates" 
-              value={String(donationCertificates.length)} 
+              value={String(displayCertificates.length)} 
               variant="primary"
               subtitle="Earned awards"
             />
@@ -193,7 +335,7 @@ const DonorDashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {donationCertificates.length === 0 ? (
+              {displayCertificates.length === 0 ? (
                 <p className="text-muted-foreground">No certificates yet.</p>
               ) : (
                 <div className="overflow-x-auto">
@@ -207,16 +349,27 @@ const DonorDashboard = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {donationCertificates.map(c => (
-                        <tr key={c._id} className="border-b">
-                          <td className="py-3">{c.organOrBlood || '—'}</td>
-                          <td className="py-3">{c.dateOfDonation ? (new Date(c.dateOfDonation)).toLocaleDateString() : '—'}</td>
+                      {displayCertificates.map((c, index) => (
+                        <tr key={getCertificateKey(c, index)} className="border-b">
+                          <td className="py-3">{getCertificateOrgan(c)}</td>
+                          <td className="py-3">{getCertificateDate(c)}</td>
                           <td className="py-3">Certificate Issued</td>
                           <td className="py-3">
                             <button className="text-primary underline" onClick={async () => {
                               try {
                                 const token = localStorage.getItem('token')
-                                const resp = await fetch(`/api/certificates/${encodeURIComponent(c._id)}/download`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+                                const certificateId = c?._id || c?.id || c?.certificateNumber
+                                if (!certificateId || c?.synthetic) {
+                                  const html = buildCertificateHTML(c)
+                                  const w = window.open('', '_blank')
+                                  if (w) {
+                                    w.document.open()
+                                    w.document.write(html)
+                                    w.document.close()
+                                  }
+                                  return
+                                }
+                                const resp = await fetch(`/api/certificates/${encodeURIComponent(certificateId)}/download`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
                                 const html = await resp.text()
                                 const w = window.open('', '_blank')
                                 if (w) {

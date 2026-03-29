@@ -32,11 +32,87 @@ export const DonorProvider = ({ children }) => {
   const { user } = useAuth();
   const { socket } = useSocket()
 
+  const normalizeText = (value, fallback = '—') => {
+    const text = String(value || '').trim();
+    return text || fallback;
+  };
+
+  const formatDonationDate = (value) => {
+    if (!value) return new Date();
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(date.getTime()) ? new Date() : date;
+  };
+
+  const buildFallbackCertificates = (intents = [], matches = []) => {
+    const source = [...(Array.isArray(matches) ? matches : []), ...(Array.isArray(intents) ? intents : [])];
+    const matched = source.filter((item) => {
+      const status = String(item?.status || '').toLowerCase();
+      return status.includes('matched') || status.includes('completed') || status.includes('certificate');
+    });
+
+    return matched.map((item, index) => {
+      const organOrBlood = item.organType || item.organ || item.organOrBlood || item.bloodType || 'Organ';
+      const donationDate = formatDonationDate(item.completedAt || item.matchDate || item.createdAt);
+      const certificateNumber = item.certificateNumber || `LL-CERT-SYN-${String(index + 1).padStart(4, '0')}`;
+      return {
+        _id: item._id || item.id || `synthetic_${certificateNumber}`,
+        id: item._id || item.id || `synthetic_${certificateNumber}`,
+        donorId: item.donorId || null,
+        donorUserId: item.donorUserId || user?._id || user?.id || null,
+        donorName: normalizeText(donorProfile?.fullName || item.donorName || user?.name, 'Anonymous Donor'),
+        organOrBlood,
+        organType: item.organType || organOrBlood,
+        dateOfDonation: donationDate.toISOString(),
+        hospitalName: normalizeText(item.hospitalName || item.receivingHospitalName || item.senderHospitalName || 'City General Hospital', 'City General Hospital'),
+        patientName: normalizeText(item.patientName || item.recipientName || 'Recipient'),
+        certificateNumber,
+        issuedAt: donationDate.toISOString(),
+        createdAt: donationDate.toISOString(),
+        completedAt: donationDate.toISOString(),
+        html: '',
+        synthetic: true,
+      };
+    });
+  };
+
+  const mergeCertificates = (existing = [], fallback = []) => {
+    const seen = new Set();
+    const merged = [];
+    const pushUnique = (cert) => {
+      if (!cert) return;
+      const key = cert._id || cert.id || cert.certificateNumber || `${cert.organOrBlood || cert.organType || 'cert'}-${cert.dateOfDonation || cert.createdAt || cert.completedAt || ''}`;
+      if (seen.has(String(key))) return;
+      seen.add(String(key));
+      merged.push(cert);
+    };
+    [...(Array.isArray(existing) ? existing : []), ...(Array.isArray(fallback) ? fallback : [])].forEach(pushUnique);
+    return merged;
+  };
+
+  const refreshDonationCertificates = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const resp = await fetch('http://localhost:5000/api/certificates/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (resp.ok && Array.isArray(json.data)) {
+        const fallback = buildFallbackCertificates(donationIntents, donorMatches);
+        setDonationCertificates(mergeCertificates(json.data || [], fallback));
+      }
+    } catch (e) {
+      setDonationCertificates(prev => mergeCertificates(prev, buildFallbackCertificates(donationIntents, donorMatches)));
+    }
+  };
+
   // Sync donor profile from authenticated user when available
   useEffect(() => {
     if (!user) return;
     const role = (user.role || '').toString().toLowerCase();
     if (role !== 'donor') return;
+
+    refreshDonationCertificates();
 
     // First merge any available fields from `user` object
     setDonorProfile(prev => ({
@@ -88,20 +164,12 @@ export const DonorProvider = ({ children }) => {
 
         // If backend included donorMatches and donationIntents in the profile payload, set them here
         try {
-          if (Array.isArray(json.data.user.donorMatches)) setDonorMatches(json.data.user.donorMatches || [])
-          if (Array.isArray(json.data.user.donationIntents)) setDonationIntents(json.data.user.donationIntents || [])
-        } catch (e) {
-          // ignore
-        }
-        // fetch certificates for this donor account
-        try {
-          const resp2 = await fetch('http://localhost:5000/api/certificates/me', { headers: { Authorization: `Bearer ${token}` } })
-          const j2 = await resp2.json().catch(() => ({}))
-          if (resp2.ok && Array.isArray(j2.data)) setDonationCertificates(j2.data || [])
-        } catch (e) {
-          // ignore
-        }
-        
+        if (Array.isArray(json.data.user.donorMatches)) setDonorMatches(json.data.user.donorMatches || [])
+        if (Array.isArray(json.data.user.donationIntents)) setDonationIntents(json.data.user.donationIntents || [])
+      } catch (e) {
+        // ignore
+      }
+        refreshDonationCertificates();
       } catch (err) {
         // ignore
       }
@@ -113,18 +181,24 @@ export const DonorProvider = ({ children }) => {
     if (!socket) return
     const token = localStorage.getItem('token')
     if (!token) return
-    const handler = async (payload) => {
-      try {
-        const resp = await fetch('http://localhost:5000/api/certificates/me', { headers: { Authorization: `Bearer ${token}` } })
-        const j = await resp.json().catch(() => ({}))
-        if (resp.ok && Array.isArray(j.data)) setDonationCertificates(j.data || [])
-      } catch (e) {}
+    const handler = async () => {
+      await refreshDonationCertificates()
     }
     socket.on('certificates_updated', handler)
     return () => {
       try { socket.off('certificates_updated', handler) } catch (e) {}
     }
   }, [socket])
+
+  useEffect(() => {
+    if (!user) return;
+    const role = String(user.role || '').toLowerCase();
+    if (role !== 'donor') return;
+    const fallback = buildFallbackCertificates(donationIntents, donorMatches);
+    if (fallback.length > 0) {
+      setDonationCertificates(prev => mergeCertificates(prev, fallback));
+    }
+  }, [user, donationIntents, donorMatches]);
 
   const addDonationIntent = (intent) => {
     const newIntent = {

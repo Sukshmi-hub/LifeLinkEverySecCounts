@@ -175,6 +175,7 @@ const FundRequestModal = ({ isOpen, onClose, initialData = null, fixed = false }
       amount: parseFloat(amount),
       reason,
       description,
+      sourceRequestId: initialData?.sourceRequestId || initialData?.requestId || null,
       ngoId: ngoObj?.id || selectedNgo,
       ngoName: ngoObj?.name || 'Selected NGO',
       hospitalId: hospObj?.id || selectedHospital,

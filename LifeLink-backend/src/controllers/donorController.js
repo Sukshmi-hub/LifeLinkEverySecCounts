@@ -53,7 +53,11 @@ export const getMyDonorProfile = async (req, res) => {
         patientId: r.patientId ? String(r.patientId._id) : null,
         patientName: r.patientId ? (r.patientId.name || r.patientName) : (r.patientName || ''),
         organType: r.organType || r.organ || r.organRequired || '',
-        hospitalName: r.matchedDonor && (r.matchedDonor.hospitalName || r.matchedDonor.senderHospitalName) || (r.hospitalId && r.hospitalId.name) || r.receivingHospitalName || r.patientHospitalName || '',
+        hospitalName: r.matchedDonor && (r.matchedDonor.hospitalName || r.matchedDonor.senderHospitalName)
+          || (r.hospitalId && (r.hospitalId.name || r.hospitalId.organizationName))
+          || r.receivingHospitalName
+          || r.patientHospitalName
+          || '',
         matchDate: r.matchedAt || r.sentToPatientHospitalAt || r.createdAt,
         paymentCompleted: !!r.paymentId || !!r.paymentSent || (String(r.status || '').toLowerCase() === 'completed'),
         status: r.status || (r.matchedDonor ? 'Donor Matched' : 'Pending')
@@ -68,6 +72,7 @@ export const getMyDonorProfile = async (req, res) => {
     try {
       const intents = await Request.find({ donorId: donor._id, requestType: 'donor_registration' })
         .sort({ createdAt: -1 })
+        .populate('hospitalId', 'name organizationName')
         .lean()
       // map to minimal intent shape expected by frontend
       payload.donationIntents = intents.map(i => ({
@@ -76,7 +81,7 @@ export const getMyDonorProfile = async (req, res) => {
         status: i.status || 'Pending Verification',
         createdAt: i.createdAt,
         donorHospitalId: i.hospitalId || null,
-        donorHospitalName: i.hospitalId && i.hospitalId.name ? i.hospitalId.name : (i.hospitalName || '')
+        donorHospitalName: (i.hospitalId && (i.hospitalId.name || i.hospitalId.organizationName)) || i.hospitalName || (donor.hospital && String(donor.hospital)) || ''
       }))
     } catch (e) {
       payload.donationIntents = []

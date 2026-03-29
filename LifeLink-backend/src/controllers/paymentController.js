@@ -1,6 +1,7 @@
 import Payment from '../models/Payment.js'
 import Request from '../models/Request.js'
 import Donor from '../models/Donor.js'
+import Hospital from '../models/Hospital.js'
 import Dots from '../models/Dots.js'
 import { createCertificateForDonor } from './certificateController.js'
 import crypto from 'crypto'
@@ -108,7 +109,13 @@ export const createSummary = async (req, res) => {
                     const organOrBlood = reqDoc.matchedDonor && (
                       reqDoc.matchedDonor.organOffered || reqDoc.matchedDonor.organType || reqDoc.matchedDonor.organ || reqDoc.matchedDonor.bloodType
                     ) || reqDoc.organType || reqDoc.bloodType || ''
-                  const hospitalName = reqDoc.receivingHospitalName || reqDoc.patientHospitalName || ''
+                  let hospitalName = reqDoc.receivingHospitalName || reqDoc.patientHospitalName || ''
+                  if (!hospitalName && donorDoc.hospital) {
+                    try {
+                      const hospitalDoc = await Hospital.findById(donorDoc.hospital).lean()
+                      hospitalName = hospitalDoc?.name || hospitalName
+                    } catch (e) {}
+                  }
                   const cert = await createCertificateForDonor({ donorId: donorDoc._id, donorUserId: donorDoc.userId || null, donorName, organOrBlood, dateOfDonation: new Date(), hospitalName })
                   if (cert) {
                     console.debug('Certificate created for donor', { donorId: donorDoc._id, certId: cert._id })
@@ -174,6 +181,19 @@ export const createRazorpayOrder = async (req, res) => {
     } catch (e) {
       // ignore resolution errors; continue with provided id
       console.warn('Could not normalize patientId for payment creation', e && e.message)
+    }
+    // If a request is attached, prefer the patient from that request so NGO-paid
+    // requests are recorded against the actual patient rather than the NGO user.
+    if (requestId) {
+      try {
+        const requestDoc = await Request.findById(requestId).lean()
+        if (requestDoc && requestDoc.patientId) {
+          const requestPatientId = requestDoc.patientId._id || requestDoc.patientId.id || requestDoc.patientId
+          if (requestPatientId) patientId = String(requestPatientId)
+        }
+      } catch (e) {
+        console.warn('Could not resolve patientId from requestId for payment creation', e && e.message)
+      }
     }
     if (!amount || Number(amount) <= 0) return res.status(400).json({ success: false, message: 'amount is required and must be > 0' })
     if (!hospitalId) return res.status(400).json({ success: false, message: 'hospitalId is required' })
@@ -378,12 +398,27 @@ export const verifyRazorpayPayment = async (req, res) => {
     // Also update the related Request (if any) to mark payment received
     if (payment && payment._id) {
       try {
-        const reqUpdate = await Request.findOneAndUpdate({ paymentId: payment._id }, { $set: { paymentSent: true } }, { new: true })
-        // If we found the request, mark it as SentToHospital so NGO/hospital UI reflects payment
+        const reqUpdate = await Request.findOneAndUpdate(
+          { paymentId: payment._id },
+          { $set: { paymentSent: true, paymentReceived: true, paymentStatus: 'success' } },
+          { new: true }
+        )
+        if (reqUpdate && String(reqUpdate.requestType || '') === 'fund_request' && reqUpdate.sourceRequestId) {
+          try {
+            await Request.findByIdAndUpdate(
+              reqUpdate.sourceRequestId,
+              { $set: { paymentSent: true, paymentReceived: true, paymentStatus: 'success', status: 'VerifiedByHospital' } },
+              { new: true }
+            )
+          } catch (sourceUpdateErr) {
+            console.error('Failed to sync source organ request after NGO payment', sourceUpdateErr)
+          }
+        }
+        // If we found the request, mark it as verified so it leaves the NGO pay-verify queue
         if (reqUpdate) {
           try {
-            reqUpdate.status = 'SentToHospital'
-            reqUpdate.sentToHospitalAt = new Date()
+            reqUpdate.status = 'VerifiedByHospital'
+            reqUpdate.verifiedByHospitalAt = new Date()
             await reqUpdate.save()
             // Notify patient + NGO + hospital via dots and realtime socket
             try {

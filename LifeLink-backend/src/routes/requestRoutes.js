@@ -222,52 +222,67 @@ router.put('/:id/send-matched-details', authenticate, async (req, res) => {
 
       // Attempt to generate donation certificate for matched donor (best-effort, only once)
       try {
-        const reqSnapshot = await Request.findById(reqDoc._id).lean()
+        const reqSnapshot = await Request.findById(reqDoc._id).lean();
         if (reqSnapshot && reqSnapshot.matchedDonor) {
           // try derive donorId from common fields
-          let donorId = null
+          let donorId = null;
+          let donorDoc = null;
           try {
             if (reqSnapshot.matchedDonor && reqSnapshot.matchedDonor.raw && reqSnapshot.matchedDonor.raw._resolvedDonor && reqSnapshot.matchedDonor.raw._resolvedDonor.id) {
-              donorId = reqSnapshot.matchedDonor.raw._resolvedDonor.id
+              donorId = reqSnapshot.matchedDonor.raw._resolvedDonor.id;
             }
-            donorId = donorId || (reqSnapshot.donorId ? String(reqSnapshot.donorId) : null)
-            donorId = donorId || (reqSnapshot.matchedDonor && (reqSnapshot.matchedDonor.donorId || reqSnapshot.matchedDonor._id) ? String(reqSnapshot.matchedDonor.donorId || reqSnapshot.matchedDonor._id) : null)
+            donorId = donorId || (reqSnapshot.donorId ? String(reqSnapshot.donorId) : null);
+            donorId = donorId || (reqSnapshot.matchedDonor && (reqSnapshot.matchedDonor.donorId || reqSnapshot.matchedDonor._id) ? String(reqSnapshot.matchedDonor.donorId || reqSnapshot.matchedDonor._id) : null);
+            if (donorId) {
+              donorDoc = await Donor.findById(donorId).lean();
+            }
           } catch (e) {}
 
-          if (!donorId && reqSnapshot.matchedDonor) {
-            // try best-effort lookup by name + blood
-            const candName = (reqSnapshot.matchedDonor.name || reqSnapshot.matchedDonor.raw && reqSnapshot.matchedDonor.raw.name || '')
-            const candBlood = (reqSnapshot.matchedDonor.bloodType || reqSnapshot.matchedDonor.raw && (reqSnapshot.matchedDonor.raw.blood_type || reqSnapshot.matchedDonor.raw.blood) || '')
+          // fallback: try best-effort lookup by name + blood
+          if (!donorDoc && reqSnapshot.matchedDonor) {
+            const candName = (reqSnapshot.matchedDonor.name || reqSnapshot.matchedDonor.raw && reqSnapshot.matchedDonor.raw.name || '');
+            const candBlood = (reqSnapshot.matchedDonor.bloodType || reqSnapshot.matchedDonor.raw && (reqSnapshot.matchedDonor.raw.blood_type || reqSnapshot.matchedDonor.raw.blood) || '');
             if (candName && candName.trim()) {
               try {
-                const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-                const q = { name: { $regex: `^${esc(candName.trim())}$`, $options: 'i' } }
-                if (candBlood && candBlood.trim()) q.blood_type = candBlood.trim()
-                const found = await Donor.findOne(q).lean()
-                if (found && found._id) donorId = String(found._id)
+                const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const q = { name: { $regex: `^${esc(candName.trim())}$`, $options: 'i' } };
+                if (candBlood && candBlood.trim()) q.blood_type = candBlood.trim();
+                donorDoc = await Donor.findOne(q).lean();
               } catch (e) {}
             }
           }
 
-          if (donorId) {
+          // fallback: try to find donor by userId if still not found
+          if (!donorDoc && reqSnapshot.matchedDonor && reqSnapshot.matchedDonor.userId) {
             try {
-              const donorDoc = await Donor.findById(donorId).lean()
-              if (donorDoc) {
-                const already = donorDoc.certificateStatus === 'Certificate Issued' || (donorDoc.certificates && donorDoc.certificates.length > 0)
-                if (!already) {
-                  const donorName = donorDoc.name || donorDoc.fullName || ''
-                  const organOrBlood = reqSnapshot.matchedDonor && (reqSnapshot.matchedDonor.organOffered || reqSnapshot.matchedDonor.organType || reqSnapshot.matchedDonor.organ || reqSnapshot.matchedDonor.bloodType) || reqSnapshot.organType || reqSnapshot.bloodType || ''
-                  const hospitalName = reqSnapshot.receivingHospitalName || reqSnapshot.patientHospitalName || reqSnapshot.sentFromHospitalName || ''
-                  await createCertificateForDonor({ donorId: donorDoc._id, donorUserId: donorDoc.userId || null, donorName, organOrBlood, dateOfDonation: new Date(), hospitalName })
-                }
+              donorDoc = await Donor.findOne({ userId: reqSnapshot.matchedDonor.userId }).lean();
+            } catch (e) {}
+          }
+
+          if (donorDoc) {
+            const already = donorDoc.certificateStatus === 'Certificate Issued' || (donorDoc.certificates && donorDoc.certificates.length > 0);
+            if (!already) {
+              const donorName = donorDoc.name || donorDoc.fullName || '';
+              const organOrBlood = reqSnapshot.matchedDonor && (reqSnapshot.matchedDonor.organOffered || reqSnapshot.matchedDonor.organType || reqSnapshot.matchedDonor.organ || reqSnapshot.matchedDonor.bloodType) || reqSnapshot.organType || reqSnapshot.bloodType || '';
+              let hospitalName = reqSnapshot.receivingHospitalName || reqSnapshot.patientHospitalName || reqSnapshot.sentFromHospitalName || '';
+              if (!hospitalName && reqSnapshot.hospitalId) {
+                try {
+                  const hospitalDoc = await Hospital.findById(reqSnapshot.hospitalId).lean();
+                  hospitalName = hospitalDoc?.name || hospitalName;
+                } catch (e) {}
               }
-            } catch (e) {
-              console.error('Failed to create certificate for matched donor', e)
+              if (!hospitalName && donorDoc.hospital) {
+                try {
+                  const hospitalDoc = await Hospital.findById(donorDoc.hospital).lean();
+                  hospitalName = hospitalDoc?.name || hospitalName;
+                } catch (e) {}
+              }
+              await createCertificateForDonor({ donorId: donorDoc._id, donorUserId: donorDoc.userId || null, donorName, organOrBlood, dateOfDonation: new Date(), hospitalName });
             }
           }
         }
       } catch (e) {
-        console.error('Certificate generation after match attempted but failed', e)
+        console.error('Certificate generation after match attempted but failed', e);
       }
 
     // Resolve the hospital where the patient is admitted (targetHospitalId).
@@ -619,6 +634,7 @@ router.post('/fund', authenticate, upload.fields([
     const ngoId = body.ngoId || body.ngo_id || null
     const ngoName = body.ngoName || body.ngo_name || body.ngo || ''
     const message = body.message || body.description || ''
+    const sourceRequestId = body.sourceRequestId || body.requestId || null
 
     if (!user) return res.status(401).json({ success: false, message: 'Authentication required' })
     if (!amount || amount <= 0) return res.status(400).json({ success: false, message: 'Valid amount required' })
@@ -638,7 +654,8 @@ router.post('/fund', authenticate, upload.fields([
       message,
       amount,
       ngoId: ngoId || null,
-      ngoName: ngoName || ''
+      ngoName: ngoName || '',
+      sourceRequestId: sourceRequestId || null
     })
     // If client provided a JSON breakdown, store it on the document for later display
     try {

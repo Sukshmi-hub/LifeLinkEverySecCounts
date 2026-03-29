@@ -256,9 +256,9 @@ const ManageRequests = () => {
         const json = await resp.json();
         console.debug('hospital NGO fund-requests response:', json);
         if (resp.ok && Array.isArray(json.data)) {
-          // if hospitalId is present, use backend filtering; otherwise filter SentToHospital locally
+          // Only keep requests that still need hospital verification.
           const rawList = Array.isArray(json.data) ? json.data : [];
-          const candidates = hospitalId ? rawList : rawList.filter(r => String(r.status).toLowerCase() === 'senttohospital' || String(r.status).toLowerCase() === 'senttohos' || String(r.status).toLowerCase() === 'senttohospital');
+          const candidates = rawList.filter(r => String(r.status).toLowerCase() === 'senttohospital' || String(r.status).toLowerCase() === 'senttohos');
           const mapped = candidates.filter(r => r.requestType === 'fund_request').map(r => {
                 // derive patient name from common locations
                 const pName = r.patientName || (r.patientId && (r.patientId.name || r.patientId.fullName || r.patientId.displayName)) || (r.raw && (r.raw.patientName || r.raw.patientId && (r.raw.patientId.name))) || 'Unknown';
@@ -696,6 +696,12 @@ const ManageRequests = () => {
                             }} className="bg-success/10 hover:bg-success/20 text-success">
                               <Check className="w-4 h-4" />
                             </Button>
+                            <Button size="sm" variant="outline" onClick={() => {
+                              setHospitalNgoFundRequests(prev => prev.filter(p => p.id !== req.id))
+                              toast.info('Request dismissed')
+                            }} className="text-destructive border-destructive hover:bg-destructive/10">
+                              <X className="w-4 h-4" />
+                            </Button>
                             <Button size="sm" variant="outline" onClick={() => { 
                               const raw = req.raw || req;
                               const details = raw.patientId || raw.requestedBy || raw.patient || raw.patientDetails || null;
@@ -1097,6 +1103,15 @@ const ManageRequests = () => {
         isOpen={showNgoDetails && Boolean(selectedNgoRequest)}
         onClose={() => { setShowNgoDetails(false); setSelectedNgoRequest(null); }}
         request={selectedNgoRequest}
+        onPaymentSuccess={(id) => {
+          if (id) {
+            setHospitalNgoFundRequests(prev => prev.filter(r => String(r.id) !== String(id)))
+          } else {
+            setHospitalNgoFundRequests(prev => prev.filter(r => String(r.id) !== String(selectedNgoRequest?.id)))
+          }
+          setShowNgoDetails(false)
+          setSelectedNgoRequest(null)
+        }}
         onReject={(id) => {
           // local optimistic update: mark as rejected if id present
           setHospitalNgoFundRequests(prev => prev.map(r => (String(r.id) === String(id) ? { ...r, status: 'Rejected' } : r)));

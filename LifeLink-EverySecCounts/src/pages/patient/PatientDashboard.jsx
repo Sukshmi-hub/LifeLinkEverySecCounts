@@ -1,21 +1,23 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { useNotifications } from "@/context/NotificationContext";
 import Header from "@/components/Header";
-import DashboardCard from "@/components/DashboardCard";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Droplets,
   Heart,
   MessageCircle,
   CreditCard,
-  AlertTriangle,
   FileText,
   Clock,
 } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 
 function PatientDashboard() {
   const { user } = useAuth();
+  const { organRequests, loadOrganRequests } = useNotifications();
   const [patientData, setPatientData] = useState({
     activeRequests: 0,
     pending: 0,
@@ -24,42 +26,31 @@ function PatientDashboard() {
   });
 
   useEffect(() => {
-    // Try to load dashboard counts from backend (fallback to localStorage)
-    const loadCounts = async () => {
-      try {
-        const stored = localStorage.getItem('lifelink_auth')
-        const parsed = stored ? JSON.parse(stored) : null
-        const patientId = parsed?.user?.id
-        if (patientId) {
-          const res = await fetch(`http://localhost:5000/api/requests/dashboard?patientId=${encodeURIComponent(patientId)}`)
-          const json = await res.json()
-          if (json && json.success && json.data) {
-            setPatientData({
-              activeRequests: json.data.activeRequests || 0,
-              pending: json.data.pending || 0,
-              matched: json.data.matched || 0,
-              emergencies: json.data.emergencies || 0,
-            })
-            return
-          }
-        }
-        // fallback to localStorage legacy data
-        const storedData = localStorage.getItem("lifelink_patient_data");
-        if (storedData) {
-          const parsed2 = JSON.parse(storedData);
-          setPatientData({
-            activeRequests: parsed2.activeRequests || 0,
-            pending: parsed2.pending || 0,
-            matched: parsed2.matched || 0,
-            emergencies: parsed2.emergencies || 0,
-          });
-        }
-      } catch (err) {
-        console.error('Failed to load dashboard counts:', err)
-      }
+    if (user?.id && typeof loadOrganRequests === 'function') {
+      loadOrganRequests(user.id);
     }
-    loadCounts()
-  }, []);
+  }, [user?.id, loadOrganRequests]);
+
+  useEffect(() => {
+    const patientRequests = Array.isArray(organRequests)
+      ? organRequests.filter(r => String(r.patientId || '') === String(user?.id || '') || String(r.patientName || '') === String(user?.name || ''))
+      : [];
+    const matchedCount = patientRequests.filter(r => {
+      const status = String(r.status || '').toLowerCase();
+      return status.includes('matched') || status === 'accepted';
+    }).length;
+    const pendingCount = patientRequests.filter(r => {
+      const status = String(r.status || '').toLowerCase();
+      return !status.includes('matched') && status !== 'accepted' && status !== 'rejected';
+    }).length;
+
+    setPatientData({
+      activeRequests: patientRequests.length,
+      pending: pendingCount,
+      matched: matchedCount,
+      emergencies: 0,
+    });
+  }, [organRequests, user?.id]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -74,31 +65,36 @@ function PatientDashboard() {
           </p>
         </div>
 
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-          <DashboardCard
-            icon={FileText}
-            title="Active Requests"
-            value={String(patientData.activeRequests)}
-            variant="primary"
-          />
-          <DashboardCard
-            icon={Clock}
-            title="Pending"
-            value={String(patientData.pending)}
-            variant="warning"
-          />
-          <DashboardCard
-            icon={Heart}
-            title="Matched"
-            value={String(patientData.matched)}
-            variant="success"
-          />
-          <DashboardCard
-            icon={AlertTriangle}
-            title="Emergencies"
-            value={String(patientData.emergencies)}
-            variant="critical"
-          />
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 mb-8">
+          <Card className="border-none bg-primary/5 shadow-none">
+            <CardContent className="flex items-center gap-4 p-6">
+              <FileText className="w-8 h-8 text-primary" />
+              <div>
+                <p className="text-2xl font-bold">{String(patientData.activeRequests)}</p>
+                <p className="text-muted-foreground text-xs uppercase tracking-wider font-semibold">Total</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-none bg-warning/5 shadow-none">
+            <CardContent className="flex items-center gap-4 p-6">
+              <Clock className="w-8 h-8 text-warning" />
+              <div>
+                <p className="text-2xl font-bold">{String(patientData.pending)}</p>
+                <p className="text-muted-foreground text-xs uppercase tracking-wider font-semibold">Pending</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-none bg-success/5 shadow-none">
+            <CardContent className="flex items-center gap-4 p-6">
+              <Heart className="w-8 h-8 text-success" />
+              <div>
+                <p className="text-2xl font-bold">{String(patientData.matched)}</p>
+                <p className="text-muted-foreground text-xs uppercase tracking-wider font-semibold">Matched</p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         <h2 className="text-xl font-semibold mb-4">

@@ -228,8 +228,8 @@ function HospitalPayments() {
                       // Prefer the matched donor's hospital (or the sender hospital) when available.
                       // Fall back to `sentFromHospitalName` (the hospital that forwarded the match) or other available names.
                       const receivedFrom = (r.matchedDonor && (r.matchedDonor.hospitalName || r.matchedDonor.senderHospitalName)) || r.sentFromHospitalName || r.receivingHospitalName || r.patientHospitalName || '—'
-                      const summarySent = !!r.summarySent || !!r.paymentSummarySent || !!r.summaryCreated || !!r.paymentSent || !!r.paymentId
-                      const paymentCompleted = r.paymentId && String(r.paymentStatus || r.status || '').toLowerCase() !== 'pending'
+                      const summarySent = !!r.summarySent || !!r.paymentSummarySent || !!r.summaryCreated || !!r.paymentSent
+                      const paymentCompleted = !!r.paymentReceived || String(r.paymentStatus || '').toLowerCase() === 'success'
 
                       return (
                         <tr key={r._id || r.id} className="border-b">

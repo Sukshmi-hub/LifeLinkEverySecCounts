@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+const displayRequestStatus = (status) => (String(status || '') === 'VerifiedByHospital' ? 'SentToHospital' : status);
+
 const NgoDashboard = () => {
   const { user } = useAuth();
   const { fundRequests, updateFundRequestStatus, loadNgoFundRequests } = useNotifications();
@@ -31,11 +33,13 @@ const NgoDashboard = () => {
 
   // Calculate stats
   const totalRequests = fundRequests.length;
-  const pendingRequests = fundRequests.filter(r => String(r.status || '').toLowerCase().startsWith('pending')).length;
-  // Approved Supports: count of patients for whom NGO payment has been completed (paymentSent or SentToHospital)
-  const approvedRequests = fundRequests.filter(r => (r.paymentSent === true) || String(r.status) === 'SentToHospital' || String(r.status).toLowerCase() === 'paid').length;
-  // Disbursed Amount: total amount actually paid by NGO (sum of paymentSent requests or SentToHospital)
-  const disbursedAmount = fundRequests.filter(r => (r.paymentSent === true) || String(r.status) === 'SentToHospital' || String(r.status).toLowerCase() === 'paid').reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+  const paymentCompleted = (r) => Boolean(r.paymentReceived) || String(r.paymentStatus || '').toLowerCase() === 'success' || String(r.status) === 'SentToHospital';
+  const completedRequests = fundRequests.filter(paymentCompleted);
+  const pendingRequests = fundRequests.filter(r => !paymentCompleted(r)).length;
+  // Approved Supports: total number of donations done
+  const approvedRequests = completedRequests.length;
+  // Disbursed Amount: total amount distributed by NGO
+  const disbursedAmount = completedRequests.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 
   const handleViewDetails = (request) => {
     // If the mapped request includes the original server response as `raw`, prefer that for detail view
@@ -94,21 +98,21 @@ const NgoDashboard = () => {
         />
         <NgoStatCard
           title="Pending Approvals"
-          subtitle="Requests awaiting NGO decision"
+          subtitle="Payments not done"
           value={pendingRequests}
           icon={Clock}
           variant="warning"
         />
         <NgoStatCard
           title="Approved Supports"
-          subtitle="Funds approved by NGO"
+          subtitle="Total donations done"
           value={approvedRequests}
           icon={CheckCircle}
           variant="success"
         />
         <NgoStatCard
           title="Disbursed Amount"
-          subtitle="Total funds released"
+          subtitle="Total amount distributed"
           value={`₹${disbursedAmount.toLocaleString()}`}
           icon={Wallet}
           variant="info"
@@ -148,7 +152,7 @@ const NgoDashboard = () => {
                           'bg-warning/20 text-warning-foreground'
                         )}
                       >
-                        {request.status}
+                        {displayRequestStatus(request.status)}
                       </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">
@@ -246,7 +250,7 @@ const NgoDashboard = () => {
                           'bg-warning/20 text-warning-foreground'
                         )}
                       >
-                        {request.status}
+                        {displayRequestStatus(request.status)}
                       </Badge>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
@@ -366,6 +370,18 @@ const NgoDashboard = () => {
           isOpen={showDetails}
           onClose={() => setShowDetails(false)}
           request={selectedRequest}
+          onPaymentSuccess={() => {
+            setSelectedRequest(prev => prev ? {
+              ...prev,
+              paymentSent: true,
+              paymentReceived: true,
+              paymentStatus: 'success',
+              status: 'VerifiedByHospital',
+            } : prev)
+            if (user?.id) {
+              loadNgoFundRequests(user.id)
+            }
+          }}
           onApprove={async (id) => {
           try {
             const token = localStorage.getItem('token')

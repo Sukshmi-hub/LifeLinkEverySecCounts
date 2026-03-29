@@ -72,6 +72,7 @@ const RequestSchema = new Schema({
   amount: { type: Number, default: 0 },
   ngoId: { type: Schema.Types.ObjectId, ref: 'NGO', default: null },
   ngoName: { type: String, default: '' },
+  sourceRequestId: { type: Schema.Types.ObjectId, ref: 'Request', default: null },
   // Optional breakdown stored for fund requests (patient-entered fees)
   breakdown: {
     transplantFee: { type: Number, default: 0 },
@@ -85,6 +86,8 @@ const RequestSchema = new Schema({
   // Payment-related fields
   paymentSent: { type: Boolean, default: false },
   paymentId: { type: Schema.Types.ObjectId, ref: 'Payment', required: false, default: null },
+  paymentReceived: { type: Boolean, default: false },
+  paymentStatus: { type: String, default: 'pending' },
   // Red alert flags
   isRedAlert: { type: Boolean, default: false },
   isResolved: { type: Boolean, default: false },

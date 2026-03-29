@@ -258,6 +258,9 @@ export const NotificationProvider = ({ children }) => {
           amount: r.amount,
           status: r.status,
           createdAt: r.createdAt,
+          paymentSent: Boolean(r.paymentSent),
+          paymentReceived: Boolean(r.paymentReceived),
+          paymentStatus: r.paymentStatus || null,
           ngoId: r.ngoId,
           ngoName: r.ngoName,
           patientId: extractId(r.patientId) || r.patientId,
@@ -269,6 +272,7 @@ export const NotificationProvider = ({ children }) => {
           hospitalName: (r.hospitalId && (r.hospitalId.name || r.hospitalId.organizationName)) || r.hospitalName || null,
           hospitalContact: (r.hospitalId && (r.hospitalId.phone || r.hospitalId.contact_phone)) || null,
           hospitalAddress: (r.hospitalId && (r.hospitalId.address || r.hospitalId.location?.full_address)) || r.hospitalAddress || null,
+          sourceRequestId: extractId(r.sourceRequestId) || r.sourceRequestId || null,
           // include breakdown if backend provided it (used by NGO UI)
           breakdown: r.breakdown || {
             transplantFee: r.transplantFee || 0,
@@ -313,6 +317,7 @@ export const NotificationProvider = ({ children }) => {
           hospitalName: (r.hospitalId && (r.hospitalId.name || r.hospitalId.organizationName)) || r.hospitalName || null,
           hospitalContact: (r.hospitalId && (r.hospitalId.phone || r.hospitalId.contact_phone)) || null,
           hospitalAddress: (r.hospitalId && (r.hospitalId.address || r.hospitalId.location?.full_address)) || r.hospitalAddress || null,
+          sourceRequestId: extractId(r.sourceRequestId) || r.sourceRequestId || null,
           // include original server response so callers can access populated patient/hospital objects
           raw: r,
           // include breakdown fields so NGO UI can render exact amounts
@@ -341,6 +346,7 @@ export const NotificationProvider = ({ children }) => {
         if (request.hospitalId) form.append('hospitalId', request.hospitalId)
         if (request.hospitalName) form.append('hospitalName', request.hospitalName)
         if (request.hospitalAddress) form.append('hospitalAddress', request.hospitalAddress)
+        if (request.sourceRequestId) form.append('sourceRequestId', request.sourceRequestId)
         form.append('message', request.description || request.message || '')
         // attach breakdown as JSON when provided
         if (request.transplantFee || request.hospitalCharges || request.processingFee) {
@@ -382,8 +388,11 @@ export const NotificationProvider = ({ children }) => {
             document: saved.files?.medicalReports?.[0] || null,
             prescription: saved.files?.prescription || null,
             rationCard: saved.files?.rationCard || null,
-            patientName: saved.patientName
-          ,
+            patientName: saved.patientName,
+            sourceRequestId: saved.sourceRequestId || null,
+            paymentSent: Boolean(saved.paymentSent),
+            paymentReceived: Boolean(saved.paymentReceived),
+            paymentStatus: saved.paymentStatus || null,
             // include raw server response to enable immediate detail view with populated fields
             raw: saved,
           }

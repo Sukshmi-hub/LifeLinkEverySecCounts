@@ -74,10 +74,44 @@ export const getMyCertificates = async (req, res) => {
   try {
     const user = req.user
     if (!user) return res.status(401).json({ success: false, message: 'Authentication required' })
-    // find donor record for this user
-    const donor = await Donor.findOne({ userId: user._id }).populate('certificates').lean()
-    if (!donor) return res.json({ success: true, data: [] })
-    return res.json({ success: true, data: donor.certificates || [] })
+    const userId = user._id || user.id || null
+
+    // Find donor record for this user, but keep a few fallbacks because the
+    // auth/profile payload shape has shifted in a few places across the app.
+    let donor = null
+    if (userId) {
+      donor = await Donor.findOne({ userId }).lean()
+    }
+    if (!donor && user.email) {
+      donor = await Donor.findOne({ email: String(user.email).toLowerCase() }).lean()
+    }
+
+    // Prefer the certificate collection directly so the UI always receives
+    // full certificate documents instead of raw ObjectId refs.
+    const queries = []
+    if (donor && donor._id) queries.push({ donorId: donor._id })
+    if (userId) queries.push({ donorUserId: userId })
+
+    for (const query of queries) {
+      const certificates = await Certificate.find(query).sort({ createdAt: -1 }).lean()
+      if (certificates.length) {
+        return res.json({ success: true, data: certificates })
+      }
+    }
+
+    // If no direct certificate docs are found, resolve any stored certificate refs.
+    if (donor && Array.isArray(donor.certificates) && donor.certificates.length) {
+      const refs = donor.certificates.filter(Boolean)
+      const objectIds = refs.filter((ref) => mongoose.Types.ObjectId.isValid(String(ref))).map((ref) => String(ref))
+      if (objectIds.length) {
+        const resolved = await Certificate.find({ _id: { $in: objectIds } }).sort({ createdAt: -1 }).lean()
+        if (resolved.length) {
+          return res.json({ success: true, data: resolved })
+        }
+      }
+    }
+
+    return res.json({ success: true, data: [] })
   } catch (err) {
     console.error('getMyCertificates failed', err)
     return res.status(500).json({ success: false, message: 'Server error' })
@@ -87,8 +121,13 @@ export const getMyCertificates = async (req, res) => {
 export const downloadCertificate = async (req, res) => {
   try {
     const id = req.params.id
-    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ success: false, message: 'Invalid id' })
-    const cert = await Certificate.findById(id).lean()
+    let cert = null
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      cert = await Certificate.findById(id).lean()
+    }
+    if (!cert) {
+      cert = await Certificate.findOne({ certificateNumber: id }).lean()
+    }
     if (!cert) return res.status(404).json({ success: false, message: 'Certificate not found' })
     // Only allow donor owner or admin/hospital? For now, ensure authenticated donor owns it
     if (req.user && String(req.user._id)) {

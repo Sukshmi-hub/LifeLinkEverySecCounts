@@ -188,14 +188,15 @@ const PaymentPage = () => {
                               hospitalCharges: paymentSummary?.hospitalCharges || 0,
                               processingFee: paymentSummary?.processingFee || 0,
                               hospitalId: paymentSummary?.hospitalId || matchedRequest?.hospitalId || null,
-                              hospitalName: paymentSummary?.hospitalName || matchedRequest?.hospitalName || ''
+                              hospitalName: paymentSummary?.hospitalName || matchedRequest?.hospitalName || '',
+                              sourceRequestId: matchedRequest?.id || matchedRequest?._id || paymentSummary?.requestId || null
                             };
                             navigate('/patient/request-funds', { state: { prefill, fixed: true } });
                           }}
                           variant="secondary"
                           className="h-12 flex items-center gap-2"
                         >
-                          <img src="/src/assets/ngo_logo.png" alt="NGO Logo" style={{ width: 24, height: 24, marginRight: 8 }} />
+                          <HandHeart className="w-5 h-5 mr-2 shrink-0" />
                           Ask NGO
                         </Button>
                       </>

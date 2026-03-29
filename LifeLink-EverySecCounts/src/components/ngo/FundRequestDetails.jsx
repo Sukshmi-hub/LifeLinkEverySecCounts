@@ -50,6 +50,7 @@ const FundRequestDetails = ({
   onApprove,
   onReject,
   onMessageHospital,
+  onPaymentSuccess,
 }) => {
 
   const [sendingToHos, setSendingToHos] = useState(false);
@@ -296,6 +297,8 @@ const FundRequestDetails = ({
     const candidate = (fh && (fh._id || fh.id || fh.userId || fh.user_id)) || null;
     return extractId(candidate) || extractId(request.hospitalId) || null;
   }, [fetchedHospital, request]);
+  const paymentCompleted = Boolean(request.paymentReceived) || String(request.paymentStatus || '').toLowerCase() === 'success';
+  const displayStatus = String(request.status || '') === 'VerifiedByHospital' ? 'SentToHospital' : request.status;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -547,23 +550,18 @@ const FundRequestDetails = ({
                 </Button>
               )}
               {/* Approve button removed from modal per NGO UX - approval remains available from requests list */}
-                {/* Allow patient to pay hospital from this modal when hospital id is known */}
-                {hospitalDbId && (
-                  <Button
-                    onClick={() => setIsRzpOpen(true)}
-                    className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
-                  >
-                    <CreditCard className="w-4 h-4" />
-                    Pay Hospital
-                  </Button>
-                )}
             </>
           ) : (
             <div className="flex items-center gap-3">
               {String(request.status) === 'VerifiedByHospital' ? (
-                // Show Pay button to NGO when hospital has verified the request
+                // Show payment state to NGO when hospital has verified the request
                 <>
-                  {hospitalDbId && (
+                  {paymentCompleted ? (
+                    <Badge className="bg-success/20 text-success">
+                      <CheckCircle className="w-4 h-4 mr-1" />
+                      Payment Done
+                    </Badge>
+                  ) : hospitalDbId ? (
                     <Button
                       onClick={() => setIsRzpOpen(true)}
                       className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
@@ -571,18 +569,18 @@ const FundRequestDetails = ({
                       <CreditCard className="w-4 h-4" />
                       Pay Hospital
                     </Button>
-                  )}
+                  ) : null}
                   <Button variant="outline" onClick={onClose}>Close</Button>
                 </>
               ) : (
                 <>
                   <Badge className={cn("text-sm py-1 px-3", request.status === 'Approved' ? 'bg-success/20 text-success' : (request.status === 'Dennied' ? 'bg-destructive/20 text-destructive' : 'bg-destructive/20 text-destructive'))}>
-                    {request.status === 'Approved' ? (
+                    {displayStatus === 'Approved' ? (
                       <><CheckCircle className="w-4 h-4 mr-1" /> Approved</>
-                    ) : request.status === 'Dennied' ? (
+                    ) : displayStatus === 'Dennied' ? (
                       <><XCircle className="w-4 h-4 mr-1" /> Dennied</>
                     ) : (
-                      <><XCircle className="w-4 h-4 mr-1" /> Rejected</>
+                      <><XCircle className="w-4 h-4 mr-1" /> {displayStatus || 'Rejected'}</>
                     )}
                   </Badge>
                   <Button variant="outline" onClick={onClose}>Close</Button>
@@ -595,6 +593,10 @@ const FundRequestDetails = ({
         <RazorpayModal
           isOpen={isRzpOpen}
           onClose={() => setIsRzpOpen(false)}
+          onPaymentSuccess={() => {
+            setSentToHos(true)
+            if (onPaymentSuccess) onPaymentSuccess(request.id || request._id || null)
+          }}
           donorName={patient.name}
           organType={request.reason || request.description}
           hospitalName={hospital.name}

@@ -63,6 +63,7 @@ const RazorpayModal = ({
       setReceipt(verifyJson.data && verifyJson.data.receipt ? verifyJson.data.receipt : null)
       console.log('Setting isSuccess to true');
       setIsSuccess(true)
+      if (onPaymentSuccess) onPaymentSuccess()
       
       // Close Razorpay modal if it exists
       if (razorpayRef.current) {
