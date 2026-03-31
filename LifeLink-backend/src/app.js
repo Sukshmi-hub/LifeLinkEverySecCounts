@@ -40,20 +40,20 @@ const app = express()
 // MIDDLEWARE
 // ============================================
 
-// CORS - Allow all origins for deployment and local development.
-// The backend uses bearer tokens, so credentials are not required here.
-const corsOptions = {
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-};
+const corsOrigin = process.env.FRONTEND_URL || "*";
 
-app.use(cors(corsOptions));
-// Ensure preflight requests are handled for all routes
-app.options('*', cors(corsOptions));
+app.use(cors({
+  origin: corsOrigin,
+  credentials: true
+}));
+
+app.options("*", cors({
+  origin: corsOrigin,
+  credentials: true
+}));
 
 // Body parser - Parse JSON requests
-app.use(express.json())
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }))
 
 // Serve uploaded files (make sure public/uploads exists)
