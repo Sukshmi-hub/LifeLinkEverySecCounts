@@ -1,37 +1,36 @@
 // src/controllers/authController.js
+import crypto from 'node:crypto';
+import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import Patient from '../models/Patient.js';
 import Donor from '../models/Donor.js';
 import Hospital from '../models/Hospital.js';
 import NGO from '../models/NGO.js';
 import Admin from '../models/Admin.js';
-import Message from '../models/Message.js'
-import jwt from 'jsonwebtoken';
-import { sendPasswordResetEmail } from '../config/email.js';
-import bcrypt from 'bcryptjs'
+import Message from '../models/Message.js';
+import Dots from '../models/Dots.js';
+import PendingSignup from '../models/PendingSignup.js';
+import { sendPasswordResetEmail, sendVerificationEmail } from '../config/email.js';
 
-// In-memory OTP storage: { phone: { code, expiry, attempts } }
-const otpStore = {};
+const OTP_EXPIRY_MINUTES = 5;
+const OTP_EXPIRY_MS = OTP_EXPIRY_MINUTES * 60 * 1000;
+const MAX_OTP_ATTEMPTS = 5;
+const RESEND_COOLDOWN_MS = 60 * 1000;
 
-// Helper to parse MongoDB duplicate key errors into { field, value }
 const parseDuplicateKeyError = (err) => {
   try {
     if (err.keyValue && typeof err.keyValue === 'object') {
       const field = Object.keys(err.keyValue)[0];
       return { field, value: err.keyValue[field] };
     }
-    // Fallback: attempt to parse from error.message
-    // Examples of message formats vary; try to extract "dup key: { : \"value\" }" and index name
     const msg = err.message || '';
-    // Try to extract value between quotes after dup key
     const valueMatch = msg.match(/dup key:\s*\{\s*: "([^"]+)"\s*\}/);
     const idxMatch = msg.match(/index:\s*([^\s]+)\s*/);
     const value = valueMatch ? valueMatch[1] : undefined;
     let field;
     if (idxMatch) {
-      // index may be like db.collection.$field_1
       const idx = idxMatch[1];
-      const parts = idx.split('\.');
+      const parts = idx.split('.');
       const last = parts[parts.length - 1];
       field = last.replace(/\$?/, '').replace(/_\d+$/, '');
     }
@@ -41,15 +40,117 @@ const parseDuplicateKeyError = (err) => {
   }
 };
 
-const generateToken = (userId) => {
-  return jwt.sign(
-    { userId },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRE || '7d' }
-  );
+const generateToken = (userId) =>
+  jwt.sign({ userId }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRE || '7d',
+  });
+
+const generateOtp = () => `${Math.floor(100000 + Math.random() * 900000)}`;
+const hashOtp = (otp) => crypto.createHash('sha256').update(String(otp)).digest('hex');
+const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+
+const clearOtpState = (user, key) => {
+  user[key] = {
+    codeHash: null,
+    expiresAt: null,
+    attempts: 0,
+    resendCount: 0,
+    lastSentAt: null,
+  };
 };
 
-export const register = async (req, res) => {
+const setOtpState = (user, key, otp) => {
+  user[key] = {
+    codeHash: hashOtp(otp),
+    expiresAt: new Date(Date.now() + OTP_EXPIRY_MS),
+    attempts: 0,
+    resendCount: (user[key]?.resendCount || 0) + 1,
+    lastSentAt: new Date(),
+  };
+};
+
+const validateOtpState = (user, key, otp) => {
+  const state = user[key] || {};
+
+  if (!state.codeHash || !state.expiresAt) {
+    return { ok: false, status: 400, message: 'OTP not requested or already used.' };
+  }
+
+  if (new Date(state.expiresAt).getTime() < Date.now()) {
+    clearOtpState(user, key);
+    return { ok: false, status: 400, message: 'OTP has expired. Please request a new one.' };
+  }
+
+  if ((state.attempts || 0) >= MAX_OTP_ATTEMPTS) {
+    clearOtpState(user, key);
+    return { ok: false, status: 429, message: 'Too many failed attempts. Please request a new OTP.' };
+  }
+
+  if (state.codeHash !== hashOtp(otp)) {
+    user[key].attempts = (state.attempts || 0) + 1;
+    const remaining = Math.max(MAX_OTP_ATTEMPTS - user[key].attempts, 0);
+    return { ok: false, status: 400, message: `Invalid OTP. ${remaining} attempts remaining.` };
+  }
+
+  return { ok: true };
+};
+
+const ensureResendAllowed = (user, key) => {
+  const lastSentAt = user[key]?.lastSentAt;
+  if (!lastSentAt) return null;
+
+  const elapsed = Date.now() - new Date(lastSentAt).getTime();
+  if (elapsed < RESEND_COOLDOWN_MS) {
+    const seconds = Math.ceil((RESEND_COOLDOWN_MS - elapsed) / 1000);
+    return `Please wait ${seconds} seconds before requesting another OTP.`;
+  }
+
+  return null;
+};
+
+const sendSignupVerificationOtp = async (user) => {
+  const otp = generateOtp();
+  setOtpState(user, 'emailVerification', otp);
+  await user.save();
+  await sendVerificationEmail(user.email, otp);
+};
+
+const validatePendingSignupOtp = (record, otp) => {
+  if (!record || !record.otpHash || !record.expiresAt) {
+    return { ok: false, status: 400, message: 'OTP not requested or already used.' };
+  }
+
+  if (new Date(record.expiresAt).getTime() < Date.now()) {
+    return { ok: false, status: 400, message: 'OTP has expired. Please request a new one.' };
+  }
+
+  if ((record.attempts || 0) >= MAX_OTP_ATTEMPTS) {
+    return { ok: false, status: 429, message: 'Too many failed attempts. Please request a new OTP.' };
+  }
+
+  if (record.otpHash !== hashOtp(otp)) {
+    record.attempts = (record.attempts || 0) + 1;
+    const remaining = Math.max(MAX_OTP_ATTEMPTS - record.attempts, 0);
+    return { ok: false, status: 400, message: `Invalid OTP. ${remaining} attempts remaining.` };
+  }
+
+  return { ok: true };
+};
+
+const ensurePendingSignupResendAllowed = (record) => {
+  const lastSentAt = record?.lastSentAt;
+  if (!lastSentAt) return null;
+
+  const elapsed = Date.now() - new Date(lastSentAt).getTime();
+  if (elapsed < RESEND_COOLDOWN_MS) {
+    const seconds = Math.ceil((RESEND_COOLDOWN_MS - elapsed) / 1000);
+    return `Please wait ${seconds} seconds before requesting another OTP.`;
+  }
+
+  return null;
+};
+
+const signupCore = async (req, res) => {
   try {
     const {
       email,
@@ -66,60 +167,98 @@ export const register = async (req, res) => {
       address,
       emergency_contact,
       emergency_contact_name,
-      emergency_contact_phone
-    ,
-      // hospital fields
+      emergency_contact_phone,
       hospital_type,
       hospital_contact_phone,
       hospital_address,
-      // ngo fields
       ngo_contact_phone,
-      ngo_registered_office_address
+      ngo_registered_office_address,
     } = req.body;
-    console.log('Register payload:', { email, name, role, phone });
 
-    // Helper to pick the first present key from req.body for flexible frontend names
+    const normalizedEmail = normalizeEmail(email);
+    console.log('Register payload:', { email: normalizedEmail, name, role, phone });
+
     const pick = (keys) => {
-      for (const k of keys) {
-        if (req.body[k] !== undefined) return req.body[k];
+      for (const key of keys) {
+        if (req.body[key] !== undefined) return req.body[key];
       }
       return undefined;
     };
 
-    // Normalize possible frontend field names for hospital and NGO
-    const hospitalContactNormalized = pick(['hospital_contact_phone', 'hospital_contact', 'hospitalContactPhone', 'hospital_phone', 'contact_phone', 'contactPhone']);
-    const hospitalAddressNormalized = pick(['hospital_address', 'hospital_full_address', 'hospitalAddress', 'address', 'hospital_addr']);
-    const ngoContactNormalized = pick(['ngo_contact_phone', 'ngo_contact', 'ngoContactPhone', 'ngoContact', 'ngo_phone']);
-    const ngoAddressNormalized = pick(['ngo_registered_office_address', 'registered_office_address', 'ngo_registered_office_address', 'ngo_address', 'address']);
-    // Normalize possible frontend field names for coordinates and full address
+    const hospitalContactNormalized = pick([
+      'hospital_contact_phone',
+      'hospital_contact',
+      'hospitalContactPhone',
+      'hospital_phone',
+      'contact_phone',
+      'contactPhone',
+    ]);
+    const hospitalAddressNormalized = pick([
+      'hospital_address',
+      'hospital_full_address',
+      'hospitalAddress',
+      'address',
+      'hospital_addr',
+    ]);
+    const ngoContactNormalized = pick([
+      'ngo_contact_phone',
+      'ngo_contact',
+      'ngoContactPhone',
+      'ngoContact',
+      'ngo_phone',
+    ]);
+    const ngoAddressNormalized = pick([
+      'ngo_registered_office_address',
+      'registered_office_address',
+      'ngo_registered_office_address',
+      'ngo_address',
+      'address',
+    ]);
     const latNormalized = pick(['latitude', 'lat', 'location_lat', 'latlng_lat']);
     const lonNormalized = pick(['longitude', 'lon', 'lng', 'location_lon', 'location_lng', 'latlng_lon']);
-    const fullAddressNormalized = pick(['full_address', 'fullAddress', 'address', 'location_full_address', 'display_name']);
+    const fullAddressNormalized = pick([
+      'full_address',
+      'fullAddress',
+      'address',
+      'location_full_address',
+      'display_name',
+    ]);
     const countryNormalized = pick(['country', 'location_country']);
-    const hospitalNormalized = pick(['hospital', 'hospital_id', 'hospitalId', 'hospitalIdStr', 'hospitalIdString', 'admittedHospital', 'admitted_hospital']);
+    const hospitalNormalized = pick([
+      'hospital',
+      'hospital_id',
+      'hospitalId',
+      'hospitalIdStr',
+      'hospitalIdString',
+      'admittedHospital',
+      'admitted_hospital',
+    ]);
     const locationAutoFlag = pick(['location_auto', 'use_location', 'auto_location', 'useMyLocation']);
 
-    // Normalize aadhaar: trim and treat empty string as not provided
     const cleanAadhaar = aadhaar_no && String(aadhaar_no).trim() ? String(aadhaar_no).trim() : undefined;
 
-    // 1. Strict Validation: require aadhaar_no only for patient/donor
-    // Remove aadhaar_no validation for NGO role
+    const pendingSignup = await PendingSignup.findOne({ email: normalizedEmail });
+    if (!pendingSignup || !pendingSignup.verifiedAt) {
+      return res.status(403).json({
+        success: false,
+        message: 'Please verify your email with OTP before creating the account.',
+      });
+    }
+
     if (role === 'ngo') {
-      if (!email || !password || !name) {
+      if (!normalizedEmail || !password || !name) {
         return res.status(400).json({
           success: false,
           message: 'Missing fields: email, password, and name are required for NGO.',
         });
       }
-    } else {
-      // Existing validation for other roles
-      if (!email || !password || !name || !role) {
-        return res.status(400).json({
-          success: false,
-          message: 'Missing fields: email, password, name, and role are required.',
-        });
-      }
+    } else if (!normalizedEmail || !password || !name || !role) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing fields: email, password, name, and role are required.',
+      });
     }
+
     if ((role === 'patient' || role === 'donor') && !cleanAadhaar) {
       return res.status(400).json({
         success: false,
@@ -127,7 +266,6 @@ export const register = async (req, res) => {
       });
     }
 
-    // Role-specific required fields
     if (role === 'patient' || role === 'donor') {
       if (age === undefined || age === null) {
         return res.status(400).json({
@@ -143,36 +281,34 @@ export const register = async (req, res) => {
       }
     }
 
-    // 2. Check if user already exists (only check aadhaar if provided for patient/donor)
     let existingUser = null;
     if (role === 'patient' || role === 'donor') {
-      if (cleanAadhaar) {
-        existingUser = await User.findOne({ $or: [{ email }, { aadhaar_no: cleanAadhaar }] });
-      } else {
-        existingUser = await User.findOne({ email });
-      }
+      existingUser = cleanAadhaar
+        ? await User.findOne({ $or: [{ email: normalizedEmail }, { aadhaar_no: cleanAadhaar }] })
+        : await User.findOne({ email: normalizedEmail });
     } else {
-      existingUser = await User.findOne({ email });
+      existingUser = await User.findOne({ email: normalizedEmail });
     }
 
-    // Prevent registration if an account with this email/aadhaar is permanently blocked
     if (existingUser && existingUser.status === 'blocked') {
       return res.status(403).json({
         success: false,
-        message: 'This account has been permanently blocked and cannot register again.'
+        message: 'This account has been permanently blocked and cannot register again.',
       });
     }
-    // Also check phone-based block
+
     if (phone) {
       try {
-        const blockedByPhone = await User.findOne({ phone: phone });
+        const blockedByPhone = await User.findOne({ phone });
         if (blockedByPhone && blockedByPhone.status === 'blocked') {
           return res.status(403).json({
             success: false,
-            message: 'This account has been permanently blocked and cannot register again.'
+            message: 'This account has been permanently blocked and cannot register again.',
           });
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('Phone lookup during registration failed:', e.message);
+      }
     }
 
     let userToUse = null;
@@ -185,24 +321,23 @@ export const register = async (req, res) => {
       }
 
       userToUse = existingUser;
-      if (password) {
-        userToUse.password = password;
-      }
-      if (cleanAadhaar) {
-        userToUse.aadhaar_no = cleanAadhaar;
-      }
+      if (password) userToUse.password = password;
+      if (cleanAadhaar) userToUse.aadhaar_no = cleanAadhaar;
       userToUse.name = userToUse.name || name;
       userToUse.phone = userToUse.phone || phone || null;
+      userToUse.isEmailVerified = false;
+      clearOtpState(userToUse, 'emailVerification');
       await userToUse.save();
     }
 
     const userData = {
       name,
-      email,
+      email: normalizedEmail,
       password,
       phone: phone || null,
       role,
       is_verified: false,
+      isEmailVerified: false,
     };
     if (cleanAadhaar && (role === 'patient' || role === 'donor')) userData.aadhaar_no = cleanAadhaar;
 
@@ -221,6 +356,7 @@ export const register = async (req, res) => {
       ngo: NGO,
       admin: Admin,
     };
+
     const Model = roleModelMap[role];
     if (!Model) {
       await User.findByIdAndDelete(newUser._id).catch(() => {});
@@ -240,79 +376,101 @@ export const register = async (req, res) => {
 
     const roleData = {
       userId: newUser._id,
-      name: name,
-      email: email,
+      name,
+      email: normalizedEmail,
       phone: phone || null,
-      password: password,
+      password,
     };
+
     if (role === 'patient') {
       roleData.aadhaar_no = cleanAadhaar;
       roleData.age = age || null;
       roleData.blood_type = blood_type || 'O+';
-      // Accept either a nested `location` object or separate `city`/`state`/coords/full_address fields from the frontend
-      roleData.location = location || (city || state || latNormalized || lonNormalized || fullAddressNormalized || countryNormalized ? {
-        city: city || '',
-        state: state || '',
-        latitude: latNormalized || undefined,
-        longitude: lonNormalized || undefined,
-        full_address: fullAddressNormalized || '',
-        country: countryNormalized || ''
-      } : {});
-      // Accept hospital selection (id or string) from frontend
+      roleData.location =
+        location ||
+        (city || state || latNormalized || lonNormalized || fullAddressNormalized || countryNormalized
+          ? {
+              city: city || '',
+              state: state || '',
+              latitude: latNormalized || undefined,
+              longitude: lonNormalized || undefined,
+              full_address: fullAddressNormalized || '',
+              country: countryNormalized || '',
+            }
+          : {});
       roleData.hospital = hospitalNormalized || req.body.hospital || null;
     }
+
     if (role === 'donor') {
       roleData.aadhaar_no = cleanAadhaar;
       roleData.age = age || null;
       roleData.blood_type = blood_type || 'O+';
       roleData.donation_type = req.body.donation_type || [];
-      roleData.location = location || (city || state || latNormalized || lonNormalized || fullAddressNormalized || countryNormalized ? {
-        city: city || '',
-        state: state || '',
-        latitude: latNormalized || undefined,
-        longitude: lonNormalized || undefined,
-        full_address: fullAddressNormalized || '',
-        country: countryNormalized || ''
-      } : {});
-      // Accept either an `emergency_contact` object or separate name/phone fields
+      roleData.location =
+        location ||
+        (city || state || latNormalized || lonNormalized || fullAddressNormalized || countryNormalized
+          ? {
+              city: city || '',
+              state: state || '',
+              latitude: latNormalized || undefined,
+              longitude: lonNormalized || undefined,
+              full_address: fullAddressNormalized || '',
+              country: countryNormalized || '',
+            }
+          : {});
       roleData.address = address || '';
-      roleData.emergency_contact = emergency_contact || (emergency_contact_name || emergency_contact_phone ? { name: emergency_contact_name || '', phone: emergency_contact_phone || '' } : {});
+      roleData.emergency_contact =
+        emergency_contact ||
+        (emergency_contact_name || emergency_contact_phone
+          ? {
+              name: emergency_contact_name || '',
+              phone: emergency_contact_phone || '',
+            }
+          : {});
     }
+
     if (role === 'hospital') {
-      // hospital-specific fields
       roleData.hospital_type = hospital_type || '';
       roleData.contact_phone = hospitalContactNormalized || hospital_contact_phone || '';
       roleData.address = hospitalAddressNormalized || hospital_address || '';
-      // Accept location fields for hospital as well
-      roleData.location = location || (city || state || latNormalized || lonNormalized || fullAddressNormalized || countryNormalized ? {
-        city: city || '',
-        state: state || '',
-        latitude: latNormalized || undefined,
-        longitude: lonNormalized || undefined,
-        full_address: fullAddressNormalized || '',
-        country: countryNormalized || ''
-      } : {});
-    }
-    if (role === 'ngo') {
-      // NGO-specific fields
-      roleData.ngo_contact_phone = ngoContactNormalized || ngo_contact_phone || '';
-      roleData.registered_office_address = ngoAddressNormalized || ngo_registered_office_address || '';
-      // Accept location fields for NGO as well
-      roleData.location = location || (city || state || latNormalized || lonNormalized || fullAddressNormalized || countryNormalized ? {
-        city: city || '',
-        state: state || '',
-        latitude: latNormalized || undefined,
-        longitude: lonNormalized || undefined,
-        full_address: fullAddressNormalized || '',
-        country: countryNormalized || ''
-      } : {});
+      roleData.location =
+        location ||
+        (city || state || latNormalized || lonNormalized || fullAddressNormalized || countryNormalized
+          ? {
+              city: city || '',
+              state: state || '',
+              latitude: latNormalized || undefined,
+              longitude: lonNormalized || undefined,
+              full_address: fullAddressNormalized || '',
+              country: countryNormalized || '',
+            }
+          : {});
     }
 
-    // If frontend explicitly indicated auto-location should be used, validate coords are present
+    if (role === 'ngo') {
+      roleData.ngo_contact_phone = ngoContactNormalized || ngo_contact_phone || '';
+      roleData.registered_office_address = ngoAddressNormalized || ngo_registered_office_address || '';
+      roleData.location =
+        location ||
+        (city || state || latNormalized || lonNormalized || fullAddressNormalized || countryNormalized
+          ? {
+              city: city || '',
+              state: state || '',
+              latitude: latNormalized || undefined,
+              longitude: lonNormalized || undefined,
+              full_address: fullAddressNormalized || '',
+              country: countryNormalized || '',
+            }
+          : {});
+    }
+
     if (locationAutoFlag && (locationAutoFlag === true || locationAutoFlag === 'true')) {
       const loc = roleData.location || {};
       if (!loc.latitude || !loc.longitude) {
-        return res.status(400).json({ success: false, message: 'Location auto-detection requested but coordinates are missing.' });
+        return res.status(400).json({
+          success: false,
+          message: 'Location auto-detection requested but coordinates are missing.',
+        });
       }
     }
 
@@ -323,62 +481,67 @@ export const register = async (req, res) => {
       update.$set.phone = roleData.phone;
       update.$set.password = roleData.password;
       update.$setOnInsert.userId = newUser._id;
+
       if (role === 'patient' || role === 'donor' || role === 'hospital' || role === 'ngo') {
         if (cleanAadhaar) update.$setOnInsert.aadhaar_no = cleanAadhaar;
-          // Optional patient/donor/hospital/ngo fields
-          update.$set.age = roleData.age;
-          update.$set.blood_type = roleData.blood_type;
-          // Set nested location fields individually to avoid overwriting with empty object
-          if (roleData.location && typeof roleData.location === 'object' && Object.keys(roleData.location).length) {
-            Object.keys(roleData.location).forEach((lk) => {
-              update.$set[`location.${lk}`] = roleData.location[lk];
-            });
-          }
-          // Set hospital reference if provided and denormalize hospital name when possible.
-          // Prefer any explicit hospital name sent by the frontend, but fall back to
-          // resolving the hospital document's `name` when available.
-          // Collect any explicit name variations from the request body first.
-          const explicitBodyHospitalName = pick(['patientHospitalName', 'patient_hospital_name', 'hospitalName', 'hospital_name', 'hospitalNameDisplay', 'admittedHospital', 'admitted_hospital', 'hospital_name_display']);
-          if (roleData.hospital) {
-            update.$set.hospital = roleData.hospital;
-            let resolvedName = undefined;
-            try {
-              const hospCandidate = roleData.hospital;
-              const isObjectIdLike = typeof hospCandidate === 'string' && hospCandidate.length === 24 && /^[0-9a-fA-F]+$/.test(hospCandidate);
-              let hospDoc = null;
-              if (isObjectIdLike) hospDoc = await Hospital.findById(hospCandidate).lean();
-              if (!hospDoc) hospDoc = await Hospital.findOne({ $or: [{ name: hospCandidate }, { legacyId: hospCandidate }, { externalId: hospCandidate }] }).lean();
-              if (hospDoc && hospDoc.name) resolvedName = hospDoc.name;
-            } catch (e) {
-              console.warn('Failed to resolve hospital name during registration update', e && e.message ? e.message : e);
-            }
-            // Prefer explicit name from body if present, otherwise use resolved name
-            if (explicitBodyHospitalName) update.$set.hospitalName = explicitBodyHospitalName;
-            else if (resolvedName) update.$set.hospitalName = resolvedName;
+        update.$set.age = roleData.age;
+        update.$set.blood_type = roleData.blood_type;
 
-            // Mirror denormalized field to admit-friendly alias for compatibility
-            try {
-              if (update.$set.hospitalName) update.$set.admittedHospital = update.$set.hospitalName;
-            } catch (e) {}
-          } else {
-            // No hospital id provided; if frontend still provided a hospital name, persist it
-            if (explicitBodyHospitalName) {
-              update.$set.hospitalName = explicitBodyHospitalName;
-              try { update.$set.admittedHospital = explicitBodyHospitalName; } catch (e) {}
+        if (roleData.location && typeof roleData.location === 'object' && Object.keys(roleData.location).length) {
+          Object.keys(roleData.location).forEach((lk) => {
+            update.$set[`location.${lk}`] = roleData.location[lk];
+          });
+        }
+
+        const explicitBodyHospitalName = pick([
+          'patientHospitalName',
+          'patient_hospital_name',
+          'hospitalName',
+          'hospital_name',
+          'hospitalNameDisplay',
+          'admittedHospital',
+          'admitted_hospital',
+          'hospital_name_display',
+        ]);
+
+        if (roleData.hospital) {
+          update.$set.hospital = roleData.hospital;
+          let resolvedName = undefined;
+          try {
+            const hospCandidate = roleData.hospital;
+            const isObjectIdLike =
+              typeof hospCandidate === 'string' &&
+              hospCandidate.length === 24 &&
+              /^[0-9a-fA-F]+$/.test(hospCandidate);
+            let hospDoc = null;
+            if (isObjectIdLike) hospDoc = await Hospital.findById(hospCandidate).lean();
+            if (!hospDoc) {
+              hospDoc = await Hospital.findOne({
+                $or: [{ name: hospCandidate }, { legacyId: hospCandidate }, { externalId: hospCandidate }],
+              }).lean();
             }
+            if (hospDoc && hospDoc.name) resolvedName = hospDoc.name;
+          } catch (e) {
+            console.warn('Failed to resolve hospital name during registration update', e.message);
           }
-        // Donor additional fields
+
+          if (explicitBodyHospitalName) update.$set.hospitalName = explicitBodyHospitalName;
+          else if (resolvedName) update.$set.hospitalName = resolvedName;
+          if (update.$set.hospitalName) update.$set.admittedHospital = update.$set.hospitalName;
+        } else if (explicitBodyHospitalName) {
+          update.$set.hospitalName = explicitBodyHospitalName;
+          update.$set.admittedHospital = explicitBodyHospitalName;
+        }
+
         if (role === 'donor') {
           update.$set.address = roleData.address;
           update.$set.emergency_contact = roleData.emergency_contact;
         }
-        // Hospital additional fields
         if (role === 'hospital') {
           update.$set.hospital_type = roleData.hospital_type;
           update.$set.contact_phone = roleData.contact_phone;
           update.$set.address = roleData.address;
         }
-        // NGO additional fields
         if (role === 'ngo') {
           update.$set.ngo_contact_phone = roleData.ngo_contact_phone;
           update.$set.registered_office_address = roleData.registered_office_address;
@@ -392,88 +555,82 @@ export const register = async (req, res) => {
         runValidators: true,
       });
 
-      // If registering a hospital, ensure it has inventory rows created with default 0 counts
       if (role === 'hospital') {
         try {
           const hospDoc = await Hospital.findOne({ userId: newUser._id }).exec();
           if (hospDoc) {
             const Inventory = (await import('../models/Inventory.js')).default;
-            const ORGANS_LIST = ['KIDNEY','LIVER','HEART','LUNG','PANCREAS','CORNEA','BONE MARROW'];
-            const BLOOD_GROUPS = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
+            const ORGANS_LIST = ['KIDNEY', 'LIVER', 'HEART', 'LUNG', 'PANCREAS', 'CORNEA', 'BONE MARROW'];
+            const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
-            // Upsert organ entries with count 0 if missing. Use case-insensitive match
-            // to avoid creating duplicates like 'Kidney' and 'KIDNEY'.
             for (const organ of ORGANS_LIST) {
-              try {
-                await Inventory.findOneAndUpdate(
-                  { hospitalId: hospDoc._id, itemType: 'organ', organType: { $regex: `^${organ}$`, $options: 'i' } },
-                  { $setOnInsert: { organType: organ, count: 0, bloodType: '' } },
-                  { upsert: true, new: true }
-                );
-              } catch (e) {
-                console.error('Failed to upsert organ inventory for', organ, e);
-              }
+              await Inventory.findOneAndUpdate(
+                { hospitalId: hospDoc._id, itemType: 'organ', organType: { $regex: `^${organ}$`, $options: 'i' } },
+                { $setOnInsert: { organType: organ, count: 0, bloodType: '' } },
+                { upsert: true, new: true }
+              );
             }
 
-            // Upsert blood group entries with count 0 if missing
             for (const bg of BLOOD_GROUPS) {
-              try {
-                await Inventory.findOneAndUpdate(
-                  { hospitalId: hospDoc._id, itemType: 'blood', bloodType: { $regex: `^${bg}$`, $options: 'i' } },
-                  { $setOnInsert: { bloodType: bg, count: 0, organType: '' } },
-                  { upsert: true, new: true }
-                );
-              } catch (e) {
-                console.error('Failed to upsert blood inventory for', bg, e);
-              }
+              await Inventory.findOneAndUpdate(
+                { hospitalId: hospDoc._id, itemType: 'blood', bloodType: { $regex: `^${bg}$`, $options: 'i' } },
+                { $setOnInsert: { bloodType: bg, count: 0, organType: '' } },
+                { upsert: true, new: true }
+              );
             }
           }
         } catch (seedErr) {
           console.error('Inventory seeding failed for hospital:', seedErr);
         }
       }
-    
-      // If registering a patient or donor and a hospital was selected, create a verification request
+
       if (role === 'patient' || role === 'donor') {
         try {
           let selectedHospitalId = req.body.hospital || req.body.hospital_id || req.body.hospitalId;
-          // Normalize hospital id: if frontend sent a non-ObjectId (e.g., a custom id or name), try to resolve
           try {
             if (selectedHospitalId) {
-              // If it's already a 24-char hex string, try to load that hospital
               let hospDoc = null;
-              const isObjectIdLike = typeof selectedHospitalId === 'string' && selectedHospitalId.length === 24 && /^[0-9a-fA-F]+$/.test(selectedHospitalId);
+              const isObjectIdLike =
+                typeof selectedHospitalId === 'string' &&
+                selectedHospitalId.length === 24 &&
+                /^[0-9a-fA-F]+$/.test(selectedHospitalId);
               if (isObjectIdLike) {
                 hospDoc = await Hospital.findById(selectedHospitalId).exec();
               }
-              // If not found yet, try matching by name or by a string id stored in `legacyId` or similar
               if (!hospDoc) {
-                hospDoc = await Hospital.findOne({ $or: [ { name: selectedHospitalId }, { legacyId: selectedHospitalId }, { externalId: selectedHospitalId } ] }).exec();
+                hospDoc = await Hospital.findOne({
+                  $or: [{ name: selectedHospitalId }, { legacyId: selectedHospitalId }, { externalId: selectedHospitalId }],
+                }).exec();
               }
               if (hospDoc && hospDoc._id) selectedHospitalId = String(hospDoc._id);
             }
           } catch (e) {
-            console.warn('Failed to normalize selectedHospitalId during registration', e && e.message ? e.message : e);
+            console.warn('Failed to normalize selectedHospitalId during registration', e.message);
           }
+
           if (selectedHospitalId) {
             const Request = (await import('../models/Request.js')).default;
-
-            // Attempt to find the role document (Patient/Donor) created/updated above so we can reference its _id
             let roleDoc = null;
             try {
               roleDoc = await Model.findOne({ userId: newUser._id }).exec();
             } catch (e) {
-              // ignore
+              console.warn('Failed to fetch role document after registration:', e.message);
             }
 
-            // Try to resolve hospital name for denormalized display on the verification request
             let hospDocForRequest = null;
             try {
-              const isObjectIdLike = typeof selectedHospitalId === 'string' && selectedHospitalId.length === 24 && /^[0-9a-fA-F]+$/.test(selectedHospitalId);
+              const isObjectIdLike =
+                typeof selectedHospitalId === 'string' &&
+                selectedHospitalId.length === 24 &&
+                /^[0-9a-fA-F]+$/.test(selectedHospitalId);
               if (isObjectIdLike) hospDocForRequest = await Hospital.findById(selectedHospitalId).lean();
-              if (!hospDocForRequest) hospDocForRequest = await Hospital.findOne({ $or: [{ name: selectedHospitalId }, { legacyId: selectedHospitalId }, { externalId: selectedHospitalId }] }).lean();
+              if (!hospDocForRequest) {
+                hospDocForRequest = await Hospital.findOne({
+                  $or: [{ name: selectedHospitalId }, { legacyId: selectedHospitalId }, { externalId: selectedHospitalId }],
+                }).lean();
+              }
             } catch (e) {
-              // ignore resolution errors
+              console.warn('Failed to resolve hospital for verification request:', e.message);
             }
 
             const verificationRequest = new Request({
@@ -482,46 +639,51 @@ export const register = async (req, res) => {
               hospitalId: selectedHospitalId,
               patientHospitalName: hospDocForRequest && hospDocForRequest.name ? hospDocForRequest.name : undefined,
               requestedBy: newUser._id,
-              // Prefer role document id (Patient/Donor) when available, otherwise fall back to user id
-              patientId: role === 'patient' ? (roleDoc?._id || newUser._id) : undefined,
-              donorId: role === 'donor' ? (roleDoc?._id || newUser._id) : undefined,
-              message: `New ${role} registration - pending verification`
+              patientId: role === 'patient' ? roleDoc?._id || newUser._id : undefined,
+              donorId: role === 'donor' ? roleDoc?._id || newUser._id : undefined,
+              message: `New ${role} registration - pending verification`,
             });
             await verificationRequest.save();
-            console.log('Verification request created for hospital', verificationRequest._id);
-            // Create an initial chat message so room appears for the patient-hospital conversation
-            try {
-              const pid = role === 'patient' ? (roleDoc?._id || newUser._id) : (roleDoc?._id || newUser._id)
-              const roomId = `room_hospital_${selectedHospitalId}_patient_${pid}`
-              // Attempt to use hospital account as sender if available
-              let hospitalAccountUserId = null
-              try {
-                const hospDoc = await Hospital.findById(selectedHospitalId).exec()
-                if (hospDoc && hospDoc.userId) hospitalAccountUserId = hospDoc.userId
-              } catch (e) {
-                // ignore
-              }
-              const senderId = hospitalAccountUserId || newUser._id
-              const senderRole = hospitalAccountUserId ? 'hospital' : 'system'
 
-              const welcomeMsg = new Message({ senderId, senderRole, roomId, content: `Verification request created and sent to hospital.`, timestamp: new Date() })
-              await welcomeMsg.save()
-              // mark hospital messages dot so hospital user sees the incoming verification
+            try {
+              const pid = roleDoc?._id || newUser._id;
+              const roomId = `room_hospital_${selectedHospitalId}_patient_${pid}`;
+              let hospitalAccountUserId = null;
               try {
-                if (hospitalAccountUserId) {
-                  const tgt = String(hospitalAccountUserId)
-                  await Dots.findOneAndUpdate({ userId: tgt }, { $set: { 'dots.messages': true }, $setOnInsert: { userType: 'hospital' } }, { upsert: true })
-                  try {
-                    const map = global.__LIFELINK_USER_SOCKET_MAP
-                    const ioRef = global.__LIFELINK_IO
-                    if (map && ioRef && map.has(tgt)) ioRef.to(map.get(tgt)).emit('dots_updated', { section: 'messages' })
-                  } catch (e) {}
-                }
+                const hospDoc = await Hospital.findById(selectedHospitalId).exec();
+                if (hospDoc && hospDoc.userId) hospitalAccountUserId = hospDoc.userId;
               } catch (e) {
-                // ignore dot set errors
+                console.warn('Failed to fetch hospital account user for room:', e.message);
+              }
+              const senderId = hospitalAccountUserId || newUser._id;
+              const senderRole = hospitalAccountUserId ? 'hospital' : 'system';
+
+              const welcomeMsg = new Message({
+                senderId,
+                senderRole,
+                roomId,
+                content: 'Verification request created and sent to hospital.',
+                timestamp: new Date(),
+              });
+              await welcomeMsg.save();
+
+              if (hospitalAccountUserId) {
+                const tgt = String(hospitalAccountUserId);
+                await Dots.findOneAndUpdate(
+                  { userId: tgt },
+                  { $set: { 'dots.messages': true }, $setOnInsert: { userType: 'hospital' } },
+                  { upsert: true }
+                );
+                try {
+                  const map = global.__LIFELINK_USER_SOCKET_MAP;
+                  const ioRef = global.__LIFELINK_IO;
+                  if (map && ioRef && map.has(tgt)) ioRef.to(map.get(tgt)).emit('dots_updated', { section: 'messages' });
+                } catch (e) {
+                  console.warn('Failed to emit dots update:', e.message);
+                }
               }
             } catch (e) {
-              console.error('Failed to create initial chat message for verification request', e)
+              console.error('Failed to create initial chat message for verification request', e);
             }
           }
         } catch (reqError) {
@@ -543,10 +705,9 @@ export const register = async (req, res) => {
       }
       if (err.name === 'ValidationError') {
         const details = Object.keys(err.errors || {}).map((k) => err.errors[k].message);
-        const msg = details.length ? `Validation error: ${details.join('; ')}` : 'Validation error';
         return res.status(400).json({
           success: false,
-          message: msg,
+          message: details.length ? `Validation error: ${details.join('; ')}` : 'Validation error',
           errors: details,
           error: err.message,
         });
@@ -558,19 +719,22 @@ export const register = async (req, res) => {
       });
     }
 
-    const token = generateToken(newUser._id);
+    newUser.isEmailVerified = true;
+    clearOtpState(newUser, 'emailVerification');
+    await newUser.save();
+    await PendingSignup.deleteOne({ email: normalizedEmail });
 
     return res.status(201).json({
       success: true,
-      message: 'Registration successful!',
+      message: 'Signup successful. Your email was already verified.',
       data: {
         user: {
           id: newUser._id,
           name: newUser.name,
           email: newUser.email,
           role: newUser.role,
+          isEmailVerified: true,
         },
-        token,
       },
     });
   } catch (error) {
@@ -587,16 +751,15 @@ export const register = async (req, res) => {
     }
     if (error.name === 'ValidationError') {
       const details = Object.keys(error.errors || {}).map((k) => error.errors[k].message);
-      const msg = details.length ? `Validation error: ${details.join('; ')}` : 'Validation error';
       return res.status(400).json({
         success: false,
-        message: msg,
+        message: details.length ? `Validation error: ${details.join('; ')}` : 'Validation error',
         errors: details,
         error: error.message,
       });
     }
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Registration failed',
       error: error.message,
@@ -604,88 +767,227 @@ export const register = async (req, res) => {
   }
 };
 
+export const signup = signupCore;
+export const register = signupCore;
+
+export const sendSignupOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const normalizedEmail = normalizeEmail(email);
+
+    if (!normalizedEmail) {
+      return res.status(400).json({ success: false, message: 'Email is required.' });
+    }
+
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: 'User with this email already exists.' });
+    }
+
+    let pendingSignup = await PendingSignup.findOne({ email: normalizedEmail });
+    if (!pendingSignup) {
+      pendingSignup = new PendingSignup({ email: normalizedEmail });
+    }
+
+    const cooldownMessage = ensurePendingSignupResendAllowed(pendingSignup);
+    if (cooldownMessage) {
+      return res.status(429).json({ success: false, message: cooldownMessage });
+    }
+
+    const otp = generateOtp();
+    pendingSignup.otpHash = hashOtp(otp);
+    pendingSignup.expiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
+    pendingSignup.attempts = 0;
+    pendingSignup.resendCount = (pendingSignup.resendCount || 0) + 1;
+    pendingSignup.lastSentAt = new Date();
+    pendingSignup.verifiedAt = null;
+    await pendingSignup.save();
+
+    await sendVerificationEmail(normalizedEmail, otp);
+
+    return res.status(200).json({
+      success: true,
+      message: 'OTP sent to your email address.',
+    });
+  } catch (error) {
+    console.error('Send Signup OTP Error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to send signup OTP.' });
+  }
+};
+
+export const verifySignupOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    const normalizedEmail = normalizeEmail(email);
+
+    if (!normalizedEmail || !otp) {
+      return res.status(400).json({ success: false, message: 'Email and OTP are required.' });
+    }
+
+    const pendingSignup = await PendingSignup.findOne({ email: normalizedEmail });
+    if (!pendingSignup) {
+      return res.status(404).json({ success: false, message: 'No signup OTP request found for this email.' });
+    }
+
+    const validation = validatePendingSignupOtp(pendingSignup, otp);
+    if (!validation.ok) {
+      await pendingSignup.save();
+      return res.status(validation.status).json({ success: false, message: validation.message });
+    }
+
+    pendingSignup.verifiedAt = new Date();
+    pendingSignup.attempts = 0;
+    await pendingSignup.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Email OTP verified. You can now complete registration.',
+    });
+  } catch (error) {
+    console.error('Verify Signup OTP Error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to verify signup OTP.' });
+  }
+};
+
+export const verifyEmail = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, message: 'Email and OTP are required.' });
+    }
+
+    const user = await User.findOne({ email: normalizeEmail(email) });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    if (user.isEmailVerified) {
+      return res.status(200).json({ success: true, message: 'Email is already verified.' });
+    }
+
+    const validation = validateOtpState(user, 'emailVerification', otp);
+    if (!validation.ok) {
+      await user.save();
+      return res.status(validation.status).json({ success: false, message: validation.message });
+    }
+
+    user.isEmailVerified = true;
+    user.verification_token = null;
+    clearOtpState(user, 'emailVerification');
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Email verified successfully. You can now login.',
+    });
+  } catch (error) {
+    console.error('Verify Email Error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to verify email.' });
+  }
+};
+
+export const resendVerification = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email is required.' });
+    }
+
+    const user = await User.findOne({ email: normalizeEmail(email) });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    if (user.isEmailVerified) {
+      return res.status(400).json({ success: false, message: 'Email is already verified.' });
+    }
+
+    const cooldownMessage = ensureResendAllowed(user, 'emailVerification');
+    if (cooldownMessage) {
+      return res.status(429).json({ success: false, message: cooldownMessage });
+    }
+
+    await sendSignupVerificationOtp(user);
+
+    return res.status(200).json({
+      success: true,
+      message: 'A new verification OTP has been sent to your email.',
+    });
+  } catch (error) {
+    console.error('Resend Verification Error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to resend verification OTP.' });
+  }
+};
+
 export const login = async (req, res) => {
   try {
     const { email, password, role } = req.body;
 
-    // 1. Basic validation
     if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email and password are required'
-      });
+      return res.status(400).json({ success: false, message: 'Email and password are required' });
     }
 
-    // Validate role selection
     if (!role) {
-      return res.status(400).json({
-        success: false,
-        message: 'Role selection is required'
-      });
+      return res.status(400).json({ success: false, message: 'Role selection is required' });
     }
 
-    // 2. Find user in the database (include password field)
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email: normalizeEmail(email) }).select('+password');
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid email or password'
-      });
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
 
-    // 3. Check password
     const isMatch = await user.matchPassword(password);
     if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid email or password'
-      });
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
 
-    // Enforce blocked/suspended login rules
     if (user.status === 'blocked') {
       return res.status(403).json({
         success: false,
-        message: 'Your account has been permanently blocked. Please contact support.'
+        message: 'Your account has been permanently blocked. Please contact support.',
       });
     }
+
     if (user.status === 'suspended') {
       if (user.suspendedUntil && user.suspendedUntil > Date.now()) {
         const hoursLeft = Math.ceil((user.suspendedUntil - Date.now()) / (1000 * 60 * 60));
         return res.status(403).json({
           success: false,
-          message: `Your account is suspended for ${hoursLeft} more hours.`
+          message: `Your account is suspended for ${hoursLeft} more hours.`,
         });
-      } else {
-        // Auto lift suspension if time passed
-        user.status = 'active';
-        user.suspendedUntil = null;
-        await user.save();
       }
+      user.status = 'active';
+      user.suspendedUntil = null;
+      await user.save();
     }
 
-    // 4. Verify selected role matches user's database role (case-insensitive comparison)
-    if (user.role.toLowerCase() !== role.toLowerCase()) {
+    if (user.role.toLowerCase() !== String(role).toLowerCase()) {
       return res.status(403).json({
         success: false,
-        message: 'Invalid role selected for this user.'
+        message: 'Invalid role selected for this user.',
       });
     }
 
-    // Block login for unverified patients until hospital verification
+    if (!user.isEmailVerified) {
+      return res.status(403).json({
+        success: false,
+        message: 'Please verify your email before logging in.',
+        verification_status: 'email_pending',
+      });
+    }
+
     if (user.role === 'patient' && !user.is_verified) {
       return res.status(403).json({
         success: false,
         message: 'Your account is pending hospital verification. Please wait for hospital approval before logging in.',
         verification_status: 'pending',
-        role: user.role
+        role: user.role,
       });
     }
 
-    // 5. Generate Token and send success
     const token = generateToken(user._id);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: 'Login successful',
       data: {
@@ -694,32 +996,25 @@ export const login = async (req, res) => {
           name: user.name,
           role: user.role,
           email: user.email,
-          phone: user.phone
+          phone: user.phone,
+          isEmailVerified: user.isEmailVerified,
         },
-        token
-      }
+        token,
+      },
     });
-
   } catch (error) {
     console.error('Login Error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message
-    });
+    return res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
 
 export const getMe = async (req, res) => {
   try {
     if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Not authenticated'
-      });
+      return res.status(401).json({ success: false, message: 'Not authenticated' });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: {
         user: {
@@ -728,72 +1023,49 @@ export const getMe = async (req, res) => {
           email: req.user.email,
           role: req.user.role,
           phone: req.user.phone,
-          is_verified: req.user.is_verified
-        }
-      }
+          is_verified: req.user.is_verified,
+          isEmailVerified: req.user.isEmailVerified,
+        },
+      },
     });
   } catch (error) {
     console.error('Get Me Error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message
-    });
+    return res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
 
 export const logout = async (req, res) => {
   try {
-    res.status(200).json({
-      success: true,
-      message: 'Logout successful'
-    });
+    return res.status(200).json({ success: true, message: 'Logout successful' });
   } catch (error) {
     console.error('Logout Error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Logout failed',
-      error: error.message
-    });
+    return res.status(500).json({ success: false, message: 'Logout failed', error: error.message });
   }
 };
 
 export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
-    if (!email) return res.status(400).json({ success: false, message: 'Please provide an email address' });
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Please provide an email address' });
+    }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
-
-    // Always respond success to avoid user enumeration
+    const user = await User.findOne({ email: normalizeEmail(email) });
     if (!user) {
-      return res.status(200).json({ success: true, message: 'If that email exists, a reset link was sent' });
+      return res.status(200).json({ success: true, message: 'If that email exists, a reset OTP has been sent.' });
     }
 
-    // generate secure token and its SHA-256 hash for DB
-    const { randomBytes, createHash } = await import('node:crypto');
-    const resetToken = randomBytes(32).toString('hex');
-    const hashedToken = createHash('sha256').update(resetToken).digest('hex');
+    const cooldownMessage = ensureResendAllowed(user, 'passwordReset');
+    if (cooldownMessage) {
+      return res.status(429).json({ success: false, message: cooldownMessage });
+    }
 
-    // save hashed token + 15 minute expiry
-    user.resetToken = hashedToken;
-    user.resetTokenExpiry = Date.now() + 15 * 60 * 1000; // 15 minutes
+    const otp = generateOtp();
+    setOtpState(user, 'passwordReset', otp);
     await user.save();
+    await sendPasswordResetEmail(user.email, otp);
 
-    const resetLink = `${(process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '')}/reset-password?token=${resetToken}`;
-
-    try {
-      await sendPasswordResetEmail(user.email, resetLink);
-      return res.status(200).json({ success: true, message: 'If that email exists, a reset link was sent' });
-    } catch (emailError) {
-      console.error('Email sending failed:', emailError);
-      // Dev fallback: return resetLink so you can test
-      return res.status(200).json({
-        success: true,
-        message: 'Password reset link generated (email failed). Use resetLink from response.',
-        resetLink
-      });
-    }
+    return res.status(200).json({ success: true, message: 'If that email exists, a reset OTP has been sent.' });
   } catch (error) {
     console.error('Forgot Password Error:', error);
     return res.status(500).json({ success: false, message: 'Error processing forgot password request' });
@@ -802,33 +1074,66 @@ export const forgotPassword = async (req, res) => {
 
 export const resetPassword = async (req, res) => {
   try {
-    const { token, password, confirmPassword } = req.body;
-    if (!token || !password || !confirmPassword) {
-      return res.status(400).json({ success: false, message: 'Token and password fields are required' });
+    const { email, otp, newPassword, password, confirmPassword, token } = req.body;
+
+    if (token) {
+      const legacyPassword = password || newPassword;
+      if (!legacyPassword || !confirmPassword) {
+        return res.status(400).json({ success: false, message: 'Token and password fields are required' });
+      }
+      if (legacyPassword !== confirmPassword) {
+        return res.status(400).json({ success: false, message: 'Passwords do not match' });
+      }
+      if (legacyPassword.length < 6) {
+        return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long' });
+      }
+
+      const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+      const user = await User.findOne({
+        resetToken: hashedToken,
+        resetTokenExpiry: { $gt: Date.now() },
+      });
+
+      if (!user) {
+        return res.status(400).json({ success: false, message: 'Invalid or expired reset token' });
+      }
+
+      user.password = legacyPassword;
+      user.resetToken = undefined;
+      user.resetTokenExpiry = undefined;
+      clearOtpState(user, 'passwordReset');
+      await user.save();
+      return res.status(200).json({ success: true, message: 'Password reset successful. You can now login.' });
     }
-    if (password !== confirmPassword) {
+
+    if (!email || !otp || !(newPassword || password)) {
+      return res.status(400).json({ success: false, message: 'Email, OTP, and newPassword are required.' });
+    }
+
+    const nextPassword = newPassword || password;
+    const confirm = confirmPassword || nextPassword;
+    if (nextPassword !== confirm) {
       return res.status(400).json({ success: false, message: 'Passwords do not match' });
     }
-    if (password.length < 6) {
+    if (nextPassword.length < 6) {
       return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long' });
     }
 
-    const { createHash } = await import('node:crypto');
-    const hashedToken = createHash('sha256').update(token).digest('hex');
-
-    const user = await User.findOne({
-      resetToken: hashedToken,
-      resetTokenExpiry: { $gt: Date.now() }
-    });
-
+    const user = await User.findOne({ email: normalizeEmail(email) }).select('+password');
     if (!user) {
-      return res.status(400).json({ success: false, message: 'Invalid or expired reset token' });
+      return res.status(404).json({ success: false, message: 'User not found.' });
     }
 
-    // Set new password (will be hashed by User model pre-save hook)
-    user.password = password;
+    const validation = validateOtpState(user, 'passwordReset', otp);
+    if (!validation.ok) {
+      await user.save();
+      return res.status(validation.status).json({ success: false, message: validation.message });
+    }
+
+    user.password = nextPassword;
     user.resetToken = undefined;
     user.resetTokenExpiry = undefined;
+    clearOtpState(user, 'passwordReset');
     await user.save();
 
     return res.status(200).json({ success: true, message: 'Password reset successful. You can now login.' });
@@ -838,141 +1143,16 @@ export const resetPassword = async (req, res) => {
   }
 };
 
-export const sendOTP = async (req, res) => {
-  try {
-    const { phone } = req.body;
-
-    if (!phone || !/^[0-9]{10}$/.test(phone)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid phone number. Must be 10 digits.'
-      });
-    }
-
-    // Generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiryTime = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-
-    // Store OTP in memory
-    otpStore[phone] = {
-      code: otp,
-      expiry: expiryTime,
-      attempts: 0
-    };
-
-    console.log('\n✅ OTP GENERATED: ' + otp + '\n');
-
-    // SIMPLE WORKING SOLUTION:
-    // Return OTP directly to frontend - user will see it and enter it
-    return res.status(200).json({
-      success: true,
-      message: 'OTP sent successfully. Check the notification at the top.',
-      otp: otp  // Return OTP - user will see it
-    });
-  } catch (error) {
-    console.error('ERROR:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to send OTP'
-    });
-  }
+export default {
+  sendSignupOtp,
+  verifySignupOtp,
+  signup,
+  register,
+  verifyEmail,
+  resendVerification,
+  login,
+  getMe,
+  logout,
+  forgotPassword,
+  resetPassword,
 };
-
-export const verifyOTP = async (req, res) => {
-  try {
-    const { phone, otp } = req.body;
-
-    if (!phone || !/^[0-9]{10}$/.test(phone)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid phone number.'
-      });
-    }
-
-    if (!otp || !/^[0-9]{6}$/.test(otp)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid OTP format. Must be 6 digits.'
-      });
-    }
-
-    const storedOTP = otpStore[phone];
-
-    if (!storedOTP) {
-      return res.status(400).json({
-        success: false,
-        message: 'No OTP request found for this phone number.'
-      });
-    }
-
-    // Check if OTP has expired
-    if (new Date() > storedOTP.expiry) {
-      delete otpStore[phone];
-      return res.status(400).json({
-        success: false,
-        message: 'OTP has expired. Please request a new one.'
-      });
-    }
-
-    // Check if OTP matches
-    if (storedOTP.code !== otp) {
-      storedOTP.attempts = (storedOTP.attempts || 0) + 1;
-      
-      // Block after 5 failed attempts
-      if (storedOTP.attempts > 5) {
-        delete otpStore[phone];
-        return res.status(400).json({
-          success: false,
-          message: 'Too many failed attempts. Please request a new OTP.'
-        });
-      }
-
-      return res.status(400).json({
-        success: false,
-        message: `Invalid OTP. ${6 - storedOTP.attempts} attempts remaining.`
-      });
-    }
-
-    // OTP verified successfully
-    delete otpStore[phone];
-    
-    res.status(200).json({
-      success: true,
-      message: 'Phone number verified successfully.'
-    });
-  } catch (error) {
-    console.error('Verify OTP Error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to verify OTP',
-      error: error.message
-    });
-  }
-};
-
-export const resetPasswordPhone = async (req, res) => {
-  try {
-    const { phone, newPassword } = req.body;
-
-    if (!phone || !/^[0-9]{10}$/.test(phone)) {
-      return res.status(400).json({ success: false, message: 'Invalid phone number' });
-    }
-    if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
-    }
-
-    const user = await User.findOne({ phone });
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-
-    const hashed = await bcrypt.hash(newPassword, 10);
-    user.password = hashed;
-    await user.save();
-
-    return res.status(200).json({ success: true });
-  } catch (error) {
-    console.error('resetPasswordPhone error', error);
-    return res.status(500).json({ success: false, message: 'Server error' });
-  }
-}
-
-export default { register, login, getMe, logout, forgotPassword, resetPassword, sendOTP, verifyOTP, resetPasswordPhone };

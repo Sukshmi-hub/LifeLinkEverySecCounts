@@ -2,6 +2,32 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
+const otpSubSchema = new mongoose.Schema(
+  {
+    codeHash: {
+      type: String,
+      default: null,
+    },
+    expiresAt: {
+      type: Date,
+      default: null,
+    },
+    attempts: {
+      type: Number,
+      default: 0,
+    },
+    resendCount: {
+      type: Number,
+      default: 0,
+    },
+    lastSentAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  { _id: false }
+);
+
 const userSchema = new mongoose.Schema(
   {
     name: {
@@ -52,6 +78,10 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isEmailVerified: {
+      type: Boolean,
+      default: false,
+    },
     verification_token: {
       type: String,
       default: null,
@@ -61,6 +91,14 @@ const userSchema = new mongoose.Schema(
     },
     resetTokenExpiry: {
       type: Date,
+    },
+    emailVerification: {
+      type: otpSubSchema,
+      default: () => ({}),
+    },
+    passwordReset: {
+      type: otpSubSchema,
+      default: () => ({}),
     },
   },
   { timestamps: true }
@@ -89,5 +127,3 @@ userSchema.methods.matchPassword = async function (enteredPassword) {
 userSchema.index({ aadhaar_no: 1 }, { unique: true, sparse: true });
 
 export default mongoose.model('User', userSchema);
-
-

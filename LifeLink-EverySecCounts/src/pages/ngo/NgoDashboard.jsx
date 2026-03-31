@@ -273,58 +273,10 @@ const NgoDashboard = () => {
                         <p className="font-medium">{new Date(request.createdAt).toLocaleDateString()}</p>
                       </div>
                       <div className="flex items-center justify-end gap-2">
-                        {((request.status && String(request.status).toLowerCase()) === 'pending') && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-destructive"
-                          onClick={async () => {
-                            // Optimistic UI update: mark as Dennied immediately
-                            const prevStatus = request.status;
-                            try {
-                              updateFundRequestStatus(request.id, 'Dennied');
-                              const token = localStorage.getItem('token')
-                              const headers = { 'Content-Type': 'application/json' }
-                              if (token) headers.Authorization = `Bearer ${token}`
-                              const res = await fetch(`http://localhost:5000/api/requests/${request.id}/reject`, { method: 'PUT', headers, body: JSON.stringify({ rejectionReason: 'Rejected by NGO' }) })
-                              const json = await res.json()
-                              if (!res.ok) throw new Error(json.message || 'Failed to reject')
-                            } catch (err) {
-                              console.error('Reject fund request failed', err)
-                              // Revert optimistic update on failure
-                              updateFundRequestStatus(request.id, prevStatus || 'Pending')
-                            }
-                          }}
-                        >
-                          Deny
-                        </Button>
-                        )}
-                        {((request.status && String(request.status).toLowerCase()) === 'pending') && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-success"
-                          onClick={async () => {
-                            try {
-                              const token = localStorage.getItem('token')
-                              const headers = { 'Content-Type': 'application/json' }
-                              if (token) headers.Authorization = `Bearer ${token}`
-                              const res = await fetch(`http://localhost:5000/api/requests/${request.id}/approve`, { method: 'PUT', headers })
-                              const json = await res.json()
-                              if (!res.ok) throw new Error(json.message || 'Failed to approve')
-                              updateFundRequestStatus(request.id, 'Approved')
-                            } catch (err) {
-                              console.error('Approve fund request failed', err)
-                            }
-                          }}
-                        >
-                          Approve
-                        </Button>
-                        )}
                         <Button
                           variant="default"
                           size="sm"
-                          className="gap-2 ml-4"
+                          className="gap-2"
                           onClick={() => handleViewDetails(request)}
                         >
                           <Eye className="w-4 h-4" />

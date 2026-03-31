@@ -43,6 +43,10 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
+  const [signupOtp, setSignupOtp] = useState('');
+  const [signupOtpSent, setSignupOtpSent] = useState(false);
+  const [signupEmailVerified, setSignupEmailVerified] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
 
   // Form states
   const [loginEmail, setLoginEmail] = useState('');
@@ -117,13 +121,6 @@ const Login = () => {
   const [hospitals, setHospitals] = useState([]);
   const { state: geoState, getLocation } = useGeolocation();
 
-  // OTP verification states
-  const [phoneVerified, setPhoneVerified] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpCode, setOtpCode] = useState('');
-  const [otpTimer, setOtpTimer] = useState(0);
-  const [otpLoading, setOtpLoading] = useState(false);
-
   const handleUseLocation = async () => {
     try {
       const res = await getLocation();
@@ -181,26 +178,17 @@ const Login = () => {
     }
   };
 
-  // OTP Timer countdown
-  useEffect(() => {
-    if (otpTimer <= 0) return;
-    const interval = setInterval(() => {
-      setOtpTimer(prev => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [otpTimer]);
-
   useEffect(() => {
     if (isAuthenticated && user) {
       navigate(getRoleBasedRedirect(user.role));
     }
   }, [isAuthenticated, user, navigate]);
+
+  useEffect(() => {
+    setSignupOtp('');
+    setSignupOtpSent(false);
+    setSignupEmailVerified(false);
+  }, [commonData.email]);
 
   useEffect(() => {
     const fetchHospitals = async () => {
@@ -273,7 +261,7 @@ const Login = () => {
   const validateRegistration = () => {
     const passwordRegex = /^(?=.*[A-Z])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{1,10}$/;
     const phoneRegex = /^[0-9]{10}$/;
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@(gmail\.com|gmail\.in|yahoo\.com|outlook\.com)$/;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (!passwordRegex.test(commonData.password)) {
       toast({ 
@@ -291,15 +279,19 @@ const Login = () => {
       toast({ title: 'Invalid Primary Phone', description: 'Phone number must be exactly 10 numeric digits.', variant: 'destructive' });
       return false;
     }
-    if (!phoneVerified) {
-      toast({ title: 'Phone Not Verified', description: 'Please verify your phone number using OTP before creating the account.', variant: 'destructive' });
-      return false;
-    }
     if (!emailRegex.test(commonData.email)) {
       toast({ 
-        title: 'Invalid Email Domain', 
-        description: 'Allowed domains: gmail.com, gmail.in, yahoo.com, outlook.com', 
+        title: 'Invalid Email',
+        description: 'Please enter a valid email address.', 
         variant: 'destructive' 
+      });
+      return false;
+    }
+    if (!signupEmailVerified) {
+      toast({
+        title: 'Email Not Verified',
+        description: 'Please get the OTP on email and verify it before creating the account.',
+        variant: 'destructive'
       });
       return false;
     }
@@ -348,81 +340,64 @@ const Login = () => {
     return true;
   };
 
-  const handleSendOTP = async () => {
-    const phoneRegex = /^[0-9]{10}$/;
-    if (!phoneRegex.test(commonData.phone)) {
-      toast({ title: 'Invalid Phone', description: 'Please enter a valid 10-digit phone number.', variant: 'destructive' });
-      return;
-    }
-    
-    setOtpLoading(true);
-    try {
-      const response = await fetch(`${serverUrl}/api/auth/send-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: commonData.phone }),
+  const handleGetEmailOtp = async () => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(commonData.email)) {
+      toast({
+        title: 'Invalid Email',
+        description: 'Enter a valid email before requesting OTP.',
+        variant: 'destructive'
       });
-      
-      const result = await response.json();
-      if (result.success) {
-        setOtpSent(true);
-        setOtpTimer(30);
-        setOtpCode('');
-        setPhoneVerified(false);
-        
-        // Show OTP prominently
-        if (result.otp) {
-          toast({ 
-            title: '✅ OTP is: ' + result.otp, 
-            description: 'Enter this code below. Valid for 5 minutes.',
-            className: 'bg-green-500 text-white text-lg font-bold'
-          });
-        } else {
-          toast({ title: 'OTP Sent', description: 'Check your SMS and the field below.' });
-        }
-      } else {
-        toast({ title: 'Error', description: result.message || 'Failed to send OTP', variant: 'destructive' });
-      }
-    } catch (err) {
-      toast({ title: 'Error', description: 'Failed to send OTP. Check your connection.', variant: 'destructive' });
-    } finally {
-      setOtpLoading(false);
-    }
-  };
-
-  const handleVerifyOTP = async () => {
-    if (!otpCode.trim() || otpCode.length !== 6) {
-      toast({ title: 'Invalid OTP', description: 'Please enter a 6-digit OTP code.', variant: 'destructive' });
       return;
     }
 
     setOtpLoading(true);
     try {
-      const response = await fetch(`${serverUrl}/api/auth/verify-otp`, {
+      const response = await fetch(`${serverUrl}/api/auth/send-signup-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: commonData.phone, otp: otpCode }),
+        body: JSON.stringify({ email: commonData.email }),
       });
-
       const result = await response.json();
       if (result.success) {
-        setPhoneVerified(true);
-        setOtpSent(false);
-        setOtpCode('');
-        setOtpTimer(0);
-        toast({ title: 'Phone Verified', description: 'Your phone number has been verified successfully.' });
+        setSignupOtpSent(true);
+        setSignupEmailVerified(false);
+        toast({ title: 'OTP Sent', description: 'Check your email inbox for the verification OTP.' });
       } else {
-        toast({ title: 'Invalid OTP', description: result.message || 'The OTP you entered is incorrect or expired.', variant: 'destructive' });
+        toast({ title: 'Error', description: result.message || 'Failed to send email OTP.', variant: 'destructive' });
       }
     } catch (err) {
-      toast({ title: 'Error', description: 'Failed to verify OTP. Check your connection.', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Unable to send email OTP right now.', variant: 'destructive' });
     } finally {
       setOtpLoading(false);
     }
   };
 
-  const handleResendOTP = async () => {
-    await handleSendOTP();
+  const handleVerifyEmailOtp = async () => {
+    if (signupOtp.trim().length !== 6) {
+      toast({ title: 'Invalid OTP', description: 'Please enter the 6-digit OTP from your email.', variant: 'destructive' });
+      return;
+    }
+
+    setOtpLoading(true);
+    try {
+      const response = await fetch(`${serverUrl}/api/auth/verify-signup-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: commonData.email, otp: signupOtp }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        setSignupEmailVerified(true);
+        toast({ title: 'Email Verified', description: 'Email verified successfully. You can now create the account.' });
+      } else {
+        toast({ title: 'Verification Failed', description: result.message || 'Invalid OTP.', variant: 'destructive' });
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: 'Unable to verify email OTP right now.', variant: 'destructive' });
+    } finally {
+      setOtpLoading(false);
+    }
   };
 
   const handleLogin = async (e) => {
@@ -537,7 +512,7 @@ const Login = () => {
         }
       }
 
-      const response = await fetch(`${serverUrl}/api/auth/register`, {
+      const response = await fetch(`${serverUrl}/api/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -579,7 +554,7 @@ const Login = () => {
         <div className="bg-white p-8 rounded-2xl shadow-xl text-center max-w-md">
           <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold mb-2">Success!</h2>
-          <p className="text-gray-600 mb-6">Account created successfully.</p>
+          <p className="text-gray-600 mb-6">Account created successfully. Your email OTP was verified during registration, so you can log in now.</p>
           <Button onClick={() => { setShowSuccess(false); setActiveTab('login'); }} className="w-full">Go to Login</Button>
         </div>
       </div>
@@ -647,7 +622,12 @@ const Login = () => {
                   <button
                     key={r.value}
                     type="button"
-                    onClick={() => setCommonData({ ...commonData, role: r.value })}
+                    onClick={() => {
+                      setCommonData({ ...commonData, role: r.value });
+                      setSignupOtp('');
+                      setSignupOtpSent(false);
+                      setSignupEmailVerified(false);
+                    }}
                     className={`p-3 border rounded-xl flex flex-col items-center gap-2 transition-colors ${commonData.role === r.value ? 'bg-primary text-white' : 'bg-white hover:bg-slate-50'}`}
                   >
                     <r.icon className="w-5 h-5" />
@@ -669,52 +649,43 @@ const Login = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="email-input">Email</Label>
-                    <Input id="email-input" name="email" placeholder="Email" type="email" value={commonData.email} onChange={(e) => setCommonData({ ...commonData, email: e.target.value })} required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone-input">Primary Phone</Label>
                     <div className="flex gap-2">
-                      <Input id="phone-input" name="phone" placeholder="10-Digit Phone" value={commonData.phone} onChange={(e) => setCommonData({ ...commonData, phone: e.target.value.replace(/\D/g, '') })} required maxLength={10} disabled={phoneVerified} />
-                      {phoneVerified ? (
+                      <Input id="email-input" name="email" placeholder="Email" type="email" value={commonData.email} onChange={(e) => setCommonData({ ...commonData, email: e.target.value })} required disabled={signupEmailVerified} />
+                      {signupEmailVerified ? (
                         <Button type="button" variant="outline" disabled className="whitespace-nowrap flex items-center gap-2">
                           <CheckCircle className="h-4 w-4 text-green-500" /> Verified
                         </Button>
                       ) : (
-                        <Button type="button" onClick={handleSendOTP} disabled={otpLoading || !commonData.phone || commonData.phone.length !== 10 || otpSent}>
-                          {otpLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Send OTP'}
+                        <Button type="button" onClick={handleGetEmailOtp} disabled={otpLoading || !commonData.email}>
+                          {otpLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Get OTP'}
                         </Button>
                       )}
                     </div>
                   </div>
-                </div>
-
-                {otpSent && !phoneVerified && (
-                  <div className="space-y-2 bg-blue-50 p-3 rounded-lg border border-blue-200">
-                    <Label htmlFor="otp-input">Enter OTP Code</Label>
-                    <div className="flex gap-2">
-                      <Input 
-                        id="otp-input"
-                        name="otp"
-                        placeholder="6-digit OTP" 
-                        value={otpCode} 
-                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))} 
-                        maxLength={6}
-                      />
-                      <Button type="button" onClick={handleVerifyOTP} disabled={otpLoading || otpCode.length !== 6}>
-                        {otpLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Verify'}
-                      </Button>
-                    </div>
-                    <div className="flex gap-2 text-sm">
-                      {otpTimer > 0 ? (
-                        <span className="text-gray-600">Resend OTP in {otpTimer}s</span>
-                      ) : (
-                        <button type="button" onClick={handleResendOTP} className="text-blue-600 hover:underline">
-                          Resend OTP
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
+	                  <div className="space-y-2">
+	                    <Label htmlFor="phone-input">Primary Phone</Label>
+	                    <Input id="phone-input" name="phone" placeholder="10-Digit Phone" value={commonData.phone} onChange={(e) => setCommonData({ ...commonData, phone: e.target.value.replace(/\D/g, '') })} required maxLength={10} />
+	                  </div>
+	                </div>
+	                {signupOtpSent && !signupEmailVerified && (
+	                  <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50 p-3">
+	                    <Label htmlFor="signup-otp-input">Email OTP</Label>
+	                    <div className="flex gap-2">
+	                      <Input
+	                        id="signup-otp-input"
+	                        name="signupOtp"
+	                        placeholder="Enter 6-digit OTP"
+	                        value={signupOtp}
+	                        onChange={(e) => setSignupOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+	                        maxLength={6}
+	                      />
+	                      <Button type="button" onClick={handleVerifyEmailOtp} disabled={otpLoading || signupOtp.length !== 6}>
+	                        {otpLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Verify OTP'}
+	                      </Button>
+	                    </div>
+	                    <p className="text-sm text-slate-600">We sent the OTP to your email using Nodemailer.</p>
+	                  </div>
+	                )}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="password-input">Password</Label>
@@ -855,7 +826,7 @@ const Login = () => {
                 </div>
               )}
 
-              <Button type="submit" className="w-full" disabled={isLoading || !phoneVerified}>
+	              <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? <Loader2 className="animate-spin" /> : 'Create Account'}
               </Button>
             </form>

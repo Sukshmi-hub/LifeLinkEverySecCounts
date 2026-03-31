@@ -1,16 +1,52 @@
 // src/routes/authRoutes.js - Authentication Routes
 import express from 'express'
-import { register, login, getMe, logout, forgotPassword, resetPassword, sendOTP, verifyOTP, resetPasswordPhone } from '../controllers/authController.js'
+import {
+  sendSignupOtp,
+  verifySignupOtp,
+  signup,
+  register,
+  verifyEmail,
+  resendVerification,
+  login,
+  getMe,
+  logout,
+  forgotPassword,
+  resetPassword,
+} from '../controllers/authController.js'
 import { authenticate } from '../middleware/auth.js'
 
 const router = express.Router()
 
+router.post('/send-signup-otp', sendSignupOtp)
+router.post('/verify-signup-otp', verifySignupOtp)
+
+/**
+ * @route   POST /api/auth/signup
+ * @desc    Signup new user and send email verification OTP
+ * @access  Public
+ */
+router.post('/signup', signup)
+
 /**
  * @route   POST /api/auth/register
- * @desc    Register new user
+ * @desc    Legacy signup alias
  * @access  Public
  */
 router.post('/register', register)
+
+/**
+ * @route   POST /api/auth/verify-email
+ * @desc    Verify email with OTP
+ * @access  Public
+ */
+router.post('/verify-email', verifyEmail)
+
+/**
+ * @route   POST /api/auth/resend-verification
+ * @desc    Resend email verification OTP
+ * @access  Public
+ */
+router.post('/resend-verification', resendVerification)
 
 /**
  * @route   POST /api/auth/login
@@ -46,26 +82,5 @@ router.post('/forgot-password', forgotPassword)
  * @access  Public
  */
 router.post('/reset-password', resetPassword)
-
-/**
- * @route   POST /api/auth/send-otp
- * @desc    Send OTP to phone number via SMS
- * @access  Public
- */
-router.post('/send-otp', sendOTP)
-
-/**
- * @route   POST /api/auth/verify-otp
- * @desc    Verify OTP code
- * @access  Public
- */
-router.post('/verify-otp', verifyOTP)
-
-/**
- * @route   POST /api/auth/reset-password-phone
- * @desc    Reset password using phone (after client verifies OTP)
- * @access  Public
- */
-router.post('/reset-password-phone', resetPasswordPhone)
 
 export default router

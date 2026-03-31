@@ -1,84 +1,85 @@
 import nodemailer from 'nodemailer';
 
-// Email transporter configuration
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER || 'your-email@gmail.com',
-    pass: process.env.EMAIL_PASS || 'your-app-password',
-  },
-});
+const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@lifelink.local';
 
-// Verify transporter connection (optional, for debugging)
-transporter.verify((error, success) => {
-  if (error) {
-    console.warn('Email transporter verification failed:', error.message);
-  } else {
-    console.log('Email transporter ready');
-  }
-});
+const transporter = process.env.EMAIL_USER && process.env.EMAIL_PASS
+  ? nodemailer.createTransport({
+      service: process.env.EMAIL_SERVICE || 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    })
+  : nodemailer.createTransport({
+      jsonTransport: true,
+    });
 
-/**
- * Send password reset email
- * @param {string} email - Recipient email
- * @param {string} resetLink - Full reset link with token
- * @returns {Promise}
- */
-export const sendPasswordResetEmail = async (email, resetLink) => {
-  try {
-    const mailOptions = {
-      from: process.env.EMAIL_USER || 'noreply@lifelink.com',
-      to: email,
-      subject: 'LifeLink - Password Reset Request',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 28px;">LifeLink</h1>
-            <p style="color: rgba(255,255,255,0.9); margin: 5px 0 0 0;">Every Second Counts</p>
-          </div>
-          <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb;">
-            <h2 style="color: #1f2937; margin-top: 0;">Password Reset Request</h2>
-            <p style="color: #6b7280; line-height: 1.6;">
-              We received a request to reset your password. Click the button below to create a new password.
-            </p>
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${resetLink}" style="background-color: #dc2626; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold; font-size: 16px;">
-                Reset Password
-              </a>
-            </div>
-            <p style="color: #6b7280; font-size: 13px;">
-              Or copy and paste this link in your browser:<br/>
-              <span style="word-break: break-all; color: #3b82f6;">${resetLink}</span>
-            </p>
-            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
-            <p style="color: #9ca3af; font-size: 12px;">
-              This link will expire in 1 hour. If you didn't request a password reset, please ignore this email.
-            </p>
-            <p style="color: #9ca3af; font-size: 12px; margin-bottom: 0;">
-              Do not share this link with anyone.
-            </p>
-          </div>
+const renderTemplate = ({ title, intro, otpLabel, otp, footer }) => ({
+  html: `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+        <h1 style="color: white; margin: 0; font-size: 28px;">LifeLink</h1>
+        <p style="color: rgba(255,255,255,0.9); margin: 5px 0 0 0;">Every Second Counts</p>
+      </div>
+      <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb;">
+        <h2 style="color: #1f2937; margin-top: 0;">${title}</h2>
+        <p style="color: #4b5563; line-height: 1.6;">${intro}</p>
+        <div style="margin: 24px 0; padding: 18px; border-radius: 8px; background: #ffffff; border: 1px solid #e5e7eb; text-align: center;">
+          <div style="font-size: 13px; color: #6b7280; margin-bottom: 8px;">${otpLabel}</div>
+          <div style="font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #111827;">${otp}</div>
         </div>
-      `,
-      text: `
-        Password Reset Request
-        
-        We received a request to reset your password. Visit this link to create a new password:
-        ${resetLink}
-        
-        This link will expire in 1 hour.
-        If you didn't request a password reset, please ignore this email.
-        Do not share this link with anyone.
-      `,
-    };
+        <p style="color: #6b7280; font-size: 14px; line-height: 1.6;">${footer}</p>
+      </div>
+    </div>
+  `,
+  text: `${title}\n\n${intro}\n\n${otpLabel}: ${otp}\n\n${footer}`,
+});
 
-    const result = await transporter.sendMail(mailOptions);
-    console.log('Password reset email sent to:', email);
-    return result;
-  } catch (error) {
-    console.error('Failed to send password reset email:', error);
-    throw error;
+const sendMail = async ({ to, subject, ...content }) => {
+  const result = await transporter.sendMail({
+    from: fromAddress,
+    to,
+    subject,
+    ...content,
+  });
+
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.log(`Email transport is using JSON mode. Preview payload generated for ${to}.`);
   }
+
+  return result;
 };
 
-export default { sendPasswordResetEmail };
+export const sendVerificationEmail = async (email, otp) => {
+  const content = renderTemplate({
+    title: 'Verify Your Email',
+    intro: 'Use the OTP below to verify your email address and activate your LifeLink account.',
+    otpLabel: 'Email verification OTP',
+    otp,
+    footer: 'This OTP expires in 5 minutes. If you did not create this account, you can ignore this email.',
+  });
+
+  return sendMail({
+    to: email,
+    subject: 'LifeLink - Verify your email',
+    ...content,
+  });
+};
+
+export const sendPasswordResetEmail = async (email, otp) => {
+  const content = renderTemplate({
+    title: 'Reset Your Password',
+    intro: 'We received a password reset request for your LifeLink account. Use the OTP below to continue.',
+    otpLabel: 'Password reset OTP',
+    otp,
+    footer: 'This OTP expires in 5 minutes. Do not share it with anyone.',
+  });
+
+  return sendMail({
+    to: email,
+    subject: 'LifeLink - Password reset OTP',
+    ...content,
+  });
+};
+
+export default { sendVerificationEmail, sendPasswordResetEmail };

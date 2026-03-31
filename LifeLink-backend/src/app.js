@@ -40,22 +40,13 @@ const app = express()
 // MIDDLEWARE
 // ============================================
 
-// CORS - Allow frontend to access backend
-const devOrigins = ['http://localhost:8080', 'http://127.0.0.1:8080', 'http://localhost:5173', 'http://127.0.0.1:5173'];
-const corsOptions = process.env.NODE_ENV === 'production'
-  ? {
-      origin: devOrigins,
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization']
-    }
-  : {
-      // In development reflect the request origin (allows any local dev origin)
-      origin: true,
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization']
-    };
+// CORS - Allow all origins for deployment and local development.
+// The backend uses bearer tokens, so credentials are not required here.
+const corsOptions = {
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
 
 app.use(cors(corsOptions));
 // Ensure preflight requests are handled for all routes
