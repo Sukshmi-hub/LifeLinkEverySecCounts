@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import useChat from '@/hooks/useChat'
 import ChatWindow from '@/components/chat/ChatWindow'
 import { useAuth } from '@/context/AuthContext'
+import { serverUrl } from '@/lib/serverConfig'
 
 const SECTION_ORDER = [
   'registeredPatients',
@@ -80,7 +81,6 @@ const getDisplaySecondary = (room, isHospitalUser) => {
 }
 
 export default function HospitalMessages() {
-  const serverUrl = 'http://localhost:5000'
   const { state, joinRoom, loadHistory, sendMessage, markRead } = useChat(serverUrl)
   const { user } = useAuth() || {}
   const [rooms, setRooms] = useState([])

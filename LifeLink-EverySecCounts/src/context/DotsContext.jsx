@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import useSocket from '@/hooks/useSocket'
+import { serverUrl } from '@/lib/serverConfig';
 
 const DotsContext = createContext(undefined);
 
@@ -16,8 +17,6 @@ export const DotsProvider = ({ children }) => {
   });
   const [loading, setLoading] = useState(false);
 
-  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
-
   // Fetch dots from API
   const fetchDots = async () => {
     if (!userId) return;
@@ -25,7 +24,7 @@ export const DotsProvider = ({ children }) => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE}/api/dots/${userId}`, {
+      const response = await fetch(`${serverUrl}/api/dots/${userId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
 
@@ -48,7 +47,7 @@ export const DotsProvider = ({ children }) => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE}/api/dots/clear/${userId}/${section}`, {
+      const response = await fetch(`${serverUrl}/api/dots/clear/${userId}/${section}`, {
         method: 'PUT',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });

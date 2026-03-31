@@ -10,6 +10,7 @@ import NgoMessages from '@/components/ngo/NgoMessages';
 import NgoProfile from '@/components/ngo/NgoProfile';
 import FundRequestDetails from '@/components/ngo/FundRequestDetails';
 import NgoHospitalChat from '@/components/ngo/NgoHospitalChat';
+import { serverUrl } from '@/lib/serverConfig';
 import { 
   FileText, 
   Clock, 
@@ -349,7 +350,7 @@ const NgoDashboard = () => {
             const token = localStorage.getItem('token')
             const headers = { 'Content-Type': 'application/json' }
             if (token) headers.Authorization = `Bearer ${token}`
-            const res = await fetch(`http://localhost:5000/api/requests/${id}/approve`, { method: 'PUT', headers })
+            const res = await fetch(`${serverUrl}/api/requests/${id}/approve`, { method: 'PUT', headers })
             const json = await res.json()
             if (!res.ok) throw new Error(json.message || 'Failed to approve')
             updateFundRequestStatus(id, 'Approved')
@@ -363,7 +364,7 @@ const NgoDashboard = () => {
             const token = localStorage.getItem('token')
             const headers = { 'Content-Type': 'application/json' }
             if (token) headers.Authorization = `Bearer ${token}`
-            const res = await fetch(`http://localhost:5000/api/requests/${id}/reject`, { method: 'PUT', headers, body: JSON.stringify({ rejectionReason: 'Rejected by NGO' }) })
+            const res = await fetch(`${serverUrl}/api/requests/${id}/reject`, { method: 'PUT', headers, body: JSON.stringify({ rejectionReason: 'Rejected by NGO' }) })
             const json = await res.json()
             if (!res.ok) throw new Error(json.message || 'Failed to reject')
             updateFundRequestStatus(id, 'Rejected')
@@ -388,3 +389,4 @@ const NgoDashboard = () => {
 };
 
 export default NgoDashboard;
+

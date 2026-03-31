@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { serverUrl } from '@/lib/serverConfig';
 import {
   Dialog,
   DialogContent,
@@ -72,7 +73,7 @@ const FundRequestModal = ({ isOpen, onClose, initialData = null, fixed = false }
     // load NGOs from backend
     (async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/ngo');
+        const res = await fetch(`${serverUrl}/api/ngo`);
         const json = await res.json();
         if (res.ok && Array.isArray(json.data)) {
           // accept items in shape { id, name } or { _id, name }
@@ -90,7 +91,7 @@ const FundRequestModal = ({ isOpen, onClose, initialData = null, fixed = false }
     // load hospitals for patient to choose from
     (async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/hospitals')
+        const res = await fetch(`${serverUrl}/api/hospitals`)
         const json = await res.json()
         if (res.ok && Array.isArray(json.data)) {
           const mapped = json.data.map(x => ({ id: String(x.id || x._id || x._id), name: x.name || x.hospitalName || x.name, address: x.address || '' }))
@@ -437,3 +438,5 @@ const FundRequestModal = ({ isOpen, onClose, initialData = null, fixed = false }
 };
 
 export default FundRequestModal;
+
+

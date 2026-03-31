@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
+import { serverUrl } from '@/lib/serverConfig';
 import {
   Dialog,
   DialogContent,
@@ -133,7 +134,7 @@ const OrganRequestModal = ({ isOpen, onClose }) => {
       const headers = {}
       if (token) headers['Authorization'] = `Bearer ${token}`
 
-      const res = await fetch('http://localhost:5000/api/requests', {
+      const res = await fetch(`${serverUrl}/api/requests`, {
         method: 'POST',
         headers,
         body: payload,
@@ -318,3 +319,5 @@ const MultiFileUploadCard = ({ label, description, files, onFileChange, onRemove
 );
 
 export default OrganRequestModal;
+
+

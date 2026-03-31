@@ -4,9 +4,9 @@ import ChatList from '@/components/chat/ChatList'
 import ChatWindow from '@/components/chat/ChatWindow'
 import { useAuth } from '@/context/AuthContext'
 import { useNotifications } from '@/context/NotificationContext'
+import { serverUrl } from '@/lib/serverConfig'
 
 export default function NgoMessages() {
-  const serverUrl = 'http://localhost:5000'
   const { user } = useAuth()
   const { fundRequests, loadNgoFundRequests } = useNotifications()
   const { socket, isConnected, connectionError, state, joinRoom, loadHistory, sendMessage, markRead } = useChat(serverUrl)

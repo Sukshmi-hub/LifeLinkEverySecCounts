@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { toast } from 'sonner';
 import { useSocket } from '@/hooks/useSocket';
 import { useAuth } from '@/context/AuthContext';
+import { serverUrl } from '@/lib/serverConfig';
 
 const NotificationContext = createContext(undefined);
 
@@ -156,7 +157,7 @@ export const NotificationProvider = ({ children }) => {
       }
       lastRequestsRef.current["organ:" + patientId] = now
       console.debug('[NotificationContext] loadOrganRequests called for', patientId, new Date().toISOString())
-      const res = await fetch(`http://localhost:5000/api/requests?patientId=${encodeURIComponent(patientId)}`)
+      const res = await fetch(`${serverUrl}/api/requests?patientId=${encodeURIComponent(patientId)}`)
       const json = await res.json()
       if (json && json.success && Array.isArray(json.data)) {
         // map backend _id to id and normalize fields
@@ -250,7 +251,7 @@ export const NotificationProvider = ({ children }) => {
       }
       lastRequestsRef.current["fund:" + patientId] = now
       const token = localStorage.getItem('token')
-      const res = await fetch(`http://localhost:5000/api/requests?patientId=${encodeURIComponent(patientId)}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+      const res = await fetch(`${serverUrl}/api/requests?patientId=${encodeURIComponent(patientId)}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
       const json = await res.json()
       if (json && json.success && Array.isArray(json.data)) {
         const mapped = json.data.filter(r => r.requestType === 'fund_request').map(r => ({
@@ -299,7 +300,7 @@ export const NotificationProvider = ({ children }) => {
       }
       lastRequestsRef.current["ngoFund:" + ngoId] = now
       const token = localStorage.getItem('token')
-      const res = await fetch(`http://localhost:5000/api/requests?ngoId=${encodeURIComponent(ngoId)}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+      const res = await fetch(`${serverUrl}/api/requests?ngoId=${encodeURIComponent(ngoId)}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
       const json = await res.json()
       if (json && json.success && Array.isArray(json.data)) {
         const mapped = json.data.filter(r => r.requestType === 'fund_request').map(r => ({
@@ -372,7 +373,7 @@ export const NotificationProvider = ({ children }) => {
           form.append('rationCard', request.rationCard)
         }
 
-        const res = await fetch('http://localhost:5000/api/requests/fund', {
+        const res = await fetch(`${serverUrl}/api/requests/fund`, {
           method: 'POST',
           body: form,
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
@@ -582,3 +583,5 @@ export const useNotifications = () => {
   }
   return context;
 };
+
+

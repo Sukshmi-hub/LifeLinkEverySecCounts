@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react'
 import useChat from '@/hooks/useChat'
 import ChatList from '@/components/chat/ChatList'
 import ChatWindow from '@/components/chat/ChatWindow'
+import { serverUrl } from '@/lib/serverConfig'
 
 export default function MessagesPage() {
-  const serverUrl = 'http://localhost:5000'
   const { socket, isConnected, connectionError, state, joinRoom, loadHistory, sendMessage } = useChat(serverUrl)
   const [rooms, setRooms] = useState([])
 

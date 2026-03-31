@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNotifications } from './NotificationContext';
 import { useAuth } from './AuthContext';
 import useSocket from '@/hooks/useSocket';
+import { serverUrl } from '@/lib/serverConfig';
 
 const defaultProfile = {
   fullName: 'Sunita Singh',
@@ -131,7 +132,7 @@ export const DonorProvider = ({ children }) => {
     try {
       const token = localStorage.getItem('token');
       if (!token) return;
-      const resp = await fetch('http://localhost:5000/api/certificates/me', {
+      const resp = await fetch(`${serverUrl}/api/certificates/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await resp.json().catch(() => ({}));
@@ -192,7 +193,7 @@ export const DonorProvider = ({ children }) => {
       try {
         const token = localStorage.getItem('token');
         if (!token) return;
-        const resp = await fetch('http://localhost:5000/api/profile', {
+        const resp = await fetch(`${serverUrl}/api/profile`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!resp.ok) return;
@@ -500,3 +501,5 @@ export const useDonor = () => {
   }
   return context;
 };
+
+

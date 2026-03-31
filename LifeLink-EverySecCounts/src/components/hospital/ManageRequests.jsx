@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useNotifications } from '@/context/NotificationContext';
 import { formatDistanceToNow } from 'date-fns';
+import { serverUrl } from '@/lib/serverConfig';
 
 const ManageRequests = () => {
   const { organRequests, updateOrganRequestStatus, simulateDonorMatch, addNotification } = useNotifications();
@@ -101,7 +102,7 @@ const ManageRequests = () => {
   const handleApproveRequest = async (requestId) => {
     try {
       const token = localStorage.getItem('token');
-      const resp = await fetch(`http://localhost:5000/api/hospital-requests/${requestId}/approve`, {
+      const resp = await fetch(`${serverUrl}/api/hospital-requests/${requestId}/approve`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       });
@@ -117,7 +118,7 @@ const ManageRequests = () => {
   const handleRejectRequest = async (requestId) => {
     try {
       const token = localStorage.getItem('token');
-      const resp = await fetch(`http://localhost:5000/api/hospital-requests/${requestId}/reject`, {
+      const resp = await fetch(`${serverUrl}/api/hospital-requests/${requestId}/reject`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ rejectionReason: 'Rejected by hospital' }),
@@ -137,7 +138,7 @@ const ManageRequests = () => {
       try {
         const token = localStorage.getItem('token');
         if (!token) return;
-        const resp = await fetch('http://localhost:5000/api/hospital-requests/organ-requests', {
+        const resp = await fetch(`${serverUrl}/api/hospital-requests/organ-requests`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const json = await resp.json();
@@ -168,7 +169,7 @@ const ManageRequests = () => {
       setPendingError(null);
       try {
         const token = localStorage.getItem('token');
-        const resp = await fetch('http://localhost:5000/api/hospital-requests/verify', {
+        const resp = await fetch(`${serverUrl}/api/hospital-requests/verify`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const json = await resp.json();
@@ -207,7 +208,7 @@ const ManageRequests = () => {
       try {
         const token = localStorage.getItem('token');
         if (!token) return;
-        const resp = await fetch('http://localhost:5000/api/hospital-requests/donor-requests', {
+        const resp = await fetch(`${serverUrl}/api/hospital-requests/donor-requests`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const json = await resp.json();
@@ -249,7 +250,7 @@ const ManageRequests = () => {
         const hospitalId = localStorage.getItem('hospitalId') || null;
         // If we have a hospitalId, prefer querying by it. Otherwise, fetch fund requests and
         // filter for items with status 'SentToHospital' so NGO-sent requests still appear.
-        const baseUrl = hospitalId ? ('http://localhost:5000/api/requests?hospitalId=' + encodeURIComponent(hospitalId)) : 'http://localhost:5000/api/requests?requestType=fund_request';
+        const baseUrl = hospitalId ? (`${serverUrl}/api/requests?hospitalId=` + encodeURIComponent(hospitalId)) : `${serverUrl}/api/requests?requestType=fund_request`;
         const resp = await fetch(baseUrl, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -288,7 +289,7 @@ const ManageRequests = () => {
   const handleAcceptOrganRequest = async (requestId) => {
     try {
       const token = localStorage.getItem('token');
-      const resp = await fetch(`http://localhost:5000/api/hospital-requests/${requestId}/approve`, {
+      const resp = await fetch(`${serverUrl}/api/hospital-requests/${requestId}/approve`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       });
@@ -320,7 +321,7 @@ const ManageRequests = () => {
   const handleRejectOrganRequest = async (requestId) => {
     try {
       const token = localStorage.getItem('token');
-      const resp = await fetch(`http://localhost:5000/api/hospital-requests/${requestId}/reject`, {
+      const resp = await fetch(`${serverUrl}/api/hospital-requests/${requestId}/reject`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ rejectionReason: 'Rejected by hospital' }),
@@ -353,7 +354,7 @@ const ManageRequests = () => {
       if (!token) throw new Error('Not authenticated');
 
       const endpoint = action === 'approved' ? 'approve' : 'reject';
-      const url = `http://localhost:5000/api/hospital-requests/${requestId}/${endpoint}`;
+      const url = `${serverUrl}/api/hospital-requests/${requestId}/${endpoint}`;
       const opts = {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -437,7 +438,7 @@ const ManageRequests = () => {
       console.log('Submitting report with payload:', payload);
 
       // Submit report to moderation API
-      const resp = await fetch('http://localhost:5000/api/moderation/report-user', {
+      const resp = await fetch(`${serverUrl}/api/moderation/report-user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -680,7 +681,7 @@ const ManageRequests = () => {
                             <Button size="sm" onClick={async () => {
                               try {
                                 const token = localStorage.getItem('token')
-                                const resp = await fetch(`http://localhost:5000/api/requests/${req.id}/verify-by-hospital`, {
+                                const resp = await fetch(`${serverUrl}/api/requests/${req.id}/verify-by-hospital`, {
                                   method: 'PUT',
                                   headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
                                 })
@@ -850,7 +851,7 @@ const ManageRequests = () => {
                   if (!f) return null;
                   // file could be string or array
                   if (Array.isArray(f)) f = f[0];
-                  const src = typeof f === 'string' && f.startsWith('/') ? `http://localhost:5000${f}` : f;
+                  const src = typeof f === 'string' && f.startsWith('/') ? `${serverUrl}${f}` : f;
                   return (
                     <a href={src} target="_blank" rel="noreferrer" className="text-sm text-primary block mt-1">Open</a>
                   );
@@ -901,7 +902,7 @@ const ManageRequests = () => {
                               const f = files[k];
                               if (!f) return null;
                               const fileItem = Array.isArray(f) ? f[0] : f;
-                              const src = typeof fileItem === 'string' && fileItem.startsWith('/') ? `http://localhost:5000${fileItem}` : fileItem;
+                              const src = typeof fileItem === 'string' && fileItem.startsWith('/') ? `${serverUrl}${fileItem}` : fileItem;
                               return (
                                 <div key={i} className="mt-1">
                                   <p className="text-xs text-muted-foreground">{k}:</p>
@@ -1066,7 +1067,7 @@ const ManageRequests = () => {
                           <p className="text-xs text-muted-foreground">Medical Reports:</p>
                           <div className="flex gap-2 mt-1 flex-wrap">
                             {organDetails.raw.files.medicalReports.map((f, i) => {
-                              const src = f.startsWith('/') ? `http://localhost:5000${f}` : f
+                              const src = f.startsWith('/') ? `${serverUrl}${f}` : f
                               return (
                                 <a key={i} href={src} target="_blank" rel="noreferrer" className="block w-24 h-24 bg-muted rounded overflow-hidden border">
                                   <img src={src} alt={`medical-${i}`} className="w-full h-full object-cover" />
@@ -1079,13 +1080,13 @@ const ManageRequests = () => {
                       {organDetails.raw.files.prescription && (
                         <div>
                           <p className="text-xs text-muted-foreground">Prescription:</p>
-                          <a href={organDetails.raw.files.prescription.startsWith('/') ? `http://localhost:5000${organDetails.raw.files.prescription}` : organDetails.raw.files.prescription} target="_blank" rel="noreferrer" className="text-sm text-primary">Open Prescription</a>
+                          <a href={organDetails.raw.files.prescription.startsWith('/') ? `${serverUrl}${organDetails.raw.files.prescription}` : organDetails.raw.files.prescription} target="_blank" rel="noreferrer" className="text-sm text-primary">Open Prescription</a>
                         </div>
                       )}
                       {organDetails.raw.files.idProof && (
                         <div>
                           <p className="text-xs text-muted-foreground">ID Proof:</p>
-                          <a href={organDetails.raw.files.idProof.startsWith('/') ? `http://localhost:5000${organDetails.raw.files.idProof}` : organDetails.raw.files.idProof} target="_blank" rel="noreferrer" className="text-sm text-primary">Open ID Proof</a>
+                          <a href={organDetails.raw.files.idProof.startsWith('/') ? `${serverUrl}${organDetails.raw.files.idProof}` : organDetails.raw.files.idProof} target="_blank" rel="noreferrer" className="text-sm text-primary">Open ID Proof</a>
                         </div>
                       )}
                     </div>
@@ -1132,3 +1133,6 @@ const ManageRequests = () => {
 };
 
 export default ManageRequests;
+
+
+

@@ -11,6 +11,7 @@ import { FileText, Clock, Heart, AlertTriangle, Plus, Search, Building2, MapPin,
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
+import { serverUrl } from '@/lib/serverConfig';
 
 // ✅ SAFE Medical Icons (Consistent with DonateModal)
 import { GiKidneys, GiLiver, GiLungs, GiSkeleton } from "react-icons/gi";
@@ -54,7 +55,7 @@ const PatientRequestPage = () => {
     const load = async () => {
       setHospitalsLoading(true);
       try {
-        const resp = await fetch('http://localhost:5000/api/hospitals');
+        const resp = await fetch(`${serverUrl}/api/hospitals`);
         const json = await resp.json();
         let list = [];
         if (resp.ok && Array.isArray(json.data) && json.data.length > 0) {
@@ -70,11 +71,11 @@ const PatientRequestPage = () => {
           const hosp = { ...h, id };
           try {
             // Try plural endpoint first (older routes), fallback to singular if missing
-            let invResp = await fetch(`http://localhost:5000/api/hospitals/${id}/inventory`);
+            let invResp = await fetch(`${serverUrl}/api/hospitals/${id}/inventory`);
             let invJson = await invResp.json().catch(() => ({}));
             if (!invResp.ok) {
               // try singular mount
-              invResp = await fetch(`http://localhost:5000/api/hospital/${id}/inventory`);
+              invResp = await fetch(`${serverUrl}/api/hospital/${id}/inventory`);
               invJson = await invResp.json().catch(() => ({}));
             }
             if (invResp.ok && Array.isArray(invJson.data)) {
@@ -460,3 +461,4 @@ const PatientRequestPage = () => {
 };
 
 export default PatientRequestPage;
+

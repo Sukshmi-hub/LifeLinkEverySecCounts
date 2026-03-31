@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useEffect } from 'react';
+import { serverUrl } from '@/lib/serverConfig';
 import {
   Dialog,
   DialogContent,
@@ -136,7 +137,7 @@ const DonateModal = ({ isOpen, onClose }) => {
       otherDocuments.forEach(d => { if (d.file) form.append('additionalDocs', d.file) });
 
       const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:5000/api/requests/donor', {
+      const res = await fetch(`${serverUrl}/api/requests/donor`, {
         method: 'POST',
         body: form,
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -191,7 +192,7 @@ const DonateModal = ({ isOpen, onClose }) => {
     (async () => {
       try {
         const token = localStorage.getItem('token')
-        const res = await fetch('http://localhost:5000/api/hospital/list', { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+        const res = await fetch(`${serverUrl}/api/hospital/list`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
         if (!res.ok) return
         const json = await res.json()
         if (json && json.success && Array.isArray(json.data)) setHospitals(json.data)
@@ -331,3 +332,4 @@ const DonateModal = ({ isOpen, onClose }) => {
 };
 
 export default DonateModal;
+

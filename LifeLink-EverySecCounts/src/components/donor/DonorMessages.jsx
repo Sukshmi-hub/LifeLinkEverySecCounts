@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import useChat from '@/hooks/useChat'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MessageCircle, Send, Building2, Search, AlertTriangle } from "lucide-react";
+import { serverUrl } from '@/lib/serverConfig';
 
 /**
  * ChatSystem now accepts 'initialContacts' and 'initialMessages' as props.
@@ -14,8 +15,7 @@ import { MessageCircle, Send, Building2, Search, AlertTriangle } from "lucide-re
 function ChatSystem({ className = "" }) {
   const { user } = useAuth();
 
-  const serverUrl = 'http://localhost:5000'
-  const { sendMessage, joinRoom, loadHistory } = useChat(serverUrl)
+    const { sendMessage, joinRoom, loadHistory } = useChat(serverUrl)
 
   const [contacts, setContacts] = useState([]);
   const [selectedContact, setSelectedContact] = useState(null);
@@ -284,3 +284,4 @@ function ChatSystem({ className = "" }) {
 }
 
 export default ChatSystem;
+

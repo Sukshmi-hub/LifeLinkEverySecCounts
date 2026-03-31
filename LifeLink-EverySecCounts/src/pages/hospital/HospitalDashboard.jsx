@@ -8,6 +8,7 @@ import RedAlerts from '@/components/hospital/RedAlerts';
 import HospitalMessages from '@/components/hospital/HospitalMessages';
 import HospitalNotifications from '@/components/hospital/HospitalNotifications';
 import HospitalProfile from '@/components/hospital/HospitalProfile';
+import { serverUrl } from '@/lib/serverConfig';
 
 const HospitalDashboard = () => {
   const { user } = useAuth();
@@ -21,7 +22,7 @@ const HospitalDashboard = () => {
     const token = localStorage.getItem('token')
     const fetchAlerts = async () => {
       try {
-        const resp = await fetch('http://localhost:5000/api/requests/red-alerts', {
+        const resp = await fetch(`${serverUrl}/api/requests/red-alerts`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         })
         if (!resp.ok) return
@@ -47,7 +48,7 @@ const HospitalDashboard = () => {
     (async () => {
       try {
         const token = localStorage.getItem('token')
-        const resp = await fetch(`http://localhost:5000/api/requests/${alertId}/resolve`, {
+        const resp = await fetch(`${serverUrl}/api/requests/${alertId}/resolve`, {
           method: 'PUT',
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         })
@@ -108,3 +109,4 @@ const HospitalDashboard = () => {
 };
 
 export default HospitalDashboard;
+

@@ -25,11 +25,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { serverUrl } from "@/lib/serverConfig";
 
 function TributeWall() {
   const { toast } = useToast();
-  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
-  
   const [tributes, setTributes] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -52,7 +51,7 @@ function TributeWall() {
     const fetchTributes = async () => {
       try {
         setIsLoading(true);
-        const resp = await fetch(`${API_BASE}/api/tributes/public`);
+        const resp = await fetch(`${serverUrl}/api/tributes/public`);
         if (!resp.ok) throw new Error('Failed to fetch tributes');
         const json = await resp.json();
         if (json.success && Array.isArray(json.tributes)) {

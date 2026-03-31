@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { io } from 'socket.io-client'
 import { useAuth } from '@/context/AuthContext'
+import { serverUrl as defaultServerUrl } from '@/lib/serverConfig';
 
 // Hook to manage socket connection with JWT auth and reconnection/backoff
-export function useSocket(serverUrl = 'http://localhost:5000') {
+export function useSocket(serverUrl = defaultServerUrl) {
   const { user } = useAuth()
   const [socket, setSocket] = useState(null)
   const [isConnected, setIsConnected] = useState(false)
@@ -65,3 +66,5 @@ export function useSocket(serverUrl = 'http://localhost:5000') {
 }
 
 export default useSocket
+
+

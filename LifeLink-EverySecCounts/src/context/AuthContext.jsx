@@ -5,6 +5,7 @@ import React, {
   useEffect,
 } from "react";
 import { UserRole } from "@/data/users";
+import { serverUrl } from '@/lib/serverConfig';
 
 const AuthContext = createContext(undefined);
 
@@ -43,7 +44,7 @@ export function AuthProvider({ children }) {
 
         (async () => {
           try {
-            const resp = await fetch('http://localhost:5000/api/profile', {
+            const resp = await fetch(`${serverUrl}/api/profile`, {
               headers: { Authorization: `Bearer ${token}` },
             });
 
@@ -103,7 +104,7 @@ export function AuthProvider({ children }) {
 
         // attempt to fetch rich profile and validate token
         try {
-          const resp = await fetch('http://localhost:5000/api/profile', {
+          const resp = await fetch(`${serverUrl}/api/profile`, {
             headers: { Authorization: `Bearer ${token}` },
           });
 
@@ -302,3 +303,5 @@ export function getRoleBasedRedirect(role) {
 
   return routes[role] || "/";
 }
+
+

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { serverUrl } from '@/lib/serverConfig';
 import { 
   User, 
   Phone, 
@@ -82,7 +83,7 @@ const FundRequestDetails = ({
     if (origin) {
       endpoints.push(`${origin}/api/hospitals/${id}`, `${origin}/api/hospital/${id}`);
     }
-    endpoints.push(`http://localhost:5000/api/hospitals/${id}`, `http://localhost:5000/api/hospital/${id}`);
+    endpoints.push(`${serverUrl}/api/hospitals/${id}`, `${serverUrl}/api/hospital/${id}`);
     // also try encoded id variants
     endpoints.push(...endpoints.map(ep => ep.replace(id, encodeURIComponent(id))));
     for (const ep of endpoints) {
@@ -106,7 +107,7 @@ const FundRequestDetails = ({
     if (origin) {
       endpoints.push(`${origin}/api/patients/${id}`, `${origin}/api/patient/${id}`);
     }
-    endpoints.push(`http://localhost:5000/api/patients/${id}`, `http://localhost:5000/api/patient/${id}`);
+    endpoints.push(`${serverUrl}/api/patients/${id}`, `${serverUrl}/api/patient/${id}`);
     endpoints.push(...endpoints.map(ep => ep.replace(id, encodeURIComponent(id))));
     for (const ep of endpoints) {
       try {
@@ -424,7 +425,7 @@ const FundRequestDetails = ({
                     const doc = f.path;
                     const displayName = typeof doc === 'string' ? (doc.split('/').pop() || doc) : (doc.name || String(doc));
                     const uploadedOn = request.createdAt ? new Date(request.createdAt).toLocaleDateString() : '—';
-                    const href = typeof doc === 'string' ? (doc.startsWith('/') ? `http://localhost:5000${doc}` : doc) : null;
+                    const href = typeof doc === 'string' ? (doc.startsWith('/') ? `${serverUrl}${doc}` : doc) : null;
                     return (
                       <div key={`${f.key}_${i}`} className="bg-muted/50 rounded-lg p-3 border border-border flex items-center gap-3">
                         <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -610,3 +611,4 @@ const FundRequestDetails = ({
 };
 
 export default FundRequestDetails;
+

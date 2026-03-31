@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Building2, MapPin, Mail, Clock, Save, Edit2, Phone } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { serverUrl } from '@/lib/serverConfig';
 
 const HospitalProfile = () => {
   const { toast } = useToast();
@@ -26,7 +27,7 @@ const HospitalProfile = () => {
       try {
         const token = localStorage.getItem('token');
         if (!token) return;
-        const resp = await fetch('http://localhost:5000/api/profile', {
+        const resp = await fetch(`${serverUrl}/api/profile`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!resp.ok) return;
@@ -190,3 +191,5 @@ const HospitalProfile = () => {
 };
 
 export default HospitalProfile;
+
+

@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { serverUrl } from '@/lib/serverConfig';
 import {
   Dialog,
   DialogContent,
@@ -37,7 +38,7 @@ const HospitalDashboardOverview = ({
   pendingVerifications,
   redAlertsCount,
 }) => {
-  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+  const API_BASE = import.meta.env.VITE_API_URL;
   const { organRequests, notifications } = useNotifications();
   const { toast } = useToast();
 
