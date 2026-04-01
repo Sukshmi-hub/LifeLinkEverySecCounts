@@ -40,23 +40,32 @@ const app = express()
 // MIDDLEWARE
 // ============================================
 
-const frontendUrl = process.env.FRONTEND_URL?.trim();
-const corsOptions = frontendUrl
-  ? {
-      origin: frontendUrl,
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
-    }
-  : {
-      origin: true,
-      credentials: false,
-      methods: ['GET', 'POST', 'PUT', 'DELETE'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
-    };
+const allowedOrigins = [
+  'https://life-link-every-sec-counts.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+]
 
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (
+      !origin ||
+      allowedOrigins.includes(origin) ||
+      /^https:\/\/life-link-every-sec-counts.*\.vercel\.app$/.test(origin)
+    ) {
+      callback(null, true)
+      return
+    }
+
+    callback(new Error('Not allowed by CORS'))
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}
+
+app.use(cors(corsOptions))
+app.options('*', cors(corsOptions))
 
 // Body parser - Parse JSON requests
 app.use(express.json());
