@@ -15,7 +15,7 @@ export default function PatientMessages() {
         const token = localStorage.getItem('token')
         const res = await fetch(`${serverUrl}/api/chat/rooms`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
         if (!res.ok) return
-        const json = await res.json()
+        const json = await res.json().catch(() => ({}))
         if (json.success) setRooms(json.data)
       } catch (err) {
         console.error('Failed to fetch rooms', err)
@@ -33,7 +33,7 @@ export default function PatientMessages() {
         const token = localStorage.getItem('token')
         const res = await fetch(`${serverUrl}/api/profile`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
         if (!res.ok) return
-        const json = await res.json()
+        const json = await res.json().catch(() => ({}))
         if (json.success) setProfile(json.data?.user || null)
       } catch (err) {
         console.error('Failed to fetch patient profile', err)

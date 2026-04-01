@@ -8,6 +8,7 @@ import RedAlerts from '@/components/hospital/RedAlerts';
 import HospitalMessages from '@/components/hospital/HospitalMessages';
 import HospitalNotifications from '@/components/hospital/HospitalNotifications';
 import HospitalProfile from '@/components/hospital/HospitalProfile';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import { serverUrl } from '@/lib/serverConfig';
 
 const HospitalDashboard = () => {
@@ -78,7 +79,7 @@ const HospitalDashboard = () => {
       case 'red-alerts':
         return <RedAlerts alerts={redAlerts} onResolve={handleResolveAlert} />;
       case 'messages':
-        return <HospitalMessages />;
+        return <ErrorBoundary><HospitalMessages /></ErrorBoundary>;
       case 'notifications':
         return <HospitalNotifications />;
       case 'profile':

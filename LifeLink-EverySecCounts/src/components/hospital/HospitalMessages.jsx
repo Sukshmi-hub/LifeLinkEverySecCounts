@@ -98,7 +98,7 @@ export default function HospitalMessages() {
       const token = localStorage.getItem('token')
       const res = await fetch(`${serverUrl}/api/chat/rooms`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
       if (!res.ok) return
-      const json = await res.json()
+      const json = await res.json().catch(() => ({}))
       if (json.success) setRooms(json.data)
     } catch (err) {
       console.error('Failed to fetch rooms', err)
@@ -115,7 +115,7 @@ export default function HospitalMessages() {
         const token = localStorage.getItem('token')
         const res = await fetch(`${serverUrl}/api/hospital/me`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
         if (!res.ok) return
-        const json = await res.json()
+        const json = await res.json().catch(() => ({}))
         const hospitalId = String(json?.data?.hospitalId || json?.data?._id || json?.data?.id || localStorage.getItem('hospitalId') || '')
 
         const patients = Array.isArray(json?.data?.admitted_patients) ? json.data.admitted_patients : []
@@ -132,7 +132,7 @@ export default function HospitalMessages() {
           headers: { Authorization: token ? `Bearer ${token}` : '' },
         })
         if (!requestsResp.ok) return
-        const requestsJson = await requestsResp.json()
+        const requestsJson = await requestsResp.json().catch(() => ({}))
         const requestList = Array.isArray(requestsJson?.data) ? requestsJson.data : []
 
         const syntheticRoomsMap = new Map()
@@ -213,11 +213,11 @@ export default function HospitalMessages() {
   }, [activeRoomCategory])
 
   const handleSelectEnhanced = async (roomId) => {
-    const res = await joinRoom(roomId)
-    let msgs = []
-    if (res && res.success) {
-      msgs = await loadHistory(roomId) || []
-    } else {
+      const res = await joinRoom(roomId)
+      let msgs = []
+      if (res && res.success) {
+        msgs = await loadHistory(roomId) || []
+      } else {
       msgs = await loadHistory(roomId) || []
     }
     try {

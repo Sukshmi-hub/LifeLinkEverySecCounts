@@ -33,7 +33,7 @@ function ChatSystem({ className = "" }) {
       const profileRes = await fetch(`${serverUrl}/api/profile`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
       let acceptedIds = []
       if (profileRes.ok) {
-        const profileJson = await profileRes.json()
+        const profileJson = await profileRes.json().catch(() => ({}))
         const intents = Array.isArray(profileJson?.data?.user?.donationIntents) ? profileJson.data.user.donationIntents : []
         acceptedIds = intents
           .filter((intent) => {
@@ -47,7 +47,7 @@ function ChatSystem({ className = "" }) {
 
       const res = await fetch(`${serverUrl}/api/chat/rooms`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
       if (!res.ok) return
-      const json = await res.json()
+      const json = await res.json().catch(() => ({}))
       if (json && json.success && Array.isArray(json.data)) {
         const acceptedSet = new Set(acceptedIds)
         const map = new Map()
@@ -109,7 +109,7 @@ function ChatSystem({ className = "" }) {
         const token = localStorage.getItem('token')
         const res = await fetch(`${serverUrl}/api/chat/history/${encodeURIComponent(roomId)}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
         if (!res.ok) return
-        const json = await res.json()
+        const json = await res.json().catch(() => ({}))
         if (json && json.success && Array.isArray(json.data)) {
           // normalize messages for UI
           const msgs = json.data.map(m => ({

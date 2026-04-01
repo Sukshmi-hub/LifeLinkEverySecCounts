@@ -10,6 +10,7 @@ import NgoMessages from '@/components/ngo/NgoMessages';
 import NgoProfile from '@/components/ngo/NgoProfile';
 import FundRequestDetails from '@/components/ngo/FundRequestDetails';
 import NgoHospitalChat from '@/components/ngo/NgoHospitalChat';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import { serverUrl } from '@/lib/serverConfig';
 import { 
   FileText, 
@@ -303,7 +304,7 @@ const NgoDashboard = () => {
       case 'requests':
         return renderRequests();
       case 'messages':
-        return <NgoMessages />;
+        return <ErrorBoundary><NgoMessages /></ErrorBoundary>;
       case 'profile':
         return <NgoProfile />;
       default:

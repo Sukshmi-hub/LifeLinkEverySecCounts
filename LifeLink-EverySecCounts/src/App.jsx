@@ -11,6 +11,7 @@ import { SharedChatProvider } from "@/context/SharedChatContext";
 import { DonorProvider } from "@/context/DonorContext";
 import { NotificationProvider } from "@/context/NotificationContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 // Public pages
 import Home from "./pages/public/Home";
@@ -74,7 +75,7 @@ const App = () => (
                     <Route path="/patient/request-funds" element={<ProtectedRoute allowedRoles={['patient']}><RequestFundsPage /></ProtectedRoute>} />
                     <Route path="/patient/payment" element={<ProtectedRoute allowedRoles={['patient']}><PaymentPage /></ProtectedRoute>} />
                     <Route path="/patient/profile" element={<ProtectedRoute allowedRoles={['patient']}><PatientProfilePage /></ProtectedRoute>} />
-                    <Route path="/patient/messages" element={<ProtectedRoute allowedRoles={['patient']}><PatientMessagesPage /></ProtectedRoute>} />
+                    <Route path="/patient/messages" element={<ProtectedRoute allowedRoles={['patient']}><ErrorBoundary><PatientMessagesPage /></ErrorBoundary></ProtectedRoute>} />
                     {/* Patient settings removed from routes */}
 
                     {/* ========================================== */}
@@ -83,7 +84,7 @@ const App = () => (
                     <Route path="/donor/dashboard" element={<ProtectedRoute allowedRoles={['donor']}><DonorDashboard /></ProtectedRoute>} />
                     <Route path="/donor/register" element={<ProtectedRoute allowedRoles={['donor']}><DonorRegister /></ProtectedRoute>} />
                     <Route path="/donor/chat" element={<ProtectedRoute allowedRoles={['donor']}><DonorChat /></ProtectedRoute>} />
-                    <Route path="/donor/messages" element={<ProtectedRoute allowedRoles={['donor']}><DonorMessagesPage /></ProtectedRoute>} />
+                    <Route path="/donor/messages" element={<ProtectedRoute allowedRoles={['donor']}><ErrorBoundary><DonorMessagesPage /></ErrorBoundary></ProtectedRoute>} />
                     <Route path="/donor/certificate" element={<ProtectedRoute allowedRoles={['donor']}><DonorDashboard /></ProtectedRoute>} />
                     <Route path="/donor/profile" element={<ProtectedRoute allowedRoles={['donor']}><DonorProfilePage /></ProtectedRoute>} />
                     {/* Donor settings removed from routes */}
