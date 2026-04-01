@@ -199,32 +199,32 @@ export const DonorProvider = ({ children }) => {
         if (!resp.ok) return;
         const json = await resp.json();
         if (!json || !json.success || !json.data || !json.data.user) return;
-        const p = json.data.user;
+        const profileUser = json.data.user;
 
         setDonorProfile(prev => ({
           ...prev,
-          fullName: p.fullName || p.name || prev.fullName,
-          email: p.email || prev.email,
-          phone: p.phone || prev.phone,
-          age: p.age !== undefined ? String(p.age) : prev.age,
-          bloodGroup: p.bloodGroup || p.blood_type || prev.bloodGroup,
-          aadhaarNumber: p.aadhaarNumber || p.aadhaar_no || prev.aadhaarNumber,
-          address: p.address || (p.location && p.location.full_address) || prev.address,
-          city: (p.location && p.location.city) || prev.city,
-          state: (p.location && p.location.state) || prev.state,
-          emergencyContactName: p.emergencyContactName || (p.emergency_contact && p.emergency_contact.name) || prev.emergencyContactName,
-          emergencyContactNumber: p.emergencyPhone || (p.emergency_contact && p.emergency_contact.phone) || prev.emergencyContactNumber,
-          willingToDonate: p.willing_organs || p.willingToDonate || prev.willingToDonate,
-          lastDonationDate: p.last_donation_date || prev.lastDonationDate,
+          fullName: profileUser.fullName || profileUser.name || prev.fullName,
+          email: profileUser.email || prev.email,
+          phone: profileUser.phone || prev.phone,
+          age: profileUser.age !== undefined ? String(profileUser.age) : prev.age,
+          bloodGroup: profileUser.bloodGroup || profileUser.blood_type || prev.bloodGroup,
+          aadhaarNumber: profileUser.aadhaarNumber || profileUser.aadhaar_no || prev.aadhaarNumber,
+          address: profileUser.address || (profileUser.location && profileUser.location.full_address) || prev.address,
+          city: (profileUser.location && profileUser.location.city) || prev.city,
+          state: (profileUser.location && profileUser.location.state) || prev.state,
+          emergencyContactName: profileUser.emergencyContactName || (profileUser.emergency_contact && profileUser.emergency_contact.name) || prev.emergencyContactName,
+          emergencyContactNumber: profileUser.emergencyPhone || (profileUser.emergency_contact && profileUser.emergency_contact.phone) || prev.emergencyContactNumber,
+          willingToDonate: profileUser.willing_organs || profileUser.willingToDonate || prev.willingToDonate,
+          lastDonationDate: profileUser.last_donation_date || prev.lastDonationDate,
         }));
 
         // If backend included donorMatches and donationIntents in the profile payload, set them here
         try {
-        if (Array.isArray(json.data.user.donorMatches)) setDonorMatches(json.data.user.donorMatches || [])
-        if (Array.isArray(json.data.user.donationIntents)) setDonationIntents(json.data.user.donationIntents || [])
-      } catch (e) {
-        // ignore
-      }
+          if (Array.isArray(profileUser.donorMatches)) setDonorMatches(profileUser.donorMatches || [])
+          if (Array.isArray(profileUser.donationIntents)) setDonationIntents(profileUser.donationIntents || [])
+        } catch (e) {
+          // ignore
+        }
         refreshDonationCertificates();
       } catch (err) {
         // ignore

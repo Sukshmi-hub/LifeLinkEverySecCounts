@@ -33,17 +33,17 @@ const HospitalProfile = () => {
         if (!resp.ok) return;
         const json = await resp.json();
         if (!json || !json.success || !json.data || !json.data.user) return;
-        const p = json.data.user;
+        const profileUser = json.data.user;
 
         setProfile(prev => ({
           ...prev,
-          name: p.name || p.organizationName || prev.name,
-          registrationNumber: p.registration_number || p.registrationNumber || prev.registrationNumber,
-          type: p.hospital_type || p.type || prev.type,
-          email: p.email || prev.email,
-          emergencyPhone: p.contact_phone || p.hospitalContactPhone || prev.emergencyPhone,
-          address: p.address || (p.location && p.location.full_address) || prev.address,
-          workingHours: p.working_hours || p.workingHours || prev.workingHours,
+          name: profileUser.name || profileUser.organizationName || prev.name,
+          registrationNumber: profileUser.registration_number || profileUser.registrationNumber || prev.registrationNumber,
+          type: profileUser.hospital_type || profileUser.type || prev.type,
+          email: profileUser.email || prev.email,
+          emergencyPhone: profileUser.contact_phone || profileUser.hospitalContactPhone || prev.emergencyPhone,
+          address: profileUser.address || (profileUser.location && profileUser.location.full_address) || prev.address,
+          workingHours: profileUser.working_hours || profileUser.workingHours || prev.workingHours,
         }));
       } catch (err) {
         // ignore errors

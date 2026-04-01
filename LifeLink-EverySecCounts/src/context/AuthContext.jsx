@@ -58,15 +58,15 @@ export function AuthProvider({ children }) {
 
             const json = await resp.json();
             if (json && json.success && json.data && json.data.user) {
-              const p = json.data.user;
+              const profileUser = json.data.user;
               const refined = {
-                id: p.id || parsed.id || parsed._id,
-                name: p.fullName || p.name || parsed.name,
-                email: p.email || parsed.email,
-                phone: p.phone || parsed.phone || '',
-                role: parsed.role || p.role,
-                verified: (p.verified || p.is_verified || parsed.verified) || false,
-                location: (p.location && (p.location.full_address || p.location.city || p.location.state)) ? (p.location.full_address || `${p.location.city || ''}${p.location.city && p.location.state ? ', ' : ''}${p.location.state || ''}`) : (parsed.location || ''),
+                id: profileUser.id || parsed.id || parsed._id,
+                name: profileUser.fullName || profileUser.name || parsed.name,
+                email: profileUser.email || parsed.email,
+                phone: profileUser.phone || parsed.phone || '',
+                role: parsed.role || profileUser.role,
+                verified: (profileUser.verified || profileUser.is_verified || parsed.verified) || false,
+                location: (profileUser.location && (profileUser.location.full_address || profileUser.location.city || profileUser.location.state)) ? (profileUser.location.full_address || `${profileUser.location.city || ''}${profileUser.location.city && profileUser.location.state ? ', ' : ''}${profileUser.location.state || ''}`) : (parsed.location || ''),
               };
               setState({ user: refined, isAuthenticated: true, isLoading: false });
               localStorage.setItem('user', JSON.stringify(refined));
@@ -118,15 +118,15 @@ export function AuthProvider({ children }) {
 
           const json = await resp.json();
           if (json && json.success && json.data && json.data.user) {
-            const p = json.data.user;
+            const profileUser = json.data.user;
             const refined = {
-              id: p.id || serverUser.id || serverUser._id,
-              name: p.fullName || p.name || serverUser.name,
-              email: p.email || serverUser.email,
-              phone: p.phone || serverUser.phone || '',
-              role: serverUser.role || p.role,
-              verified: (p.verified || p.is_verified || serverUser.verified) || false,
-              location: (p.location && (p.location.full_address || p.location.city || p.location.state)) ? (p.location.full_address || `${p.location.city || ''}${p.location.city && p.location.state ? ', ' : ''}${p.location.state || ''}`) : (serverUser.location || ''),
+              id: profileUser.id || serverUser.id || serverUser._id,
+              name: profileUser.fullName || profileUser.name || serverUser.name,
+              email: profileUser.email || serverUser.email,
+              phone: profileUser.phone || serverUser.phone || '',
+              role: serverUser.role || profileUser.role,
+              verified: (profileUser.verified || profileUser.is_verified || serverUser.verified) || false,
+              location: (profileUser.location && (profileUser.location.full_address || profileUser.location.city || profileUser.location.state)) ? (profileUser.location.full_address || `${profileUser.location.city || ''}${profileUser.location.city && profileUser.location.state ? ', ' : ''}${profileUser.location.state || ''}`) : (serverUser.location || ''),
             };
             setState({ user: refined, isAuthenticated: true, isLoading: false });
             localStorage.setItem('user', JSON.stringify(refined));
