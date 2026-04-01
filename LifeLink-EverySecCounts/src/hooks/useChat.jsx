@@ -117,31 +117,6 @@ export function useChat(serverUrl) {
     dispatch({ type: 'SET_ACTIVE_ROOM', roomId })
   }, [])
 
-  const loadHistory = useCallback(async (roomId, opts = { limit: 50, offset: 0 }) => {
-    try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`${serverUrl}/api/chat/history/${roomId}?limit=${opts.limit}&offset=${opts.offset}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
-      if (!res.ok) return
-      const json = await res.json()
-      if (json.success && Array.isArray(json.data)) {
-        dispatch({ type: 'ADD_MESSAGES', messages: json.data })
-        try {
-          const myId = String(user?._id || user?.id || '')
-          const unreadIds = (json.data || [])
-            .filter(m => m && !m.isRead && String(m.senderId || m.sender_id || '') !== myId)
-            .map(m => m._id)
-          if (roomId && unreadIds.length > 0 && roomId === state.activeRoomId) {
-            markRead(roomId, unreadIds)
-          }
-        } catch (e) {}
-        return json.data
-      }
-    } catch (err) {
-      // ignore
-    }
-    return []
-  }, [serverUrl, markRead, state.activeRoomId, user?._id, user?.id])
-
   const leaveRoom = useCallback((roomId) => {
     if (!socket) return
     socket.emit('leave_room', { roomId })
@@ -178,6 +153,31 @@ export function useChat(serverUrl) {
       }
     })()
   }, [socket])
+
+  const loadHistory = useCallback(async (roomId, opts = { limit: 50, offset: 0 }) => {
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`${serverUrl}/api/chat/history/${roomId}?limit=${opts.limit}&offset=${opts.offset}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+      if (!res.ok) return
+      const json = await res.json()
+      if (json.success && Array.isArray(json.data)) {
+        dispatch({ type: 'ADD_MESSAGES', messages: json.data })
+        try {
+          const myId = String(user?._id || user?.id || '')
+          const unreadIds = (json.data || [])
+            .filter(m => m && !m.isRead && String(m.senderId || m.sender_id || '') !== myId)
+            .map(m => m._id)
+          if (roomId && unreadIds.length > 0 && roomId === state.activeRoomId) {
+            markRead(roomId, unreadIds)
+          }
+        } catch (e) {}
+        return json.data
+      }
+    } catch (err) {
+      // ignore
+    }
+    return []
+  }, [serverUrl, markRead, state.activeRoomId, user?._id, user?.id])
 
   return { socket, isConnected, connectionError, connect, state, joinRoom, leaveRoom, sendMessage, markRead, loadHistory, setActiveRoomLocal }
 }
