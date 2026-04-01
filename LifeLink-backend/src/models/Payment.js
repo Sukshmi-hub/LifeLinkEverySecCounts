@@ -10,6 +10,7 @@ const PaymentSchema = new mongoose.Schema({
   patientName: { type: String, default: '' },
   amount: { type: Number, default: 0 }, // amount in rupees
   surgeryFee: { type: Number, default: 0 },
+  transplantSurgeryFee: { type: Number, default: 0 },
   hospitalCharges: { type: Number, default: 0 },
   processingFee: { type: Number, default: 0 },
   totalAmount: { type: Number, default: 0 },

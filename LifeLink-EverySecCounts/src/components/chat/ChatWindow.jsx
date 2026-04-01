@@ -27,10 +27,6 @@ export default function ChatWindow({ roomId, chat = { messages: [] }, onSend }) 
         // sometimes senderId may be nested under sender._id
         if (m.sender && (String(m.sender._id || '') === myId || String(m.sender.id || '') === myId)) return true
       }
-      // If senderRole exists, compare lowercased roles
-      if (m.senderRole && user?.role) {
-        if (String(m.senderRole).toLowerCase() === String(user.role).toLowerCase()) return true
-      }
       return false
     } catch (e) {
       return false

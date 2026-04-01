@@ -20,7 +20,7 @@ const PaymentPage = () => {
 
   const hasDetailedSummary = (payment) => {
     if (!payment) return false;
-    return Number(payment.surgeryFee || payment.transplantFee || payment.hospitalCharges || payment.processingFee || 0) > 0
+    return Number(payment.transplantSurgeryFee || payment.surgeryFee || payment.transplantFee || payment.hospitalCharges || payment.processingFee || 0) > 0
       || !!payment.donorName
       || !!payment.organType
       || !!payment.hospitalName;
@@ -119,6 +119,11 @@ const PaymentPage = () => {
     ((matchedDonor?.hospitalName && matchedDonor.hospitalName !== 'City General Hospital') ? matchedDonor.hospitalName : '') ||
     'City General Hospital';
 
+  const displaySurgeryFee = paymentSummary?.transplantSurgeryFee || paymentSummary?.surgeryFee || paymentSummary?.transplantFee || 0
+  const displayHospitalCharges = paymentSummary?.hospitalCharges || 0
+  const displayProcessingFee = paymentSummary?.processingFee || 0
+  const displayTotalAmount = paymentSummary?.totalAmount || paymentSummary?.amount || (displaySurgeryFee + displayHospitalCharges + displayProcessingFee)
+
   const navigate = useNavigate();
 
   return (
@@ -194,19 +199,19 @@ const PaymentPage = () => {
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Transplant Surgery Fee</span>
-                        <span>₹{(paymentSummary?.surgeryFee || paymentSummary?.transplantFee || 0).toLocaleString()}</span>
+                        <span>₹{displaySurgeryFee.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Hospital Charges</span>
-                        <span>₹{(paymentSummary?.hospitalCharges || 0).toLocaleString()}</span>
+                        <span>₹{displayHospitalCharges.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Processing Fee</span>
-                        <span>₹{(paymentSummary?.processingFee || 0).toLocaleString()}</span>
+                        <span>₹{displayProcessingFee.toLocaleString()}</span>
                       </div>
                       <div className="border-t border-border pt-2 mt-2 flex justify-between">
                         <span className="font-semibold">Total Amount</span>
-                        <span className="font-bold text-lg">₹{(paymentSummary?.totalAmount || 0).toLocaleString()}</span>
+                        <span className="font-bold text-lg">₹{displayTotalAmount.toLocaleString()}</span>
                       </div>
                     </div>
                   </div>
@@ -226,10 +231,12 @@ const PaymentPage = () => {
                         <Button
                           onClick={() => {
                             const prefill = {
-                              totalAmount: paymentSummary?.totalAmount || 0,
-                              transplantFee: paymentSummary?.surgeryFee || paymentSummary?.transplantFee || 0,
-                              hospitalCharges: paymentSummary?.hospitalCharges || 0,
-                              processingFee: paymentSummary?.processingFee || 0,
+                              totalAmount: displayTotalAmount,
+                              transplantFee: displaySurgeryFee,
+                              transplantSurgeryFee: displaySurgeryFee,
+                              surgeryFee: displaySurgeryFee,
+                              hospitalCharges: displayHospitalCharges,
+                              processingFee: displayProcessingFee,
                               hospitalId: paymentSummary?.hospitalId || matchedRequest?.hospitalId || null,
                               hospitalName: paymentSummary?.hospitalName || matchedRequest?.hospitalName || '',
                               sourceRequestId: matchedRequest?.id || matchedRequest?._id || paymentSummary?.requestId || null
@@ -269,7 +276,7 @@ const PaymentPage = () => {
           donorName={user?.name || matchedDonor?.name || matchedRequest?.donorName || (matchedRequest?.patientName || '').trim() || 'Anonymous Donor'}
           organType={matchedDonor?.organType || matchedRequest?.organType}
           hospitalName={matchedDonor?.hospitalName || matchedRequest?.hospitalName || 'City General Hospital'}
-          amount={paymentSummary?.totalAmount || 50000}
+          amount={displayTotalAmount || 50000}
           hospitalId={matchedRequest?.hospitalId || paymentSummary?.hospitalId || null}
           requestId={matchedRequest?.id || paymentSummary?.requestId || null}
         />

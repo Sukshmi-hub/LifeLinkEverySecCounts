@@ -28,9 +28,17 @@ function reducer(state, action) {
         if (id && state.messages.some(m => String(m._id) === id)) {
           return state
         }
-        return { ...state, messages: [...state.messages, action.message], unreadCount: state.activeRoomId === action.roomId ? state.unreadCount : state.unreadCount + 1 }
+        const senderId = String(action.message?.senderId || action.message?.sender_id || '')
+        const currentUserId = String(action.currentUserId || '')
+        const isOwnMessage = currentUserId && senderId === currentUserId
+        const shouldIncrementUnread = state.activeRoomId !== action.roomId && !isOwnMessage
+        return {
+          ...state,
+          messages: [...state.messages, action.message],
+          unreadCount: shouldIncrementUnread ? state.unreadCount + 1 : state.unreadCount,
+        }
       } catch (e) {
-        return { ...state, messages: [...state.messages, action.message], unreadCount: state.activeRoomId === action.roomId ? state.unreadCount : state.unreadCount + 1 }
+        return { ...state, messages: [...state.messages, action.message], unreadCount: state.unreadCount }
       }
     case 'SET_TYPING':
       return { ...state, typingUsers: { ...state.typingUsers, [action.userId]: action.isTyping } }
@@ -50,7 +58,7 @@ export function useChat(serverUrl) {
     if (!socket) return
 
     const onReceive = ({ message }) => {
-      dispatch({ type: 'RECEIVE_MESSAGE', message, roomId: message.roomId })
+      dispatch({ type: 'RECEIVE_MESSAGE', message, roomId: message.roomId, currentUserId: String(user?._id || user?.id || '') })
       try {
         // If message is for another room (not active) and not from current user, notify Dots system
         const myId = String(user?._id || user?.id || '')
@@ -90,7 +98,7 @@ export function useChat(serverUrl) {
       socket.off('messages_read', onMessagesRead)
       socket.off('connect', onConnect)
     }
-  }, [socket, state.activeRoomId])
+  }, [socket, state.activeRoomId, user?._id, user?.id])
 
   const joinRoom = useCallback(async (roomId) => {
     if (!socket) return { success: false, message: 'No socket' }
@@ -117,13 +125,22 @@ export function useChat(serverUrl) {
       const json = await res.json()
       if (json.success && Array.isArray(json.data)) {
         dispatch({ type: 'ADD_MESSAGES', messages: json.data })
+        try {
+          const myId = String(user?._id || user?.id || '')
+          const unreadIds = (json.data || [])
+            .filter(m => m && !m.isRead && String(m.senderId || m.sender_id || '') !== myId)
+            .map(m => m._id)
+          if (roomId && unreadIds.length > 0 && roomId === state.activeRoomId) {
+            markRead(roomId, unreadIds)
+          }
+        } catch (e) {}
         return json.data
       }
     } catch (err) {
       // ignore
     }
     return []
-  }, [serverUrl])
+  }, [serverUrl, markRead, state.activeRoomId, user?._id, user?.id])
 
   const leaveRoom = useCallback((roomId) => {
     if (!socket) return
@@ -135,15 +152,6 @@ export function useChat(serverUrl) {
     if (!socket) return Promise.resolve({ success: false, message: 'No socket' })
     return new Promise((resolve) => {
       socket.emit('send_message', { roomId, content }, (res) => {
-        // Optimistically add message to local state when server confirms
-        try {
-          if (res && res.success && res.data) {
-            const msg = res.data
-            dispatch({ type: 'RECEIVE_MESSAGE', message: msg, roomId: msg.roomId })
-          }
-        } catch (e) {
-          // ignore
-        }
         resolve(res)
       })
     })

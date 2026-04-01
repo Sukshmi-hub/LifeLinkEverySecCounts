@@ -15,7 +15,7 @@ import { serverUrl } from '@/lib/serverConfig';
 function ChatSystem({ className = "" }) {
   const { user } = useAuth();
 
-    const { sendMessage, joinRoom, loadHistory } = useChat(serverUrl)
+    const { sendMessage, joinRoom, loadHistory, markRead } = useChat(serverUrl)
 
   const [contacts, setContacts] = useState([]);
   const [selectedContact, setSelectedContact] = useState(null);
@@ -27,74 +27,74 @@ function ChatSystem({ className = "" }) {
   const messagesEndRef = useRef(null);
 
   // Fetch donor's chat rooms (conversations) on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const token = localStorage.getItem('token')
-        const profileRes = await fetch(`${serverUrl}/api/profile`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
-        let acceptedIds = []
-        if (profileRes.ok) {
-          const profileJson = await profileRes.json()
-          const intents = Array.isArray(profileJson?.data?.user?.donationIntents) ? profileJson.data.user.donationIntents : []
-          acceptedIds = intents
-            .filter((intent) => {
-              const status = String(intent?.status || '').toLowerCase()
-              return status === 'approved' || status === 'donor matched' || status === 'completed'
-            })
-            .map((intent) => String(intent?.donorHospitalId || intent?.hospitalId || intent?.hospital || ''))
-            .filter(Boolean)
-          setAcceptedHospitalIds(acceptedIds)
-        }
+  const loadRooms = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const profileRes = await fetch(`${serverUrl}/api/profile`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+      let acceptedIds = []
+      if (profileRes.ok) {
+        const profileJson = await profileRes.json()
+        const intents = Array.isArray(profileJson?.data?.user?.donationIntents) ? profileJson.data.user.donationIntents : []
+        acceptedIds = intents
+          .filter((intent) => {
+            const status = String(intent?.status || '').toLowerCase()
+            return status === 'approved' || status === 'donor matched' || status === 'completed'
+          })
+          .map((intent) => String(intent?.donorHospitalId || intent?.hospitalId || intent?.hospital || ''))
+          .filter(Boolean)
+        setAcceptedHospitalIds(acceptedIds)
+      }
 
-        const res = await fetch(`${serverUrl}/api/chat/rooms`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
-        if (!res.ok) return
-        const json = await res.json()
-        if (json && json.success && Array.isArray(json.data)) {
-          // transform rooms into contact list used by the UI
-          // Only show hospital chats that correspond to accepted donation intents
-          const acceptedSet = new Set(acceptedIds)
-          const map = new Map()
-          for (const r of json.data) {
-            const rid = String(r.roomId || '')
-            if (!rid.includes('_donor_')) continue
-            if (acceptedSet.size > 0) {
-              const matchesAcceptedHospital = acceptedIds.some((hid) => hid && rid.includes(`hospital_${hid}_donor_`))
-              if (!matchesAcceptedHospital) continue
-            }
-
-            let key = null
-            try {
-              const hospitalMatch = rid.match(/(?:_|^)hospital_([0-9a-fA-F]{6,24})(?:_|$)/)
-              if (hospitalMatch) key = `hospital:${hospitalMatch[1]}`
-            } catch (e) {}
-
-            const display = (r.title || r.subtitle || r.roomId || '').toString()
-            const lastMsg = r.lastMessage && (r.lastMessage.content || r.lastMessage.message) ? (r.lastMessage.content || r.lastMessage.message) : ''
-            const lastTs = r.lastMessage && (r.lastMessage.timestamp || r.lastMessage.createdAt) ? new Date(r.lastMessage.timestamp || r.lastMessage.createdAt).getTime() : 0
-            const unread = r.unreadCount || 0
-
-            const mapKey = key || display.trim().toLowerCase() || r.roomId
-            if (!map.has(mapKey)) {
-              map.set(mapKey, { id: r.roomId, name: display, lastMessage: lastMsg, lastTs, unread, subtitle: r.subtitle || '' })
-            } else {
-              const existing = map.get(mapKey)
-              if ((lastTs || 0) > (existing.lastTs || 0)) {
-                map.set(mapKey, { id: r.roomId, name: display, lastMessage: lastMsg, lastTs, unread: (existing.unread || 0) + unread, subtitle: r.subtitle || '' })
-              } else {
-                existing.unread = (existing.unread || 0) + unread
-                map.set(mapKey, existing)
-              }
-            }
+      const res = await fetch(`${serverUrl}/api/chat/rooms`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+      if (!res.ok) return
+      const json = await res.json()
+      if (json && json.success && Array.isArray(json.data)) {
+        const acceptedSet = new Set(acceptedIds)
+        const map = new Map()
+        for (const r of json.data) {
+          const rid = String(r.roomId || '')
+          if (!rid.includes('_donor_')) continue
+          if (acceptedSet.size > 0) {
+            const matchesAcceptedHospital = acceptedIds.some((hid) => hid && rid.includes(`hospital_${hid}_donor_`))
+            if (!matchesAcceptedHospital) continue
           }
 
-          const contacts = Array.from(map.values()).map(c => ({ id: c.id, name: c.name, lastMessage: c.lastMessage, unread: c.unread, subtitle: c.subtitle }))
-          contacts.sort((a, b) => (b.lastMessage && a.lastMessage) ? 0 : 0)
-          setContacts(contacts)
+          let key = null
+          try {
+            const hospitalMatch = rid.match(/(?:_|^)hospital_([0-9a-fA-F]{6,24})(?:_|$)/)
+            if (hospitalMatch) key = `hospital:${hospitalMatch[1]}`
+          } catch (e) {}
+
+          const display = (r.title || r.subtitle || r.roomId || '').toString()
+          const lastMsg = r.lastMessage && (r.lastMessage.content || r.lastMessage.message) ? (r.lastMessage.content || r.lastMessage.message) : ''
+          const lastTs = r.lastMessage && (r.lastMessage.timestamp || r.lastMessage.createdAt) ? new Date(r.lastMessage.timestamp || r.lastMessage.createdAt).getTime() : 0
+          const unread = r.unreadCount || 0
+
+          const mapKey = key || display.trim().toLowerCase() || r.roomId
+          if (!map.has(mapKey)) {
+            map.set(mapKey, { id: r.roomId, name: display, lastMessage: lastMsg, lastTs, unread, subtitle: r.subtitle || '' })
+          } else {
+            const existing = map.get(mapKey)
+            if ((lastTs || 0) > (existing.lastTs || 0)) {
+              map.set(mapKey, { id: r.roomId, name: display, lastMessage: lastMsg, lastTs, unread: (existing.unread || 0) + unread, subtitle: r.subtitle || '' })
+            } else {
+              existing.unread = (existing.unread || 0) + unread
+              map.set(mapKey, existing)
+            }
+          }
         }
-      } catch (e) {
-        console.error('Failed to fetch chat rooms for donor', e)
+
+        const contacts = Array.from(map.values()).map(c => ({ id: c.id, name: c.name, lastMessage: c.lastMessage, unread: c.unread, subtitle: c.subtitle }))
+        contacts.sort((a, b) => (b.lastMessage && a.lastMessage) ? 0 : 0)
+        setContacts(contacts)
       }
-    })()
+    } catch (e) {
+      console.error('Failed to fetch chat rooms for donor', e)
+    }
+  }
+
+  useEffect(() => {
+    loadRooms()
   }, [])
 
   // Load messages for the selected contact (room) when it changes
@@ -122,6 +122,12 @@ function ChatSystem({ className = "" }) {
             _raw: m
           }))
           setMessages(msgs)
+          try {
+            const myId = String((localStorage.getItem('userId')) || '')
+            const unreadIds = (json.data || []).filter(m => m && !m.isRead && String(m.senderId) !== myId).map(m => m._id)
+            if (unreadIds.length > 0) markRead(roomId, unreadIds)
+            setTimeout(() => loadRooms(), 300)
+          } catch (e) {}
         }
       } catch (e) {
         console.error('Failed to fetch room history', e)
@@ -231,7 +237,7 @@ function ChatSystem({ className = "" }) {
             <CardContent className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/30">
               {messages.map((message) => {
                 // Determine ownership: match by senderId or by role when current user is donor
-                const isMine = (String(message.senderId) === String(user?._id)) || ((user && String(user.role).toLowerCase() === 'donor') && String(message.senderRole) === 'donor')
+                const isMine = String(message.senderId) === String(user?._id)
                 return (
                   <div key={message.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
                     <div className={`max-w-[75%] rounded-2xl px-4 py-2 text-sm ${

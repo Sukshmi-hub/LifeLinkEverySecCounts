@@ -12,7 +12,6 @@ export default function ChatList({ rooms = [], activeRoomId, onSelect, messages 
       const myId = getMyId()
       if (m.senderId && String(m.senderId) === myId) return true
       if (m.sender && (String(m.sender._id || '') === myId || String(m.sender.id || '') === myId)) return true
-      if (m.senderRole && user?.role && String(m.senderRole).toLowerCase() === String(user.role).toLowerCase()) return true
       return false
     } catch (e) {
       return false

@@ -11,7 +11,17 @@ import axios from 'axios'
 
 export const createSummary = async (req, res) => {
   try {
-    let { hospitalId, patientId, surgeryFee = 0, hospitalCharges = 0, processingFee = 0, requestId = null } = req.body
+    let {
+      hospitalId,
+      patientId,
+      surgeryFee,
+      transplantSurgeryFee,
+      transplantFee,
+      hospitalCharges,
+      processingFee,
+      totalAmount: totalAmountInput,
+      requestId = null
+    } = req.body
     if (!patientId) return res.status(400).json({ success: false, message: 'patientId is required' })
 
     // sanitize patientId: if an object was passed (populated Patient), extract its _id or userId
@@ -21,15 +31,47 @@ export const createSummary = async (req, res) => {
       else if (patientId.id) patientId = String(patientId.id)
     }
 
-    const totalAmount = Number(surgeryFee || 0) + Number(hospitalCharges || 0) + Number(processingFee || 0)
+    const normalizedSurgeryFee = Number(transplantSurgeryFee ?? surgeryFee ?? transplantFee ?? 0)
+    const normalizedHospitalCharges = Number(hospitalCharges ?? 0)
+    const normalizedProcessingFee = Number(processingFee ?? 0)
+    const hasExplicitFees = [normalizedSurgeryFee, normalizedHospitalCharges, normalizedProcessingFee].some((value) => Number(value) > 0)
+    const finalSurgeryFee = hasExplicitFees && normalizedSurgeryFee > 0 ? normalizedSurgeryFee : 50000
+    const finalHospitalCharges = hasExplicitFees && normalizedHospitalCharges > 0 ? normalizedHospitalCharges : 20000
+    const finalProcessingFee = hasExplicitFees && normalizedProcessingFee > 0 ? normalizedProcessingFee : 5000
+    const totalAmount = Number(totalAmountInput || 0) > 0
+      ? Number(totalAmountInput)
+      : finalSurgeryFee + finalHospitalCharges + finalProcessingFee
 
-    const payment = new Payment({ hospitalId: hospitalId || null, patientId, surgeryFee, hospitalCharges, processingFee, totalAmount })
+    const payment = new Payment({
+      hospitalId: hospitalId || null,
+      patientId,
+      surgeryFee: finalSurgeryFee,
+      transplantSurgeryFee: finalSurgeryFee,
+      hospitalCharges: finalHospitalCharges,
+      processingFee: finalProcessingFee,
+      totalAmount,
+      amount: totalAmount,
+    })
     const saved = await payment.save()
 
     // If a requestId is provided, mark the request as paymentSent and attach the paymentId
     if (requestId) {
       try {
-        await Request.findByIdAndUpdate(requestId, { $set: { paymentSent: true, paymentId: saved._id } })
+        await Request.findByIdAndUpdate(requestId, {
+          $set: {
+            paymentSent: true,
+            paymentId: saved._id,
+            transplantFee: finalSurgeryFee,
+            hospitalCharges: finalHospitalCharges,
+            processingFee: finalProcessingFee,
+            amount: totalAmount,
+            breakdown: {
+              transplantFee: finalSurgeryFee,
+              hospitalCharges: finalHospitalCharges,
+              processingFee: finalProcessingFee,
+            },
+          }
+        })
       } catch (updateErr) {
         console.error('Failed to update request with payment info', updateErr)
         // continue - payment was created, but request update failed
@@ -130,7 +172,18 @@ export const createSummary = async (req, res) => {
       }
     }
 
-    return res.json({ success: true, data: saved })
+    return res.json({
+      success: true,
+      data: {
+        ...saved.toObject(),
+        transplantSurgeryFee: finalSurgeryFee,
+        transplantFee: finalSurgeryFee,
+        surgeryFee: finalSurgeryFee,
+        hospitalCharges: finalHospitalCharges,
+        processingFee: finalProcessingFee,
+        totalAmount,
+      }
+    })
   } catch (err) {
     console.error('createSummary error', err)
     return res.status(500).json({ success: false, message: err.message || 'Internal Server Error' })
