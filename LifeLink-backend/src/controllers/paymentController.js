@@ -253,16 +253,10 @@ export const createRazorpayOrder = async (req, res) => {
     const Hospital = (await import('../models/Hospital.js')).default
     const hospital = await Hospital.findById(hospitalId).lean()
     if (!hospital) return res.status(404).json({ success: false, message: 'Hospital not found' })
-    // Support both legacy `razorpayAccountId` and newer `razorpayLinkedAccountId` fields
-    const linkedAccount = hospital.razorpayLinkedAccountId || hospital.razorpayAccountId
-    if (!linkedAccount) {
-      // In development allow proceeding without a linked account (we will not include transfers)
-      if (process.env.NODE_ENV === 'production') {
-        return res.status(400).json({ success: false, message: 'Hospital does not have a Razorpay linked account configured' })
-      } else {
-        console.warn('Hospital missing linkedAccount; continuing in development without transfers')
-      }
-    }
+    // Support both legacy `razorpayAccountId` and newer `razorpayLinkedAccountId` fields.
+    // If the hospital does not have a linked account yet, proceed without transfers so
+    // patient payments can still be created during testing or rollout.
+    const linkedAccount = hospital.razorpayLinkedAccountId || hospital.razorpayAccountId || process.env.RAZORPAY_ACCOUNT_ID || ''
 
     // Use environment variables for Razorpay keys
     const key_id = process.env.RAZORPAY_KEY_ID
@@ -287,8 +281,8 @@ export const createRazorpayOrder = async (req, res) => {
     // e.g. Rs 500.00 => 50000 paise
     const amountPaise = Math.round(Number(amount) * 100)
 
-    // Create order with transfers to hospital linked account so platform never holds funds.
-    // Razorpay 'transfers' on order creation allows specifying amount and destination linked account.
+    // Create order. If a linked account is available, attach transfers; otherwise create
+    // a normal Razorpay order and let settlement happen through the main account.
     const orderOptions = {
       amount: amountPaise,
       currency: 'INR',
@@ -309,7 +303,7 @@ export const createRazorpayOrder = async (req, res) => {
           }
         ]
       } else {
-        console.warn('Skipping transfers: invalid linkedAccount format', linkedAccount)
+        console.warn('Skipping transfers: no valid linkedAccount configured; creating order without hospital transfer')
       }
     } catch (e) {
       console.warn('Error validating linkedAccount for transfers', e)

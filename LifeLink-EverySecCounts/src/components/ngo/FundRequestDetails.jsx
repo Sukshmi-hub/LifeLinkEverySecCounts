@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+﻿import React, { useMemo, useState, useEffect } from 'react';
 import RazorpayModal from '@/components/patient/RazorpayModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -56,8 +56,6 @@ const FundRequestDetails = ({
 
   const [sendingToHos, setSendingToHos] = useState(false);
   const [sentToHos, setSentToHos] = useState(false);
-  if (!request) return null;
-
   const [fetchedPatient, setFetchedPatient] = useState(null);
   const [fetchedHospital, setFetchedHospital] = useState(null);
 
@@ -125,6 +123,7 @@ const FundRequestDetails = ({
   useEffect(() => {
     let mounted = true;
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    if (!request) return () => { mounted = false; };
 
     // Debug logs to help diagnose missing hospital data in the modal
     try {
@@ -235,9 +234,9 @@ const FundRequestDetails = ({
 
   // Try to extract patient details from request if available, else fall back to submitted name
   const patient = useMemo(() => {
-    const p = fetchedPatient || request.patientId || request.patient || request.patientDetails || {};
+    const patientSource = fetchedPatient || request?.patientId || request?.patient || request?.patientDetails || {};
 
-    const maybeDob = p.dob || p.DOB || request.dob || request.patientDob;
+    const maybeDob = patientSource.dob || patientSource.DOB || request?.dob || request?.patientDob;
     const computeAge = (d) => {
       if (!d) return null;
       const dt = new Date(d);
@@ -247,36 +246,36 @@ const FundRequestDetails = ({
       return Math.abs(ageDt.getUTCFullYear() - 1970);
     };
 
-    const ageVal = p.age || request.age || computeAge(maybeDob) || '—';
+    const ageVal = patientSource.age || request?.age || computeAge(maybeDob) || '—';
 
     return {
-      name: request.patientName || p.name || p.fullName || p.displayName || 'Unknown',
+      name: request?.patientName || patientSource.name || patientSource.fullName || patientSource.displayName || 'Unknown',
       age: ageVal,
-      email: p.email || request.email || '—',
-      contactNumber: p.phone || p.contact || request.contact || request.phone || '—',
-      aadhaarNumber: p.aadhaar_no || p.aadhaar || request.aadhaar || request.aadhaarNumber || '—',
-      bloodType: p.blood_type || p.bloodType || request.bloodType || '—',
-      address: p.location?.full_address || p.address || p.city || request.address || request.patientAddress || '—',
+      email: patientSource.email || request?.email || '—',
+      contactNumber: patientSource.phone || patientSource.contact || request?.contact || request?.phone || '—',
+      aadhaarNumber: patientSource.aadhaar_no || patientSource.aadhaar || request?.aadhaar || request?.aadhaarNumber || '—',
+      bloodType: patientSource.blood_type || patientSource.bloodType || request?.bloodType || '—',
+      address: patientSource.location?.full_address || patientSource.address || patientSource.city || request?.address || request?.patientAddress || '—',
     };
   }, [request, fetchedPatient]);
 
   // Hospital information is not always provided with fund requests; show NGO/patient-facing fields instead
   const hospital = useMemo(() => {
-    const h = fetchedHospital || request.hospitalId || request.hospital || request.hospitalInfo || {};
+    const h = fetchedHospital || request?.hospitalId || request?.hospital || request?.hospitalInfo || {};
     return {
-      name: (h && (h.name || h.hospitalName)) || request.hospitalName || request.hospital || '—',
+      name: (h && (h.name || h.hospitalName)) || request?.hospitalName || request?.hospital || '—',
       // Use hospital.userId as the displayed Hospital ID per DB schema; fall back to hospital._id if userId missing
-      id: extractId(h && (h.userId || h.user_id)) || extractId(h && (h._id || h.id) ? (h._id || h.id) : (h && h._id) || h) || extractId(request.hospitalId) || request.hospital_id || '—',
+      id: extractId(h && (h.userId || h.user_id)) || extractId(h && (h._id || h.id) ? (h._id || h.id) : (h && h._id) || h) || extractId(request?.hospitalId) || request?.hospital_id || '—',
       // Prefer the hospital `phone` field for contact, then `contact_phone` as fallback
-      contact: (h && (h.phone || h.contact_phone || h.contact || h.mobile)) || request.hospitalContact || request.hospital_phone || '—',
+      contact: (h && (h.phone || h.contact_phone || h.contact || h.mobile)) || request?.hospitalContact || request?.hospital_phone || '—',
       // Address comes from `address` or location.full_address
-      address: (h && (h.address || h.location?.full_address)) || request.hospitalAddress || '—',
+      address: (h && (h.address || h.location?.full_address)) || request?.hospitalAddress || '—',
     };
   }, [request, fetchedHospital]);
   // Prefer server-provided breakdown when available
   const amountBreakup = useMemo(() => {
     try {
-      if (request.breakdown) {
+      if (request?.breakdown) {
         const b = request.breakdown;
         // normalize into table rows
         return [
@@ -286,20 +285,22 @@ const FundRequestDetails = ({
         ];
       }
     } catch (e) {}
-    return getAmountBreakup(request.amount, request.reason || request.description || request.message || '');
+    return getAmountBreakup(request?.amount || 0, request?.reason || request?.description || request?.message || '');
   }, [request]);
   const totalAmount = amountBreakup.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const [isRzpOpen, setIsRzpOpen] = useState(false);
 
   const hospitalDbId = useMemo(() => {
     // Try several common shapes to derive the hospital _id that backend expects
-    const fh = fetchedHospital || request.hospital || request.hospitalId || request.hospitalInfo || null;
+    const fh = fetchedHospital || request?.hospital || request?.hospitalId || request?.hospitalInfo || null;
     if (!fh) return null;
     const candidate = (fh && (fh._id || fh.id || fh.userId || fh.user_id)) || null;
-    return extractId(candidate) || extractId(request.hospitalId) || null;
+    return extractId(candidate) || extractId(request?.hospitalId) || null;
   }, [fetchedHospital, request]);
-  const paymentCompleted = Boolean(request.paymentReceived) || String(request.paymentStatus || '').toLowerCase() === 'success';
-  const displayStatus = request.status;
+  const paymentCompleted = Boolean(request?.paymentReceived) || String(request?.paymentStatus || '').toLowerCase() === 'success';
+  const displayStatus = request?.status;
+
+  if (!request) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
