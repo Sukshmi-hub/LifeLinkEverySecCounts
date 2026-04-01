@@ -40,17 +40,23 @@ const app = express()
 // MIDDLEWARE
 // ============================================
 
-const corsOrigin = process.env.FRONTEND_URL || "*";
+const frontendUrl = process.env.FRONTEND_URL?.trim();
+const corsOptions = frontendUrl
+  ? {
+      origin: frontendUrl,
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+    }
+  : {
+      origin: true,
+      credentials: false,
+      methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+    };
 
-app.use(cors({
-  origin: corsOrigin,
-  credentials: true
-}));
-
-app.options("*", cors({
-  origin: corsOrigin,
-  credentials: true
-}));
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // Body parser - Parse JSON requests
 app.use(express.json());

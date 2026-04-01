@@ -429,7 +429,11 @@ const Login = () => {
         toast({ title: 'Login Failed', description: result.message, variant: 'destructive' });
       }
     } catch (err) {
-      toast({ title: 'Error', description: 'Server offline', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: err?.message || 'Unable to reach the backend. Please try again.',
+        variant: 'destructive'
+      });
     } finally {
       setIsLoading(false);
     }
