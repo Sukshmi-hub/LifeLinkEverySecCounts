@@ -41,27 +41,26 @@ const app = express()
 // MIDDLEWARE
 // ============================================
 
-const allowedOrigins = [
-  'https://life-link-every-sec-counts.vercel.app',
-  'http://localhost:5173',
-  'http://localhost:3000',
-]
-
 const corsOptions = {
   origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+
+    // Allow all Vercel deployments for this project
     if (
-      !origin ||
-      allowedOrigins.includes(origin) ||
-      /^https:\/\/life-link-every-sec-counts.*\.vercel\.app$/.test(origin)
+      origin === 'https://life-link-every-sec-counts.vercel.app' ||
+      origin.endsWith('.vercel.app') ||
+      origin === 'http://localhost:5173' ||
+      origin === 'http://localhost:3000' ||
+      origin === 'http://localhost:8080'
     ) {
-      callback(null, true)
-      return
+      return callback(null, true);
     }
 
-    callback(new Error('Not allowed by CORS'))
+    callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Pragma', 'Expires'],
 }
 
