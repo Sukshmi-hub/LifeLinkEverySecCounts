@@ -15,6 +15,7 @@ import debugEnvRoutes from './routes/debugEnv.js'
 import userRoutes from './routes/userRoutes.js'
 import profileRoutes from './routes/profile.js'
 import hospitalRequestRoutes from './routes/hospitalRequestRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js'
 import patientRoutes from './routes/patient.js'
 import donorRoutesCustom from './routes/donor.js'
 import hospitalRoutesCustom from './routes/hospital.js'
@@ -61,7 +62,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Pragma', 'Expires'],
 }
 
 app.use(cors(corsOptions))
@@ -116,6 +117,7 @@ app.use('/api/donor', donorRoutesCustom)
 app.use('/api/hospital', hospitalRoutesCustom)
 app.use('/api/ngo', ngoRoutesCustom)
 app.use('/api/chat', chatRoutes)
+app.use('/api/notifications', notificationRoutes)
 app.use('/api/payments', paymentsRoutes)
 app.use('/api/certificates', certificatesRoutes)
 app.use('/api/payment', paymentSingleRoutes)

@@ -15,4 +15,19 @@ router.get('/', async (req, res) => {
   }
 })
 
+// GET /api/hospitals/:id/inventory
+router.get('/:id/inventory', async (req, res) => {
+  try {
+    const hospital = await Hospital.findById(req.params.id).lean()
+    if (!hospital) return res.status(404).json({ success: false, message: 'Hospital not found' })
+
+    const Inventory = (await import('../models/Inventory.js')).default
+    const items = await Inventory.find({ hospitalId: hospital._id }).lean()
+    return res.json({ success: true, data: items })
+  } catch (err) {
+    console.error('Failed to fetch hospital inventory:', err)
+    return res.status(500).json({ success: false, message: 'Server error' })
+  }
+})
+
 export default router
