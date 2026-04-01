@@ -1,6 +1,6 @@
 /* ---------------- CONSTANTS ---------------- */
 import donor1 from "../assets/team/donor1.jpeg";
-import donor2 from "../assets/team/donor2.jpeg";
+import donor2 from "../assets/team/srashti.jpeg";
 import donor3 from "../assets/team/donor3.jpeg";
 
 export const tributeStatuses = [
