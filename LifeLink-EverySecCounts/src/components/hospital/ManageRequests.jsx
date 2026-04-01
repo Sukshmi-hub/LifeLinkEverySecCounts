@@ -1010,7 +1010,7 @@ const ManageRequests = () => {
                 const payload = { donor: donorPayload };
                 if (receivingHospitalName) payload.receivingHospital = receivingHospitalName;
 
-                const resp = await fetch(`/api/requests/${selectedForPayment.id}/send-matched-details`, {
+                const resp = await fetch(`${serverUrl}/api/requests/${selectedForPayment.id}/send-matched-details`, {
                   method: 'PUT',
                   headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
                   body: JSON.stringify(payload),

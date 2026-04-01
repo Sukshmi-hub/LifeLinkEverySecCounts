@@ -81,7 +81,7 @@ const NgoDashboard = () => {
       const payload = { hospitalId: request.hospitalId || request.hospital || request.raw?.hospitalId || null };
       // fallback to hospitalId from current hospital session (hospital portal) when available
       if (!payload.hospitalId) payload.hospitalId = localStorage.getItem('hospitalId') || null;
-      const res = await fetch(`/api/requests/${id}/send-to-hospital`, { method: 'PUT', headers, body: JSON.stringify(payload) });
+      const res = await fetch(`${serverUrl}/api/requests/${id}/send-to-hospital`, { method: 'PUT', headers, body: JSON.stringify(payload) });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         // surface server error body for debugging

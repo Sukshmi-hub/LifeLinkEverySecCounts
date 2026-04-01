@@ -84,6 +84,7 @@ const App = () => (
                     <Route path="/donor/register" element={<ProtectedRoute allowedRoles={['donor']}><DonorRegister /></ProtectedRoute>} />
                     <Route path="/donor/chat" element={<ProtectedRoute allowedRoles={['donor']}><DonorChat /></ProtectedRoute>} />
                     <Route path="/donor/messages" element={<ProtectedRoute allowedRoles={['donor']}><DonorMessagesPage /></ProtectedRoute>} />
+                    <Route path="/donor/certificate" element={<ProtectedRoute allowedRoles={['donor']}><DonorDashboard /></ProtectedRoute>} />
                     <Route path="/donor/profile" element={<ProtectedRoute allowedRoles={['donor']}><DonorProfilePage /></ProtectedRoute>} />
                     {/* Donor settings removed from routes */}
 

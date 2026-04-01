@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CreditCard, Clock, User, Heart, Building2, Eye, CheckCircle, HandHeart } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { serverUrl } from '@/lib/serverConfig';
 
 const PaymentPage = () => {
   const { user } = useAuth();
@@ -32,7 +33,7 @@ const PaymentPage = () => {
         return;
       }
       // Add timestamp to prevent caching
-      const resp = await fetch(`/api/payments/patient/${encodeURIComponent(user.id)}?t=${Date.now()}`, {
+      const resp = await fetch(`${serverUrl}/api/payments/patient/${encodeURIComponent(user.id)}?t=${Date.now()}`, {
         headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
       });
       const json = await resp.json().catch(() => ({}));

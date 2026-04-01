@@ -37,7 +37,7 @@ export const NotificationProvider = ({ children }) => {
       try {
         if (!user || user.role !== 'hospital') return;
         const token = localStorage.getItem('token');
-        const resp = await fetch('/api/hospital/me', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        const resp = await fetch(`${serverUrl}/api/hospital/me`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
         const j = await resp.json().catch(() => ({}));
         if (resp.ok && j.data) setMyHospital(j.data);
       } catch (e) {
@@ -76,7 +76,7 @@ export const NotificationProvider = ({ children }) => {
       try {
         if (!user) return
         const token = localStorage.getItem('token')
-        const resp = await fetch('/api/notifications', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+        const resp = await fetch(`${serverUrl}/api/notifications`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
         const json = await resp.json().catch(() => ({}))
         if (resp.ok && Array.isArray(json.data)) {
           // normalize ids to string id for UI
@@ -103,7 +103,7 @@ export const NotificationProvider = ({ children }) => {
     (async () => {
       try {
         const token = localStorage.getItem('token')
-        const resp = await fetch(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'PUT', headers: token ? { Authorization: `Bearer ${token}` } : {} })
+        const resp = await fetch(`${serverUrl}/api/notifications/${encodeURIComponent(id)}/read`, { method: 'PUT', headers: token ? { Authorization: `Bearer ${token}` } : {} })
         if (resp.ok) {
           setNotifications(prev => prev.map(n => (String(n.id) === String(id) ? { ...n, read: true } : n)))
         } else {

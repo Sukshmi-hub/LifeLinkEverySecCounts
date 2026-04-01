@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext'
 import { Eye } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import { serverUrl } from '@/lib/serverConfig'
 
 function HospitalPayments() {
   const { user } = useAuth()
@@ -30,7 +31,7 @@ function HospitalPayments() {
       setLoading(true)
       try {
         const token = localStorage.getItem('token')
-        const resp = await fetch('/api/hospital/me', { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+        const resp = await fetch(`${serverUrl}/api/hospital/me`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
         const j = await resp.json()
         if (!resp.ok) throw new Error(j.message || 'Failed to load')
         const data = j.data || {}
@@ -58,7 +59,7 @@ function HospitalPayments() {
       const token = localStorage.getItem('token')
       const idToUse = hid || hospitalId
       if (!idToUse) return
-      const resp = await fetch(`/api/requests?hospitalId=${encodeURIComponent(idToUse)}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+      const resp = await fetch(`${serverUrl}/api/requests?hospitalId=${encodeURIComponent(idToUse)}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.message || 'Failed to load')
       const list = (json.data || []).filter(r => r.detailsSentToPatientHospital || !!r.matchedDonor || r.status === 'approved' || r.status === 'Donor Matched')
@@ -77,7 +78,7 @@ function HospitalPayments() {
     }
     try {
       const token = localStorage.getItem('token')
-      const resp = await fetch('/api/hospital/me', {
+      const resp = await fetch(`${serverUrl}/api/hospital/me`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '' },
         body: JSON.stringify(form)
@@ -102,7 +103,7 @@ function HospitalPayments() {
         setShowDetails(true)
         return
       }
-      const resp = await fetch(`/api/requests/${encodeURIComponent(id)}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+      const resp = await fetch(`${serverUrl}/api/requests/${encodeURIComponent(id)}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
       const json = await resp.json().catch(() => ({}))
       if (resp.ok && json.data) {
         setSelectedRequest(json.data)
@@ -133,7 +134,7 @@ function HospitalPayments() {
         processingFee: Number(paymentForm2.processingFee || 0),
         requestId: selectedRequest._id || selectedRequest.id || null
       }
-      const resp = await fetch('/api/payments/create-summary', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '' }, body: JSON.stringify(body) })
+      const resp = await fetch(`${serverUrl}/api/payments/create-summary`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '' }, body: JSON.stringify(body) })
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.message || 'Failed to send')
       toast.success('Payment summary has been successfully sent to the patient')

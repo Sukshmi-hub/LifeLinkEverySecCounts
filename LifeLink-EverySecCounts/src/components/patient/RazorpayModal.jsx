@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { CheckCircle, Loader2, CreditCard, Smartphone, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { serverUrl } from '@/lib/serverConfig';
 
 const RazorpayModal = ({ 
   isOpen, 
@@ -45,7 +46,7 @@ const RazorpayModal = ({
   const handlePaymentVerification = useCallback(async (response) => {
     console.log('Payment verification started with response:', response);
     try {
-      const verifyResp = await fetch('/api/payments/verify', {
+      const verifyResp = await fetch(`${serverUrl}/api/payments/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(response)
@@ -89,7 +90,7 @@ const RazorpayModal = ({
       if (!hospitalId) throw new Error('Hospital information missing')
       if (!user || !user.id) throw new Error('Patient not authenticated')
 
-      const resp = await fetch('/api/payments/order', {
+      const resp = await fetch(`${serverUrl}/api/payments/order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount, hospitalId, patientId: user.id, patientName: user.name || '', requestId })

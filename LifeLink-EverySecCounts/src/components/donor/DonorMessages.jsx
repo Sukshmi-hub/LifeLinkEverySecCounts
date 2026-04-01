@@ -107,7 +107,7 @@ function ChatSystem({ className = "" }) {
         try { await joinRoom(roomId) } catch (e) { /* ignore join errors */ }
 
         const token = localStorage.getItem('token')
-        const res = await fetch(`/api/chat/history/${encodeURIComponent(roomId)}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+        const res = await fetch(`${serverUrl}/api/chat/history/${encodeURIComponent(roomId)}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
         if (!res.ok) return
         const json = await res.json()
         if (json && json.success && Array.isArray(json.data)) {

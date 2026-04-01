@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Heart, AlertTriangle, MessageCircle, CheckCircle, Award, FileText, Clock, Activity } from 'lucide-react';
+import { serverUrl } from '@/lib/serverConfig';
 
 const DonorDashboard = () => {
   const { user } = useAuth();
@@ -341,7 +342,7 @@ const DonorDashboard = () => {
                                   }
                                   return
                                 }
-                                const resp = await fetch(`/api/certificates/${encodeURIComponent(certificateId)}/download`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
+                                const resp = await fetch(`${serverUrl}/api/certificates/${encodeURIComponent(certificateId)}/download`, { headers: { Authorization: token ? `Bearer ${token}` : '' } })
                                 const html = await resp.text()
                                 const w = window.open('', '_blank')
                                 if (w) {
