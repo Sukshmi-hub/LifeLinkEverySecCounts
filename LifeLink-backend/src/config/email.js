@@ -3,16 +3,13 @@ import nodemailer from 'nodemailer';
 const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@lifelink.local';
 
 const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false,
+  service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-  tls: {
-    rejectUnauthorized: false,
-  },
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
 });
 
 if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
@@ -42,36 +39,25 @@ const renderTemplate = ({ title, intro, otpLabel, otp, footer }) => ({
 
 export const sendMail = async ({ to, subject, ...content }) => {
   const mailOptions = {
-    from: fromAddress,
+    from: `"LifeLink" <${process.env.EMAIL_USER || fromAddress}>`,
     to,
     subject,
     ...content,
   };
 
   try {
-    console.log('📡 SMTP CONFIG:', { host: 'smtp.gmail.com', port: 587 });
     console.log('[email] Sending email:', {
+      smtp: 'gmail',
       to: mailOptions.to,
       subject: mailOptions.subject,
       from: mailOptions.from,
     });
 
     const result = await transporter.sendMail(mailOptions);
-    console.log('[email] Email sent successfully:', {
-      to: mailOptions.to,
-      subject: mailOptions.subject,
-      messageId: result?.messageId,
-      response: result?.response,
-    });
+    console.log('✅ EMAIL SENT SUCCESSFULLY:', result?.response || result);
     return result;
   } catch (error) {
-    console.error('[email] Email send failed:', {
-      to: mailOptions.to,
-      subject: mailOptions.subject,
-      message: error?.message,
-      stack: error?.stack,
-      error,
-    });
+    console.error('❌ EMAIL SEND ERROR:', error);
     throw error;
   }
 };
