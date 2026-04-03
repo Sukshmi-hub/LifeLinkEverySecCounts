@@ -1,6 +1,7 @@
 // src/controllers/authController.js
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
+import nodemailer from 'nodemailer';
 import User from '../models/User.js';
 import Patient from '../models/Patient.js';
 import Donor from '../models/Donor.js';
@@ -10,7 +11,7 @@ import Admin from '../models/Admin.js';
 import Message from '../models/Message.js';
 import Dots from '../models/Dots.js';
 import PendingSignup from '../models/PendingSignup.js';
-import { sendPasswordResetEmail, sendVerificationEmail } from '../config/email.js';
+import { sendVerificationEmail } from '../config/email.js';
 
 const OTP_EXPIRY_MINUTES = 5;
 const OTP_EXPIRY_MS = OTP_EXPIRY_MINUTES * 60 * 1000;
@@ -1057,17 +1058,25 @@ export const logout = async (req, res) => {
 
 export const forgotPassword = async (req, res) => {
   try {
+    console.log('📥 BODY RECEIVED:', req.body);
+
     const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ success: false, message: 'Please provide an email address' });
+    const normalizedEmail = normalizeEmail(email);
+
+    if (!normalizedEmail) {
+      console.log('❌ No email provided');
+      return res.status(400).json({ message: 'Email is required' });
     }
 
-    console.log('[auth] Incoming email for forgotPassword:', normalizeEmail(email));
+    console.log('📧 Processing forgot password for:', normalizedEmail);
 
-    const user = await User.findOne({ email: normalizeEmail(email) });
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
-      return res.status(200).json({ success: true, message: 'If that email exists, a reset OTP has been sent.' });
+      console.log('❌ User not found');
+      return res.status(404).json({ message: 'User not found' });
     }
+
+    console.log('✅ User found:', user._id);
 
     const cooldownMessage = ensureResendAllowed(user, 'passwordReset');
     if (cooldownMessage) {
@@ -1077,16 +1086,38 @@ export const forgotPassword = async (req, res) => {
     const otp = generateOtp();
     setOtpState(user, 'passwordReset', otp);
     await user.save();
-    console.log('[auth] forgotPassword triggered password reset email:', {
-      userId: String(user._id || ''),
-      email: user.email || '',
-    });
-    await sendPasswordResetEmail(user.email, otp);
 
-    return res.status(200).json({ success: true, message: 'If that email exists, a reset OTP has been sent.' });
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+    });
+
+    console.log('📡 Sending email...');
+
+    const info = await transporter.sendMail({
+      from: `"LifeLink" <${process.env.EMAIL_USER}>`,
+      to: normalizedEmail,
+      subject: 'Password Reset',
+      text: 'Your reset link or OTP here',
+    });
+
+    console.log('✅ EMAIL SENT:', info.response);
+
+    return res.status(200).json({
+      message: 'Email sent successfully',
+    });
   } catch (error) {
-    console.error('Forgot Password Error:', error?.message, error?.stack, error);
-    return res.status(500).json({ success: false, message: 'Error processing forgot password request' });
+    console.error('❌ FULL ERROR:', error);
+
+    return res.status(500).json({
+      message: 'Error processing forgot password request',
+      error: error.message,
+    });
   }
 };
 
