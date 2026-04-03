@@ -2,17 +2,25 @@ import nodemailer from 'nodemailer';
 
 const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@lifelink.local';
 
-const transporter = process.env.EMAIL_USER && process.env.EMAIL_PASS
-  ? nodemailer.createTransport({
-      service: process.env.EMAIL_SERVICE || 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    })
-  : nodemailer.createTransport({
-      jsonTransport: true,
-    });
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+  console.error('[email] EMAIL_USER or EMAIL_PASS is missing. Gmail transporter may fail in production.');
+}
+
+transporter.verify((err, success) => {
+  if (err) {
+    console.error('[email] Gmail transporter verification failed:', err.message, err);
+    return;
+  }
+  console.log('[email] Gmail transporter ready:', success);
+});
 
 const renderTemplate = ({ title, intro, otpLabel, otp, footer }) => ({
   html: `
@@ -36,18 +44,38 @@ const renderTemplate = ({ title, intro, otpLabel, otp, footer }) => ({
 });
 
 const sendMail = async ({ to, subject, ...content }) => {
-  const result = await transporter.sendMail({
+  const mailOptions = {
     from: fromAddress,
     to,
     subject,
     ...content,
-  });
+  };
 
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.log(`Email transport is using JSON mode. Preview payload generated for ${to}.`);
+  try {
+    console.log('[email] Sending email:', {
+      to: mailOptions.to,
+      subject: mailOptions.subject,
+      from: mailOptions.from,
+    });
+
+    const result = await transporter.sendMail(mailOptions);
+    console.log('[email] Email sent successfully:', {
+      to: mailOptions.to,
+      subject: mailOptions.subject,
+      messageId: result?.messageId,
+      response: result?.response,
+    });
+    return result;
+  } catch (error) {
+    console.error('[email] Email send failed:', {
+      to: mailOptions.to,
+      subject: mailOptions.subject,
+      message: error?.message,
+      stack: error?.stack,
+      error,
+    });
+    throw error;
   }
-
-  return result;
 };
 
 export const sendVerificationEmail = async (email, otp) => {

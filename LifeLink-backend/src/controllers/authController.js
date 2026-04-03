@@ -112,6 +112,10 @@ const sendSignupVerificationOtp = async (user) => {
   const otp = generateOtp();
   setOtpState(user, 'emailVerification', otp);
   await user.save();
+  console.log('[auth] Sending email verification OTP:', {
+    userId: String(user?._id || ''),
+    email: user?.email || '',
+  });
   await sendVerificationEmail(user.email, otp);
 };
 
@@ -803,6 +807,8 @@ export const sendSignupOtp = async (req, res) => {
     pendingSignup.verifiedAt = null;
     await pendingSignup.save();
 
+    console.log('[auth] sendSignupOtp triggered verification email:', { email: normalizedEmail });
+    console.log('[auth] signup triggered verification email:', { email: normalizedEmail });
     await sendVerificationEmail(normalizedEmail, otp);
 
     return res.status(200).json({
@@ -907,6 +913,10 @@ export const resendVerification = async (req, res) => {
       return res.status(429).json({ success: false, message: cooldownMessage });
     }
 
+    console.log('[auth] resendVerification triggered email verification:', {
+      userId: String(user?._id || ''),
+      email: user?.email || '',
+    });
     await sendSignupVerificationOtp(user);
 
     return res.status(200).json({
@@ -1063,6 +1073,10 @@ export const forgotPassword = async (req, res) => {
     const otp = generateOtp();
     setOtpState(user, 'passwordReset', otp);
     await user.save();
+    console.log('[auth] forgotPassword triggered password reset email:', {
+      userId: String(user._id || ''),
+      email: user.email || '',
+    });
     await sendPasswordResetEmail(user.email, otp);
 
     return res.status(200).json({ success: true, message: 'If that email exists, a reset OTP has been sent.' });
