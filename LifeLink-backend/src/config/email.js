@@ -3,10 +3,16 @@ import nodemailer from 'nodemailer';
 const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@lifelink.local';
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
+  },
+  family: 4,
+  tls: {
+    rejectUnauthorized: false,
   },
   connectionTimeout: 10000,
   greetingTimeout: 10000,
@@ -46,8 +52,8 @@ export const sendMail = async ({ to, subject, ...content }) => {
   };
 
   try {
+    console.log('📡 USING PORT:', 587);
     console.log('[email] Sending email:', {
-      smtp: 'gmail',
       to: mailOptions.to,
       subject: mailOptions.subject,
       from: mailOptions.from,
