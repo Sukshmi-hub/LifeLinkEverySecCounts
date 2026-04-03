@@ -108,7 +108,7 @@ export default function ChatWindow({ roomId, chat = { messages: [] }, onSend }) 
   if (!roomId) return <div className="flex-1 p-6">Select a conversation</div>
 
   return (
-    <div className="flex-1 flex flex-col h-[calc(100vh-160px)]">
+    <div className="flex-1 flex flex-col h-full min-h-0">
       <div className="p-4 border-b bg-white">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -137,7 +137,7 @@ export default function ChatWindow({ roomId, chat = { messages: [] }, onSend }) 
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6 bg-white">
+      <div className="flex-1 min-h-0 overflow-auto p-6 bg-white">
         <div className="max-w-4xl mx-auto">
           {(chat.messages || []).map((m) => (
             <div key={m._id || m.id || Math.random()} className={`mb-4 flex ${isMine(m) ? 'justify-end' : 'justify-start'}`}>
@@ -151,7 +151,7 @@ export default function ChatWindow({ roomId, chat = { messages: [] }, onSend }) 
         </div>
       </div>
 
-      <div className="p-4 border-t bg-white">
+      <div className="p-4 border-t bg-white shrink-0">
         <div className="max-w-4xl mx-auto flex items-center gap-3">
           <input
             type="text"

@@ -120,8 +120,8 @@ export default function PatientMessages() {
   const visibleRooms = [...hospitalRoomsVisible, ...ngoRooms]
 
   return (
-    <div className="flex h-[calc(100vh-160px)]">
-      <div className="w-64 lg:w-64 overflow-y-auto flex flex-col">
+    <div className="flex h-full min-h-0 overflow-hidden">
+      <div className="w-64 lg:w-64 overflow-y-auto flex flex-col min-h-0">
         {primaryHospitalName && primaryHospitalRoomId && (
           <div className="mb-2">
             <div className="text-xl font-semibold mb-2">Registered Hospital</div>
@@ -146,7 +146,7 @@ export default function PatientMessages() {
           <ChatList rooms={ngoRooms} activeRoomId={state.activeRoomId} onSelect={handleSelect} messages={state.messages} heading="NGOs" />
         </div>
       </div>
-      <div className="flex-1">
+      <div className="flex-1 min-h-0 overflow-hidden">
         {(() => {
           const selected = visibleRooms.find(r => r.roomId === state.activeRoomId)
           const chatProp = { ...state, title: selected?.title, subtitle: selected?.subtitle }

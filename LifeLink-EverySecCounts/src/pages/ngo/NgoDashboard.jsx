@@ -324,7 +324,7 @@ const NgoDashboard = () => {
           </div>
         </header>
 
-        <main className="flex-1 p-6 overflow-y-auto">
+        <main className={`flex-1 p-6 ${activeTab === 'messages' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
           {renderContent()}
         </main>
       </div>

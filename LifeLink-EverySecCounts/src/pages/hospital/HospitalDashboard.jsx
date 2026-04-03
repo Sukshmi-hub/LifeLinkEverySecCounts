@@ -102,7 +102,7 @@ const HospitalDashboard = () => {
         setActiveTab={setActiveTab} 
         hasRedAlerts={hasRedAlerts}
       />
-      <main className="flex-1 p-8 overflow-auto">
+      <main className={`flex-1 p-8 ${activeTab === 'messages' ? 'overflow-hidden' : 'overflow-auto'}`}>
         {renderContent()}
       </main>
     </div>

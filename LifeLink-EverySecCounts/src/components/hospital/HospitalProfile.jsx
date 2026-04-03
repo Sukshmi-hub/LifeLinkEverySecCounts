@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Building2, MapPin, Mail, Clock, Save, Edit2, Phone } from 'lucide-react';
+import { Building2, MapPin, Mail, Clock, Phone } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { serverUrl } from '@/lib/serverConfig';
 
@@ -51,14 +50,6 @@ const HospitalProfile = () => {
     })();
   }, []);
 
-  const handleSave = () => {
-    setIsEditing(false);
-    toast({
-      title: "Profile Updated",
-      description: "Hospital profile has been saved successfully.",
-    });
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -66,22 +57,6 @@ const HospitalProfile = () => {
           <h2 className="text-2xl font-bold text-foreground">Hospital Profile</h2>
           <p className="text-muted-foreground">Manage hospital information and settings</p>
         </div>
-        <Button
-          variant={isEditing ? "default" : "outline"}
-          onClick={() => (isEditing ? handleSave() : setIsEditing(true))}
-        >
-          {isEditing ? (
-            <>
-              <Save className="w-4 h-4 mr-2" />
-              Save Changes
-            </>
-          ) : (
-            <>
-              <Edit2 className="w-4 h-4 mr-2" />
-              Edit Profile
-            </>
-          )}
-        </Button>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">

@@ -169,9 +169,9 @@ function ChatSystem({ className = "" }) {
   const filteredContacts = contacts.filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
 
   return (
-    <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 h-[600px] ${className}`}>
+    <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 h-full min-h-0 ${className}`}>
       {/* Sidebar: Contacts */}
-      <Card className="md:col-span-1 flex flex-col border-none shadow-sm">
+      <Card className="md:col-span-1 flex flex-col border-none shadow-sm min-h-0">
         <CardHeader className="pb-3">
           <CardTitle className="text-md font-semibold flex items-center gap-2">
             <MessageCircle className="h-5 w-5 text-red-500" />
@@ -219,7 +219,7 @@ function ChatSystem({ className = "" }) {
       </Card>
 
       {/* Main Chat Area */}
-      <Card className="md:col-span-2 flex flex-col border-none shadow-sm">
+      <Card className="md:col-span-2 flex flex-col border-none shadow-sm min-h-0">
         {selectedContact ? (
           <>
             <CardHeader className="border-b border-slate-100 pb-4">
@@ -233,7 +233,7 @@ function ChatSystem({ className = "" }) {
               </div>
             </CardHeader>
 
-            <CardContent className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/30">
+            <CardContent className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-slate-50/30">
               {messages.map((message) => {
                 // Determine ownership using both the live auth user and stored session user
                 const senderRole = String(message.senderRole || '').toLowerCase()

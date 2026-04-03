@@ -145,7 +145,7 @@ export default function NgoMessages() {
   const chatWithMeta = { ...state, title: selectedRoomObj?.title, subtitle: selectedRoomObj?.subtitle }
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full min-h-0 overflow-hidden">
       <ChatList rooms={visibleRooms} activeRoomId={state.activeRoomId} onSelect={handleSelect} messages={state.messages} />
       <ChatWindow roomId={state.activeRoomId} chat={chatWithMeta} onSend={sendMessage} />
     </div>

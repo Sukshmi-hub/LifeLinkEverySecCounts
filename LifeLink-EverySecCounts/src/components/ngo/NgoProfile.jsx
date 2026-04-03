@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,7 +10,6 @@ import {
   Mail, 
   Phone, 
   FileText,
-  Save,
   MapPin
 } from 'lucide-react';
 
@@ -57,19 +55,6 @@ const NgoProfile = () => {
           <h2 className="text-2xl font-bold">NGO Profile</h2>
           <p className="text-muted-foreground">Manage your organization details</p>
         </div>
-        {isEditing ? (
-          <button 
-            onClick={handleSave} 
-            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 gap-2"
-          >
-            <Save className="w-4 h-4" />
-            Save Changes
-          </button>
-        ) : (
-          <Button onClick={() => setIsEditing(true)} variant="outline">
-            Edit Profile
-          </Button>
-        )}
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">

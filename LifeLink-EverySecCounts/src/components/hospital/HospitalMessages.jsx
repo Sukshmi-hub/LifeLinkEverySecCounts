@@ -298,7 +298,7 @@ export default function HospitalMessages() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-160px)] gap-4">
+    <div className="flex h-full min-h-0 overflow-hidden gap-4">
       <aside className="w-[390px] shrink-0 rounded-3xl border bg-background/80 overflow-hidden flex flex-col">
         <div className="p-5 border-b">
           <div className="text-2xl font-semibold">Active Chats</div>
@@ -347,7 +347,7 @@ export default function HospitalMessages() {
         </div>
       </aside>
 
-      <div className="flex-1 min-w-0 rounded-3xl border bg-background/80 overflow-hidden">
+      <div className="flex-1 min-w-0 rounded-3xl border bg-background/80 overflow-hidden min-h-0">
         {(() => {
           const selected = activeRoom
           let chatProp = { ...state, title: selected?.title, subtitle: selected?.subtitle }
