@@ -783,6 +783,8 @@ export const sendSignupOtp = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email is required.' });
     }
 
+    console.log('[auth] Incoming email for sendSignupOtp:', normalizedEmail);
+
     const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       return res.status(400).json({ success: false, message: 'User with this email already exists.' });
@@ -816,7 +818,7 @@ export const sendSignupOtp = async (req, res) => {
       message: 'OTP sent to your email address.',
     });
   } catch (error) {
-    console.error('Send Signup OTP Error:', error);
+    console.error('Send Signup OTP Error:', error?.message, error?.stack, error);
     return res.status(500).json({ success: false, message: 'Failed to send signup OTP.' });
   }
 };
@@ -1060,6 +1062,8 @@ export const forgotPassword = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide an email address' });
     }
 
+    console.log('[auth] Incoming email for forgotPassword:', normalizeEmail(email));
+
     const user = await User.findOne({ email: normalizeEmail(email) });
     if (!user) {
       return res.status(200).json({ success: true, message: 'If that email exists, a reset OTP has been sent.' });
@@ -1081,7 +1085,7 @@ export const forgotPassword = async (req, res) => {
 
     return res.status(200).json({ success: true, message: 'If that email exists, a reset OTP has been sent.' });
   } catch (error) {
-    console.error('Forgot Password Error:', error);
+    console.error('Forgot Password Error:', error?.message, error?.stack, error);
     return res.status(500).json({ success: false, message: 'Error processing forgot password request' });
   }
 };
