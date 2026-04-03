@@ -1079,26 +1079,36 @@ export const forgotPassword = async (req, res) => {
     clearOtpState(user, 'passwordReset');
     await user.save();
 
-    const resetLink = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+    const frontendBaseUrl = (() => {
+      const raw = String(process.env.FRONTEND_URL || '').trim();
+      if (!raw) return 'https://life-link-every-sec-counts.vercel.app';
+      if (/^https?:\/\//i.test(raw)) return raw.replace(/\/$/, '');
+      return `https://${raw.replace(/\/$/, '')}`;
+    })();
+    const resetLink = `${frontendBaseUrl}/reset-password/${resetToken}`;
     console.log('[auth] forgotPassword sending reset link:', {
       userId: String(user._id || ''),
       email: user.email || '',
       resetLink,
     });
 
-    await sendMail({
-      to: normalizedEmail,
-      subject: 'Reset Your Password',
-      html: `
-        <div>
-          <h2>Reset Your Password</h2>
-          <p>Click the link below to reset your password:</p>
-          <a href="${resetLink}" target="_blank" rel="noreferrer">Reset Password</a>
-          <p>This link expires in 10 minutes.</p>
-        </div>
-      `,
-      text: `Reset your password: ${resetLink}\n\nThis link expires in 10 minutes.`,
-    });
+    try {
+      await sendMail({
+        to: normalizedEmail,
+        subject: 'Reset Your Password',
+        html: `
+          <div>
+            <h2>Reset Your Password</h2>
+            <p>Click the link below to reset your password:</p>
+            <a href="${resetLink}" target="_blank" rel="noreferrer">Reset Password</a>
+            <p>This link expires in 10 minutes.</p>
+          </div>
+        `,
+        text: `Reset your password: ${resetLink}\n\nThis link expires in 10 minutes.`,
+      });
+    } catch (mailError) {
+      console.error('❌ Forgot password email send failed:', mailError);
+    }
 
     return res.status(200).json({ success: true, message: 'If that email exists, a reset link has been sent.' });
   } catch (error) {
