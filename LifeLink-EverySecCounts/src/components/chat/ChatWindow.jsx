@@ -17,15 +17,77 @@ export default function ChatWindow({ roomId, chat = { messages: [] }, onSend }) 
 
   const getMyId = () => String(user?.id || user?._id || '')
 
+  const getIdentity = () => {
+    const ids = new Set()
+    const roles = new Set()
+    const names = new Set()
+
+    const addUser = (candidate) => {
+      if (!candidate) return
+      const id = candidate.id || candidate._id || candidate.userId || candidate.accountId
+      if (id) ids.add(String(id))
+      if (candidate.role) roles.add(String(candidate.role).toLowerCase())
+      const label = candidate.name || candidate.fullName || candidate.organizationName
+      if (label) names.add(String(label).trim().toLowerCase())
+    }
+
+    addUser(user)
+
+    try {
+      const stored = localStorage.getItem('user')
+      if (stored) addUser(JSON.parse(stored))
+    } catch (e) {}
+
+    try {
+      const storedAuth = localStorage.getItem('lifelink_auth')
+      if (storedAuth) {
+        const parsed = JSON.parse(storedAuth)
+        addUser(parsed?.user || parsed)
+      }
+    } catch (e) {}
+
+    return { ids, roles, names }
+  }
+
+  const normalizeId = (value) => {
+    if (!value) return ''
+    if (typeof value === 'string') return value
+    if (typeof value === 'object') {
+      if (typeof value._id === 'string') return value._id
+      if (typeof value.id === 'string') return value.id
+      if (value._id && typeof value._id === 'object' && value._id.$oid) return value._id.$oid
+      if (value.$oid) return value.$oid
+    }
+    return String(value)
+  }
+
   const isMine = (m) => {
     try {
       if (!m) return false
       const myId = getMyId()
+      const { ids, roles, names } = getIdentity()
+      if (myId) ids.add(myId)
+      const myRole = String(user?.role || '').toLowerCase()
+      const myName = String(user?.name || user?.fullName || user?.organizationName || '').trim().toLowerCase()
+      const senderRole = String(m.senderRole || m.sender_role || '').toLowerCase()
+      const senderName = String(m.senderName || m.sender_name || m.name || '').trim().toLowerCase()
+      const senderObjectName = String(m.sender?.name || m.sender?.fullName || m.sender?.organizationName || '').trim().toLowerCase()
       // If message has senderId (ObjectId or string) compare
       if (m.senderId) {
-        if (String(m.senderId) === myId) return true
+        const senderId = normalizeId(m.senderId)
+        if (senderId && ids.has(String(senderId))) return true
         // sometimes senderId may be nested under sender._id
-        if (m.sender && (String(m.sender._id || '') === myId || String(m.sender.id || '') === myId)) return true
+        if (m.sender && (ids.has(String(m.sender._id || '')) || ids.has(String(m.sender.id || '')))) return true
+        if (m.senderId && typeof m.senderId === 'object') {
+          const nestedSenderId = normalizeId(m.senderId)
+          if (nestedSenderId && ids.has(String(nestedSenderId))) return true
+        }
+      }
+      if ((myRole && senderRole && senderRole === myRole) || (senderRole && roles.has(senderRole))) {
+        return true
+      }
+      if ((myName && senderName && senderName === myName) || (myName && senderObjectName && senderObjectName === myName) || (senderName && names.has(senderName)) || (senderObjectName && names.has(senderObjectName))) {
+        return true
       }
       return false
     } catch (e) {

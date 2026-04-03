@@ -229,15 +229,37 @@ function ChatSystem({ className = "" }) {
                 </div>
                 <div>
                   <p className="font-medium text-sm">{selectedContact.name}</p>
-                  <p className="text-[10px] text-green-500 font-medium">Online</p>
                 </div>
               </div>
             </CardHeader>
 
             <CardContent className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/30">
               {messages.map((message) => {
-                // Determine ownership: match by senderId or by role when current user is donor
-                const isMine = String(message.senderId) === String(user?._id)
+                // Determine ownership using both the live auth user and stored session user
+                const senderRole = String(message.senderRole || '').toLowerCase()
+                const senderName = String(message.senderName || message.sender_name || message.name || '').trim().toLowerCase()
+                let candidateIds = new Set([String(user?._id || ''), String(user?.id || '')])
+                let candidateRoles = new Set([String(user?.role || '').toLowerCase()])
+                let candidateNames = new Set([String(user?.name || user?.fullName || user?.organizationName || '').trim().toLowerCase()])
+                try {
+                  const stored = JSON.parse(localStorage.getItem('user') || '{}')
+                  candidateIds.add(String(stored?._id || ''))
+                  candidateIds.add(String(stored?.id || ''))
+                  candidateIds.add(String(stored?.userId || ''))
+                  candidateRoles.add(String(stored?.role || '').toLowerCase())
+                  candidateNames.add(String(stored?.name || stored?.fullName || stored?.organizationName || '').trim().toLowerCase())
+                } catch (e) {}
+                try {
+                  const storedAuth = JSON.parse(localStorage.getItem('lifelink_auth') || '{}')
+                  const current = storedAuth?.user || storedAuth
+                  candidateIds.add(String(current?._id || ''))
+                  candidateIds.add(String(current?.id || ''))
+                  candidateIds.add(String(current?.userId || ''))
+                  candidateRoles.add(String(current?.role || '').toLowerCase())
+                  candidateNames.add(String(current?.name || current?.fullName || current?.organizationName || '').trim().toLowerCase())
+                } catch (e) {}
+                const senderId = String(message.senderId || '')
+                const isMine = candidateIds.has(senderId) || candidateRoles.has(senderRole) || candidateNames.has(senderName)
                 return (
                   <div key={message.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
                     <div className={`max-w-[75%] rounded-2xl px-4 py-2 text-sm ${

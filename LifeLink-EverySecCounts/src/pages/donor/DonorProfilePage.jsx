@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import DonorSidebar from '@/components/donor/DonorSidebar';
 import { useDonor } from '@/context/DonorContext';
-import { useToast } from '@/hooks/use-toast';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -27,32 +25,15 @@ import {
   MapPin,
   CreditCard,
   Droplets,
-  Save,
   UserCircle,
 } from 'lucide-react';
 
 const bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 const DonorProfilePage = () => {
-  const { toast } = useToast();
-  const { donorProfile, updateDonorProfile } = useDonor();
+  const { donorProfile } = useDonor();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState(donorProfile);
-
-  const handleSave = () => {
-    updateDonorProfile(formData);
-    setIsEditing(false);
-    toast({
-      title: 'Profile Updated',
-      description: 'Your profile has been updated successfully.',
-    });
-  };
-
-  const handleCancel = () => {
-    setFormData(donorProfile);
-    setIsEditing(false);
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -80,11 +61,6 @@ const DonorProfilePage = () => {
                     <CardDescription>Registered Donor</CardDescription>
                   </div>
                 </div>
-                {!isEditing && (
-                  <Button onClick={() => setIsEditing(true)}>
-                    Edit Profile
-                  </Button>
-                )}
               </div>
             </CardHeader>
 
@@ -102,8 +78,7 @@ const DonorProfilePage = () => {
                     <Input
                       id="fullName"
                       value={formData.fullName}
-                      onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                      disabled={!isEditing}
+                      readOnly
                     />
                   </div>
 
@@ -115,7 +90,7 @@ const DonorProfilePage = () => {
                         id="email"
                         value={formData.email}
                         className="pl-10"
-                        disabled
+                        readOnly
                       />
                     </div>
                   </div>
@@ -127,9 +102,8 @@ const DonorProfilePage = () => {
                       <Input
                         id="phone"
                         value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                         className="pl-10"
-                        disabled={!isEditing}
+                        readOnly
                       />
                     </div>
                   </div>
@@ -140,8 +114,7 @@ const DonorProfilePage = () => {
                       id="age"
                       type="number"
                       value={formData.age}
-                      onChange={(e) => setFormData({ ...formData, age: e.target.value })}
-                      disabled={!isEditing}
+                      readOnly
                     />
                   </div>
                 </div>
@@ -159,8 +132,7 @@ const DonorProfilePage = () => {
                     <Label htmlFor="bloodGroup">Blood Group</Label>
                     <Select
                       value={formData.bloodGroup}
-                      onValueChange={(value) => setFormData({ ...formData, bloodGroup: value })}
-                      disabled={!isEditing}
+                      disabled
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select blood group" />
@@ -182,9 +154,8 @@ const DonorProfilePage = () => {
                       <Input
                         id="aadhaar"
                         value={formData.aadhaarNumber}
-                        onChange={(e) => setFormData({ ...formData, aadhaarNumber: e.target.value })}
                         className="pl-10"
-                        disabled={!isEditing}
+                        readOnly
                         placeholder="1234 5678 9012"
                       />
                     </div>
@@ -204,8 +175,7 @@ const DonorProfilePage = () => {
                   <Textarea
                     id="address"
                     value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    disabled={!isEditing}
+                    readOnly
                     rows={3}
                   />
                 </div>
@@ -224,8 +194,7 @@ const DonorProfilePage = () => {
                     <Input
                       id="emergencyName"
                       value={formData.emergencyContactName}
-                      onChange={(e) => setFormData({ ...formData, emergencyContactName: e.target.value })}
-                      disabled={!isEditing}
+                      readOnly
                     />
                   </div>
 
@@ -234,25 +203,11 @@ const DonorProfilePage = () => {
                     <Input
                       id="emergencyPhone"
                       value={formData.emergencyContactNumber}
-                      onChange={(e) => setFormData({ ...formData, emergencyContactNumber: e.target.value })}
-                      disabled={!isEditing}
+                      readOnly
                     />
                   </div>
                 </div>
               </div>
-
-              {/* Action Buttons */}
-              {isEditing && (
-                <div className="flex gap-3 pt-4 border-t border-border">
-                  <Button variant="outline" onClick={handleCancel} className="flex-1">
-                    Cancel
-                  </Button>
-                  <Button onClick={handleSave} className="flex-1 gap-2">
-                    <Save className="h-4 w-4" />
-                    Save Changes
-                  </Button>
-                </div>
-              )}
             </CardContent>
           </Card>
         </div>

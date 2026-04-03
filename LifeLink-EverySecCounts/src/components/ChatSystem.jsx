@@ -34,6 +34,39 @@ function ChatSystem({ className = "" }) {
 
   const messagesEndRef = useRef(null);
 
+  const getIdentity = () => {
+    const ids = new Set([String(user?.id || user?._id || '')]);
+    const roles = new Set([String(user?.role || '').toLowerCase()]);
+    const names = new Set([String(user?.name || user?.fullName || user?.organizationName || '').trim().toLowerCase()]);
+
+    try {
+      const stored = JSON.parse(localStorage.getItem('user') || '{}');
+      if (stored) {
+        if (stored.id) ids.add(String(stored.id));
+        if (stored._id) ids.add(String(stored._id));
+        if (stored.userId) ids.add(String(stored.userId));
+        if (stored.role) roles.add(String(stored.role).toLowerCase());
+        const storedName = stored.name || stored.fullName || stored.organizationName;
+        if (storedName) names.add(String(storedName).trim().toLowerCase());
+      }
+    } catch (e) {}
+
+    try {
+      const storedAuth = JSON.parse(localStorage.getItem('lifelink_auth') || '{}');
+      const current = storedAuth?.user || storedAuth;
+      if (current) {
+        if (current.id) ids.add(String(current.id));
+        if (current._id) ids.add(String(current._id));
+        if (current.userId) ids.add(String(current.userId));
+        if (current.role) roles.add(String(current.role).toLowerCase());
+        const currentName = current.name || current.fullName || current.organizationName;
+        if (currentName) names.add(String(currentName).trim().toLowerCase());
+      }
+    } catch (e) {}
+
+    return { ids, roles, names };
+  };
+
   // 1. Fetch Contacts on load
   useEffect(() => {
     const fetchContacts = async () => {
@@ -187,9 +220,6 @@ function ChatSystem({ className = "" }) {
                 </div>
                 <div>
                   <p className="font-medium">{selectedContact.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {selectedContact.online ? "Online" : "Offline"}
-                  </p>
                 </div>
               </div>
             </CardHeader>
@@ -198,11 +228,23 @@ function ChatSystem({ className = "" }) {
               {messages.map((message) => (
                 <div
                   key={message.id}
-                  className={`flex ${message.senderId === user?.id || message.senderId === "user" ? "justify-end" : "justify-start"}`}
+                  className={`flex ${(() => {
+                    const senderId = String(message.senderId || '').trim()
+                    const senderRole = String(message.senderRole || '').trim().toLowerCase()
+                    const senderName = String(message.senderName || '').trim().toLowerCase()
+                    const { ids, roles, names } = getIdentity()
+                    return (ids.has(senderId) || roles.has(senderRole) || names.has(senderName)) ? "justify-end" : "justify-start"
+                  })()}`}
                 >
                   <div
                     className={`max-w-[70%] rounded-2xl px-4 py-2 ${
-                      message.senderId === user?.id || message.senderId === "user"
+                      (() => {
+                        const senderId = String(message.senderId || '').trim()
+                        const senderRole = String(message.senderRole || '').trim().toLowerCase()
+                        const senderName = String(message.senderName || '').trim().toLowerCase()
+                        const { ids, roles, names } = getIdentity()
+                        return (ids.has(senderId) || roles.has(senderRole) || names.has(senderName))
+                      })()
                         ? "bg-primary text-primary-foreground"
                         : "bg-muted"
                     } ${message.isEmergency ? "border-2 border-destructive" : ""}`}
