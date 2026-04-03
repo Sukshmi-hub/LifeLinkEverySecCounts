@@ -10,7 +10,7 @@ import Admin from '../models/Admin.js';
 import Message from '../models/Message.js';
 import Dots from '../models/Dots.js';
 import PendingSignup from '../models/PendingSignup.js';
-import { sendPasswordResetEmail, sendVerificationEmail } from '../config/email.js';
+import { sendMail, sendVerificationEmail } from '../config/email.js';
 
 const OTP_EXPIRY_MINUTES = 5;
 const OTP_EXPIRY_MS = OTP_EXPIRY_MINUTES * 60 * 1000;
@@ -1071,22 +1071,36 @@ export const forgotPassword = async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    const cooldownMessage = ensureResendAllowed(user, 'passwordReset');
-    if (cooldownMessage) {
-      return res.status(429).json({ success: false, message: cooldownMessage });
-    }
-
-    const otp = generateOtp();
-    setOtpState(user, 'passwordReset', otp);
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = Date.now() + 1000 * 60 * 10;
+    user.resetToken = resetToken;
+    user.resetTokenExpiry = user.resetPasswordExpires;
+    clearOtpState(user, 'passwordReset');
     await user.save();
 
-    console.log('[auth] forgotPassword triggered password reset email:', {
+    const resetLink = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+    console.log('[auth] forgotPassword sending reset link:', {
       userId: String(user._id || ''),
       email: user.email || '',
+      resetLink,
     });
-    await sendPasswordResetEmail(user.email, otp);
 
-    return res.status(200).json({ success: true, message: 'If that email exists, a reset OTP has been sent.' });
+    await sendMail({
+      to: normalizedEmail,
+      subject: 'Reset Your Password',
+      html: `
+        <div>
+          <h2>Reset Your Password</h2>
+          <p>Click the link below to reset your password:</p>
+          <a href="${resetLink}" target="_blank" rel="noreferrer">Reset Password</a>
+          <p>This link expires in 10 minutes.</p>
+        </div>
+      `,
+      text: `Reset your password: ${resetLink}\n\nThis link expires in 10 minutes.`,
+    });
+
+    return res.status(200).json({ success: true, message: 'If that email exists, a reset link has been sent.' });
   } catch (error) {
     console.error('❌ FULL ERROR:', error);
     return res.status(500).json({ success: false, message: 'Error processing forgot password request', error: error.message });
@@ -1095,7 +1109,8 @@ export const forgotPassword = async (req, res) => {
 
 export const resetPassword = async (req, res) => {
   try {
-    const { email, otp, newPassword, password, confirmPassword, token } = req.body;
+    const token = req.params?.token || req.body?.token;
+    const { email, otp, newPassword, password, confirmPassword } = req.body;
 
     if (token) {
       const legacyPassword = password || newPassword;
@@ -1109,10 +1124,11 @@ export const resetPassword = async (req, res) => {
         return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long' });
       }
 
-      const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
       const user = await User.findOne({
-        resetToken: hashedToken,
-        resetTokenExpiry: { $gt: Date.now() },
+        $or: [
+          { resetPasswordToken: token, resetPasswordExpires: { $gt: Date.now() } },
+          { resetToken: token, resetTokenExpiry: { $gt: Date.now() } },
+        ],
       });
 
       if (!user) {
@@ -1122,6 +1138,8 @@ export const resetPassword = async (req, res) => {
       user.password = legacyPassword;
       user.resetToken = undefined;
       user.resetTokenExpiry = undefined;
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
       clearOtpState(user, 'passwordReset');
       await user.save();
       return res.status(200).json({ success: true, message: 'Password reset successful. You can now login.' });
@@ -1154,6 +1172,8 @@ export const resetPassword = async (req, res) => {
     user.password = nextPassword;
     user.resetToken = undefined;
     user.resetTokenExpiry = undefined;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
     clearOtpState(user, 'passwordReset');
     await user.save();
 

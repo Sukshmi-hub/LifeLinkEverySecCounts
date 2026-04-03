@@ -81,6 +81,7 @@ router.post('/forgot-password', forgotPassword)
  * @desc    Reset password with token
  * @access  Public
  */
+router.post('/reset-password/:token', resetPassword)
 router.post('/reset-password', resetPassword)
 
 export default router

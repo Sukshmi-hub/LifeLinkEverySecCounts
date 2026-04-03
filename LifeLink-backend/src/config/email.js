@@ -84,20 +84,4 @@ export const sendVerificationEmail = async (email, otp) => {
   });
 };
 
-export const sendPasswordResetEmail = async (email, otp) => {
-  const content = renderTemplate({
-    title: 'Reset Your Password',
-    intro: 'We received a password reset request for your LifeLink account. Use the OTP below to continue.',
-    otpLabel: 'Password reset OTP',
-    otp,
-    footer: 'This OTP expires in 5 minutes. Do not share it with anyone.',
-  });
-
-  return sendMail({
-    to: email,
-    subject: 'LifeLink - Password reset OTP',
-    ...content,
-  });
-};
-
-export default { sendVerificationEmail, sendPasswordResetEmail };
+export default { sendVerificationEmail };

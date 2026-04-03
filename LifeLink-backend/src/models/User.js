@@ -92,6 +92,12 @@ const userSchema = new mongoose.Schema(
     resetTokenExpiry: {
       type: Date,
     },
+    resetPasswordToken: {
+      type: String,
+    },
+    resetPasswordExpires: {
+      type: Date,
+    },
     emailVerification: {
       type: otpSubSchema,
       default: () => ({}),
