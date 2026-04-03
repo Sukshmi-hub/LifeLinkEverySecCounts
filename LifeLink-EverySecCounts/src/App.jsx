@@ -62,6 +62,7 @@ const App = () => (
                     <Route path="/login" element={<Login />} />
                     <Route path="/register" element={<Login />} />
                     <Route path="/reset-password" element={<ResetPassword />} />
+                    <Route path="/reset-password/:token" element={<ResetPassword />} />
                     <Route path="/about" element={<About />} />
                     <Route path="/tribute" element={<TributeWall />} />
                     <Route path="/red-alert" element={<RedAlertPage />} />

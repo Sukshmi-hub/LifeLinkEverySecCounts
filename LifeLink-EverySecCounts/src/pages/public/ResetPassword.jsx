@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,6 +9,7 @@ import { serverUrl } from '@/lib/serverConfig';
 
 const ResetPassword = () => {
   const navigate = useNavigate();
+  const { token: tokenParam } = useParams();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
 
@@ -21,7 +22,7 @@ const ResetPassword = () => {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    const tokenFromUrl = searchParams.get('token');
+    const tokenFromUrl = tokenParam || searchParams.get('token');
     if (tokenFromUrl) {
       setToken(tokenFromUrl);
     } else {
@@ -32,7 +33,7 @@ const ResetPassword = () => {
       });
       setTimeout(() => navigate('/login'), 2000);
     }
-  }, [searchParams, navigate, toast]);
+  }, [tokenParam, searchParams, navigate, toast]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
