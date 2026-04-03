@@ -1,17 +1,17 @@
 import dns from 'node:dns'
 dns.setDefaultResultOrder('ipv4first')
-console.log('🌐 DNS set to IPv4 first')
+console.log('?? Forced IPv4')
 
-// server.js - LifeLink Backend Entry Point
-import dotenv from 'dotenv'
-import app from './src/app.js'
-import { connectDB } from './src/config/mongodb.js'
-
-// Load environment variables
+const { default: dotenv } = await import('dotenv')
 dotenv.config()
 
+const [{ default: app }, { connectDB }, { createRequire }] = await Promise.all([
+  import('./src/app.js'),
+  import('./src/config/mongodb.js'),
+  import('module'),
+])
+
 // Initialize Razorpay SDK (attach to app.locals for use elsewhere)
-import { createRequire } from 'module'
 const require = createRequire(import.meta.url)
 let Razorpay
 try {
@@ -36,21 +36,20 @@ const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'produ
 
 const startServer = async (portToUse) => {
   const server = app.listen(portToUse, () => {
-    console.log('🩸 LifeLink Backend Server')
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    console.log(`✅ Server running on port ${portToUse}`)
-    console.log(`🌍 Environment: ${process.env.NODE_ENV}`)
-    console.log(`🔗 API URL: port ${portToUse}`)
-    console.log('📊 Health Check: /health')
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    console.log('🚀 Backend is ready to save lives!')
+    console.log('?? LifeLink Backend Server')
+    console.log('????????????????????????????????????????')
+    console.log(`? Server running on port ${portToUse}`)
+    console.log(`?? Environment: ${process.env.NODE_ENV}`)
+    console.log(`?? API URL: port ${portToUse}`)
+    console.log('?? Health Check: /health')
+    console.log('????????????????????????????????????????')
+    console.log('?? Backend is ready to save lives!')
   })
 
-  // Initialize Socket.io and pass the running server
   try {
     const { initSocket } = await import('./src/socket.js')
     initSocket(server)
-    console.log('🔌 Socket.io initialized')
+    console.log('?? Socket.io initialized')
   } catch (err) {
     console.error('Failed to initialize Socket.io', err)
   }
@@ -64,7 +63,7 @@ const startServer = async (portToUse) => {
         return
       }
 
-      console.error(`❌ Port ${portToUse} is already in use. Please stop the process using this port or set a different PORT in your .env`)
+      console.error(`? Port ${portToUse} is already in use. Please stop the process using this port or set a different PORT in your .env`)
       console.error('Tip: run `netstat -ano | findstr :5000` to find the PID, then `taskkill /PID <pid> /F` on Windows')
       process.exit(1)
       return
@@ -76,18 +75,15 @@ const startServer = async (portToUse) => {
   return server
 }
 
-// Ensure DB is connected before starting the server
 try {
   await connectDB()
 
-  // Global process handlers to log unhandled errors (avoid silent crashes during dev)
   process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason)
   })
 
   process.on('uncaughtException', (err) => {
     console.error('Uncaught Exception thrown:', err)
-    // Do not exit automatically in development, log and attempt to continue.
     if (process.env.NODE_ENV === 'production') {
       process.exit(1)
     }
