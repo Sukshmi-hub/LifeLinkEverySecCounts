@@ -1104,14 +1104,14 @@ export const forgotPassword = async (req, res) => {
         to: normalizedEmail,
         subject: 'Reset Your Password',
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #1f1f1f; border-radius: 14px; overflow: hidden; color: #e5e7eb;">
+          <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #f8fafc; border-radius: 14px; overflow: hidden; color: #1f2937; border: 1px solid #e5e7eb;">
             <div style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); padding: 28px 24px; text-align: center;">
               <div style="font-size: 36px; font-weight: 800; color: #ffffff; line-height: 1;">LifeLink</div>
               <div style="margin-top: 8px; font-size: 16px; color: rgba(255,255,255,0.9);">Every Second Counts</div>
             </div>
-            <div style="padding: 34px 28px 30px; background: #222222;">
-              <h2 style="margin: 0 0 18px; font-size: 30px; color: #f9fafb;">Password Reset Request</h2>
-              <p style="margin: 0 0 28px; font-size: 18px; line-height: 1.65; color: #9ca3af;">
+            <div style="padding: 34px 28px 30px; background: #ffffff;">
+              <h2 style="margin: 0 0 18px; font-size: 30px; color: #111827;">Password Reset Request</h2>
+              <p style="margin: 0 0 28px; font-size: 18px; line-height: 1.65; color: #6b7280;">
                 We received a request to reset your password. Click the button below to create a new password.
               </p>
               <div style="text-align: center; margin: 18px 0 28px;">
@@ -1119,17 +1119,17 @@ export const forgotPassword = async (req, res) => {
                   Reset Password
                 </a>
               </div>
-              <div style="margin: 10px 0 0; font-size: 15px; line-height: 1.6; color: #cbd5e1;">
+              <div style="margin: 10px 0 0; font-size: 15px; line-height: 1.6; color: #6b7280;">
                 Or copy and paste this link in your browser:
-                <div style="margin-top: 8px; word-break: break-all; color: #93c5fd;">
+                <div style="margin-top: 8px; word-break: break-all; color: #2563eb;">
                   ${resetLink}
                 </div>
               </div>
-              <div style="height: 1px; background: rgba(255,255,255,0.12); margin: 30px 0 22px;"></div>
-              <p style="margin: 0 0 12px; font-size: 15px; line-height: 1.6; color: #cbd5e1;">
+              <div style="height: 1px; background: #e5e7eb; margin: 30px 0 22px;"></div>
+              <p style="margin: 0 0 12px; font-size: 15px; line-height: 1.6; color: #6b7280;">
                 This link will expire in 10 minutes. If you didn't request a password reset, please ignore this email.
               </p>
-              <p style="margin: 0; font-size: 15px; color: #cbd5e1;">Do not share this link with anyone.</p>
+              <p style="margin: 0; font-size: 15px; color: #6b7280;">Do not share this link with anyone.</p>
             </div>
           </div>
         `,
