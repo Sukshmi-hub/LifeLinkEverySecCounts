@@ -1,3 +1,7 @@
+import dns from 'node:dns'
+dns.setDefaultResultOrder('ipv4first')
+console.log('🌐 DNS set to IPv4 first')
+
 // server.js - LifeLink Backend Entry Point
 import dotenv from 'dotenv'
 import app from './src/app.js'
