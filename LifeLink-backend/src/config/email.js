@@ -19,14 +19,6 @@ if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
   console.error('[email] EMAIL_USER or EMAIL_PASS is missing. Gmail transporter may fail in production.');
 }
 
-transporter.verify((err, success) => {
-  if (err) {
-    console.error('[email] Gmail transporter verification failed:', err.message, err);
-    return;
-  }
-  console.log('[email] Gmail transporter ready:', success);
-});
-
 const renderTemplate = ({ title, intro, otpLabel, otp, footer }) => ({
   html: `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -48,7 +40,7 @@ const renderTemplate = ({ title, intro, otpLabel, otp, footer }) => ({
   text: `${title}\n\n${intro}\n\n${otpLabel}: ${otp}\n\n${footer}`,
 });
 
-const sendMail = async ({ to, subject, ...content }) => {
+export const sendMail = async ({ to, subject, ...content }) => {
   const mailOptions = {
     from: fromAddress,
     to,
@@ -57,6 +49,7 @@ const sendMail = async ({ to, subject, ...content }) => {
   };
 
   try {
+    console.log('📡 SMTP CONFIG:', { host: 'smtp.gmail.com', port: 587 });
     console.log('[email] Sending email:', {
       to: mailOptions.to,
       subject: mailOptions.subject,
