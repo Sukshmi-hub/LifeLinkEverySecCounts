@@ -786,8 +786,15 @@ export const sendSignupOtp = async (req, res) => {
     console.log('[auth] Incoming email for sendSignupOtp:', normalizedEmail);
 
     const existingUser = await User.findOne({ email: normalizedEmail });
-    if (existingUser) {
+    if (existingUser && existingUser.isEmailVerified) {
       return res.status(400).json({ success: false, message: 'User with this email already exists.' });
+    }
+
+    if (existingUser && !existingUser.isEmailVerified) {
+      console.log('[auth] Existing unverified account found, resending signup OTP:', {
+        userId: String(existingUser._id || ''),
+        email: existingUser.email || '',
+      });
     }
 
     let pendingSignup = await PendingSignup.findOne({ email: normalizedEmail });
@@ -1097,11 +1104,33 @@ export const forgotPassword = async (req, res) => {
         to: normalizedEmail,
         subject: 'Reset Your Password',
         html: `
-          <div>
-            <h2>Reset Your Password</h2>
-            <p>Click the link below to reset your password:</p>
-            <a href="${resetLink}" target="_blank" rel="noreferrer">Reset Password</a>
-            <p>This link expires in 10 minutes.</p>
+          <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #1f1f1f; border-radius: 14px; overflow: hidden; color: #e5e7eb;">
+            <div style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); padding: 28px 24px; text-align: center;">
+              <div style="font-size: 36px; font-weight: 800; color: #ffffff; line-height: 1;">LifeLink</div>
+              <div style="margin-top: 8px; font-size: 16px; color: rgba(255,255,255,0.9);">Every Second Counts</div>
+            </div>
+            <div style="padding: 34px 28px 30px; background: #222222;">
+              <h2 style="margin: 0 0 18px; font-size: 30px; color: #f9fafb;">Password Reset Request</h2>
+              <p style="margin: 0 0 28px; font-size: 18px; line-height: 1.65; color: #9ca3af;">
+                We received a request to reset your password. Click the button below to create a new password.
+              </p>
+              <div style="text-align: center; margin: 18px 0 28px;">
+                <a href="${resetLink}" target="_blank" rel="noreferrer" style="display: inline-block; background: #dc2626; color: #ffffff; text-decoration: none; font-size: 22px; font-weight: 700; padding: 18px 42px; border-radius: 12px;">
+                  Reset Password
+                </a>
+              </div>
+              <div style="margin: 10px 0 0; font-size: 15px; line-height: 1.6; color: #cbd5e1;">
+                Or copy and paste this link in your browser:
+                <div style="margin-top: 8px; word-break: break-all; color: #93c5fd;">
+                  ${resetLink}
+                </div>
+              </div>
+              <div style="height: 1px; background: rgba(255,255,255,0.12); margin: 30px 0 22px;"></div>
+              <p style="margin: 0 0 12px; font-size: 15px; line-height: 1.6; color: #cbd5e1;">
+                This link will expire in 10 minutes. If you didn't request a password reset, please ignore this email.
+              </p>
+              <p style="margin: 0; font-size: 15px; color: #cbd5e1;">Do not share this link with anyone.</p>
+            </div>
           </div>
         `,
         text: `Reset your password: ${resetLink}\n\nThis link expires in 10 minutes.`,
