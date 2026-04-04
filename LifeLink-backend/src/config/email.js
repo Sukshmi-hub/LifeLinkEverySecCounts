@@ -1,35 +1,8 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
-const emailUser = (process.env.EMAIL_USER || '').trim();
-const emailPass = (process.env.EMAIL_PASS || '').replace(/\s+/g, '').trim();
-const fromAddress = (process.env.EMAIL_FROM || emailUser || 'noreply@lifelink.local').trim();
-
-const buildTransporter = (port) => nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-  port,
-  family: 4,
-  secure: process.env.EMAIL_SECURE
-    ? String(process.env.EMAIL_SECURE).toLowerCase() === 'true'
-    : port === 465,
-  auth: {
-    user: emailUser,
-    pass: emailPass,
-  },
-  tls: {
-    rejectUnauthorized: false,
-  },
-  connectionTimeout: Number(process.env.EMAIL_CONNECTION_TIMEOUT || 15000),
-  greetingTimeout: Number(process.env.EMAIL_GREETING_TIMEOUT || 15000),
-});
-
-const primaryPort = Number(process.env.EMAIL_PORT || 465);
-const fallbackPort = primaryPort === 465 ? 587 : 465;
-const transporter = buildTransporter(primaryPort);
-const fallbackTransports = primaryPort === fallbackPort ? [] : [buildTransporter(fallbackPort)];
-
-if (!emailUser || !emailPass) {
-  console.error('[email] EMAIL_USER or EMAIL_PASS is missing. Gmail transporter may fail in production.');
-}
+const resendApiKey = (process.env.RESEND_API_KEY || '').trim();
+const resend = resendApiKey ? new Resend(resendApiKey) : null;
+const fromAddress = (process.env.RESEND_FROM || 'LifeLink <onboarding@resend.dev>').trim();
 
 const renderTemplate = ({ title, intro, otpLabel, otp, footer }) => ({
   html: `
@@ -52,42 +25,32 @@ const renderTemplate = ({ title, intro, otpLabel, otp, footer }) => ({
   text: `${title}\n\n${intro}\n\n${otpLabel}: ${otp}\n\n${footer}`,
 });
 
-export const sendMail = async ({ to, subject, ...content }) => {
-  const mailOptions = {
-    from: `"LifeLink" <${fromAddress}>`,
+export const sendMail = async ({ to, subject, html, text }) => {
+  if (!resend) {
+    throw new Error('RESEND_API_KEY is not configured.');
+  }
+
+  console.log('[email] Sending email via Resend:', {
     to,
     subject,
-    ...content,
-  };
+    from: fromAddress,
+  });
 
-  const transports = [transporter, ...fallbackTransports];
+  const { data, error } = await resend.emails.send({
+    from: fromAddress,
+    to,
+    subject,
+    html,
+    text,
+  });
 
-  try {
-    for (const currentTransport of transports) {
-      const currentPort = Number(currentTransport?.options?.port || primaryPort);
-      console.log('📡 USING PORT:', currentPort);
-      console.log('[email] Sending email:', {
-        to: mailOptions.to,
-        subject: mailOptions.subject,
-        from: mailOptions.from,
-      });
-
-      try {
-        const result = await currentTransport.sendMail(mailOptions);
-        console.log('✅ EMAIL SENT SUCCESSFULLY:', result?.response || result);
-        return result;
-      } catch (error) {
-        const retryable = error?.code === 'ETIMEDOUT' || error?.code === 'ESOCKET' || error?.code === 'ECONNECTION';
-        if (!retryable || currentTransport === transports[transports.length - 1]) {
-          throw error;
-        }
-        console.warn(`[email] Transport failed on port ${currentPort}, retrying with fallback port.`);
-      }
-    }
-  } catch (error) {
-    console.error('❌ EMAIL SEND ERROR:', error);
+  if (error) {
+    console.error('[email] EMAIL SEND ERROR:', error);
     throw error;
   }
+
+  console.log('[email] EMAIL SENT SUCCESSFULLY:', data);
+  return data;
 };
 
 export const sendVerificationEmail = async (email, otp) => {
