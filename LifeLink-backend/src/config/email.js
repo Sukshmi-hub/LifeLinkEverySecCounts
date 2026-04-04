@@ -1,5 +1,5 @@
 const brevoApiKey = (process.env.BREVO_API_KEY || '').trim();
-const senderEmail = 'sukshmipandey67@gmail.com';
+const senderEmail = 'sukshmipandey76@gmail.com';
 const senderName = 'LifeLink';
 const sender = {
   name: senderName,
