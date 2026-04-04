@@ -2,7 +2,8 @@ import { Resend } from 'resend';
 
 const resendApiKey = (process.env.RESEND_API_KEY || '').trim();
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
-const fromAddress = (process.env.RESEND_FROM || 'LifeLink <onboarding@resend.dev>').trim();
+const fromAddress = (process.env.RESEND_FROM || '').trim();
+const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
 
 const renderTemplate = ({ title, intro, otpLabel, otp, footer }) => ({
   html: `
@@ -28,6 +29,14 @@ const renderTemplate = ({ title, intro, otpLabel, otp, footer }) => ({
 export const sendMail = async ({ to, subject, html, text }) => {
   if (!resend) {
     throw new Error('RESEND_API_KEY is not configured.');
+  }
+
+  if (!fromAddress) {
+    throw new Error('RESEND_FROM is not configured. Use a verified sender like "LifeLink <no-reply@yourdomain.com>".');
+  }
+
+  if (isProduction && fromAddress.includes('onboarding@resend.dev')) {
+    throw new Error('RESEND_FROM must be a verified domain sender in production. onboarding@resend.dev is only for test delivery.');
   }
 
   console.log('[email] Sending email via Resend:', {
