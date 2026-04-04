@@ -61,10 +61,14 @@ const AdminUserManagement = () => {
   // Filter users when search term, role filter, or status filter changes
   useEffect(() => {
     const filtered = userList.filter(user => {
-      const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            user.email.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesRole = roleFilter === 'all' || user.role === roleFilter;
-      const matchesStatus = statusFilter === 'all' || String(user.status || '').toLowerCase() === String(statusFilter || '').toLowerCase();
+      const name = String(user?.name || '').toLowerCase();
+      const email = String(user?.email || '').toLowerCase();
+      const role = String(user?.role || '').toLowerCase();
+      const status = String(user?.status || '').toLowerCase();
+      const search = String(searchTerm || '').toLowerCase();
+      const matchesSearch = name.includes(search) || email.includes(search);
+      const matchesRole = roleFilter === 'all' || role === String(roleFilter || '').toLowerCase();
+      const matchesStatus = statusFilter === 'all' || status === String(statusFilter || '').toLowerCase();
       return matchesSearch && matchesRole && matchesStatus;
     });
     setFilteredUsers(filtered);
@@ -89,7 +93,7 @@ const AdminUserManagement = () => {
 
       const result = await response.json();
       if (result.success) {
-        setUserList(result.data);
+        setUserList(Array.isArray(result.data) ? result.data : []);
       } else {
         setError(result.message || 'Failed to fetch users');
       }
@@ -270,8 +274,8 @@ const AdminUserManagement = () => {
                                 <UserIcon className="h-4 w-4 text-primary" />
                               </div>
                               <div>
-                                <p className="font-medium text-sm">{user.name}</p>
-                                <p className="text-xs text-muted-foreground">{user.email}</p>
+                                <p className="font-medium text-sm">{user.name || 'Unknown User'}</p>
+                                <p className="text-xs text-muted-foreground">{user.email || 'No email'}</p>
                               </div>
                             </div>
                           </TableCell>
@@ -283,7 +287,7 @@ const AdminUserManagement = () => {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Badge variant={user.reportCount > 0 ? 'destructive' : 'secondary'}>
-                                {user.reportCount} report{user.reportCount !== 1 ? 's' : ''}
+                                {Number(user.reportCount || 0)} report{Number(user.reportCount || 0) !== 1 ? 's' : ''}
                               </Badge>
                             </div>
                           </TableCell>
