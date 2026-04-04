@@ -1,5 +1,3 @@
-import fetch from 'node-fetch';
-
 const brevoApiKey = (process.env.BREVO_API_KEY || '').trim();
 const senderEmail = 'sukshmipandey67@gmail.com';
 const senderName = 'LifeLink';
