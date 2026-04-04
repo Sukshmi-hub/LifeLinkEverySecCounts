@@ -687,7 +687,7 @@ const Login = () => {
 	                        {otpLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Verify OTP'}
 	                      </Button>
 	                    </div>
-	                    <p className="text-sm text-slate-600">We sent the OTP to your email using Nodemailer.</p>
+	                    <p className="text-sm text-slate-600">We sent the OTP to your email. Please check your inbox or spam folder.</p>
 	                  </div>
 	                )}
                 <div className="grid grid-cols-2 gap-4">
