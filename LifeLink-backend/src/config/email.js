@@ -7,6 +7,7 @@ const fromAddress = (process.env.EMAIL_FROM || emailUser || 'noreply@lifelink.lo
 const buildTransporter = (port) => nodemailer.createTransport({
   host: process.env.EMAIL_HOST || 'smtp.gmail.com',
   port,
+  family: 4,
   secure: process.env.EMAIL_SECURE
     ? String(process.env.EMAIL_SECURE).toLowerCase() === 'true'
     : port === 465,
