@@ -1,23 +1,32 @@
 import nodemailer from 'nodemailer';
 
-const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@lifelink.local';
+const emailUser = (process.env.EMAIL_USER || '').trim();
+const emailPass = (process.env.EMAIL_PASS || '').replace(/\s+/g, '').trim();
+const fromAddress = (process.env.EMAIL_FROM || emailUser || 'noreply@lifelink.local').trim();
 
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false,
+const buildTransporter = (port) => nodemailer.createTransport({
+  host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+  port,
+  secure: process.env.EMAIL_SECURE
+    ? String(process.env.EMAIL_SECURE).toLowerCase() === 'true'
+    : port === 465,
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    user: emailUser,
+    pass: emailPass,
   },
   tls: {
     rejectUnauthorized: false,
   },
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
+  connectionTimeout: Number(process.env.EMAIL_CONNECTION_TIMEOUT || 15000),
+  greetingTimeout: Number(process.env.EMAIL_GREETING_TIMEOUT || 15000),
 });
 
-if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+const primaryPort = Number(process.env.EMAIL_PORT || 465);
+const fallbackPort = primaryPort === 465 ? 587 : 465;
+const transporter = buildTransporter(primaryPort);
+const fallbackTransports = primaryPort === fallbackPort ? [] : [buildTransporter(fallbackPort)];
+
+if (!emailUser || !emailPass) {
   console.error('[email] EMAIL_USER or EMAIL_PASS is missing. Gmail transporter may fail in production.');
 }
 
@@ -44,23 +53,36 @@ const renderTemplate = ({ title, intro, otpLabel, otp, footer }) => ({
 
 export const sendMail = async ({ to, subject, ...content }) => {
   const mailOptions = {
-    from: `"LifeLink" <${process.env.EMAIL_USER || fromAddress}>`,
+    from: `"LifeLink" <${fromAddress}>`,
     to,
     subject,
     ...content,
   };
 
-  try {
-    console.log('📡 USING PORT:', 587);
-    console.log('[email] Sending email:', {
-      to: mailOptions.to,
-      subject: mailOptions.subject,
-      from: mailOptions.from,
-    });
+  const transports = [transporter, ...fallbackTransports];
 
-    const result = await transporter.sendMail(mailOptions);
-    console.log('✅ EMAIL SENT SUCCESSFULLY:', result?.response || result);
-    return result;
+  try {
+    for (const currentTransport of transports) {
+      const currentPort = Number(currentTransport?.options?.port || primaryPort);
+      console.log('📡 USING PORT:', currentPort);
+      console.log('[email] Sending email:', {
+        to: mailOptions.to,
+        subject: mailOptions.subject,
+        from: mailOptions.from,
+      });
+
+      try {
+        const result = await currentTransport.sendMail(mailOptions);
+        console.log('✅ EMAIL SENT SUCCESSFULLY:', result?.response || result);
+        return result;
+      } catch (error) {
+        const retryable = error?.code === 'ETIMEDOUT' || error?.code === 'ESOCKET' || error?.code === 'ECONNECTION';
+        if (!retryable || currentTransport === transports[transports.length - 1]) {
+          throw error;
+        }
+        console.warn(`[email] Transport failed on port ${currentPort}, retrying with fallback port.`);
+      }
+    }
   } catch (error) {
     console.error('❌ EMAIL SEND ERROR:', error);
     throw error;
