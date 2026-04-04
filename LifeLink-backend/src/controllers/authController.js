@@ -950,7 +950,65 @@ export const login = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Role selection is required' });
     }
 
-    const user = await User.findOne({ email: normalizeEmail(email) }).select('+password');
+    const normalizedEmail = normalizeEmail(email);
+    const normalizedRole = String(role).toLowerCase();
+
+    if (normalizedRole === 'admin') {
+      const admin = await Admin.findOne({ email: normalizedEmail });
+      if (!admin) {
+        return res.status(401).json({ success: false, message: 'Invalid email or password' });
+      }
+
+      if (!admin.is_active) {
+        return res.status(403).json({
+          success: false,
+          message: 'Your admin account is inactive. Please contact support.',
+        });
+      }
+
+      if (String(admin.password || '') !== String(password || '')) {
+        return res.status(401).json({ success: false, message: 'Invalid email or password' });
+      }
+
+      let user = await User.findById(admin.userId).select('-password');
+      if (!user) {
+        user = await User.findOne({ email: normalizedEmail }).select('-password');
+      }
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'Admin user record not found.',
+        });
+      }
+
+      if (String(user.role || '').toLowerCase() !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Invalid role selected for this user.',
+        });
+      }
+
+      const token = generateToken(user._id);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Login successful',
+        data: {
+          user: {
+            id: user._id,
+            name: user.name,
+            role: user.role,
+            email: user.email,
+            phone: user.phone,
+            isEmailVerified: user.isEmailVerified,
+          },
+          token,
+        },
+      });
+    }
+
+    const user = await User.findOne({ email: normalizedEmail }).select('+password');
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
@@ -980,7 +1038,7 @@ export const login = async (req, res) => {
       await user.save();
     }
 
-    if (user.role.toLowerCase() !== String(role).toLowerCase()) {
+    if (user.role.toLowerCase() !== normalizedRole) {
       return res.status(403).json({
         success: false,
         message: 'Invalid role selected for this user.',
