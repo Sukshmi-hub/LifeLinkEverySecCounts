@@ -1,9 +1,27 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
-const resendApiKey = (process.env.RESEND_API_KEY || '').trim();
-const resend = resendApiKey ? new Resend(resendApiKey) : null;
-const fromAddress = (process.env.RESEND_FROM || '').trim();
-const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+const emailUser = (process.env.BREVO_USER || '').trim();
+const emailPass = (process.env.BREVO_SMTP_KEY || '').trim();
+const fromAddress = '"LifeLink" <sukshmipandey67@gmail.com>';
+
+const transporter = nodemailer.createTransport({
+  host: 'smtp-relay.brevo.com',
+  port: 587,
+  secure: false,
+  auth: {
+    user: emailUser,
+    pass: emailPass,
+  },
+  tls: {
+    rejectUnauthorized: false,
+  },
+  connectionTimeout: Number(process.env.EMAIL_CONNECTION_TIMEOUT || 15000),
+  greetingTimeout: Number(process.env.EMAIL_GREETING_TIMEOUT || 15000),
+});
+
+if (!emailUser || !emailPass) {
+  console.error('[email] BREVO_USER or BREVO_SMTP_KEY is missing.');
+}
 
 const renderTemplate = ({ title, intro, otpLabel, otp, footer }) => ({
   html: `
@@ -27,39 +45,27 @@ const renderTemplate = ({ title, intro, otpLabel, otp, footer }) => ({
 });
 
 export const sendMail = async ({ to, subject, html, text }) => {
-  if (!resend) {
-    throw new Error('RESEND_API_KEY is not configured.');
-  }
-
-  if (!fromAddress) {
-    throw new Error('RESEND_FROM is not configured. Use a verified sender like "LifeLink <no-reply@yourdomain.com>".');
-  }
-
-  if (isProduction && fromAddress.includes('onboarding@resend.dev')) {
-    throw new Error('RESEND_FROM must be a verified domain sender in production. onboarding@resend.dev is only for test delivery.');
-  }
-
-  console.log('[email] Sending email via Resend:', {
+  console.log('[email] Sending email via Brevo:', {
     to,
     subject,
     from: fromAddress,
   });
 
-  const { data, error } = await resend.emails.send({
-    from: fromAddress,
-    to,
-    subject,
-    html,
-    text,
-  });
+  try {
+    const result = await transporter.sendMail({
+      from: fromAddress,
+      to,
+      subject,
+      html,
+      text,
+    });
 
-  if (error) {
+    console.log('[email] EMAIL SENT SUCCESSFULLY:', result?.response || result);
+    return result;
+  } catch (error) {
     console.error('[email] EMAIL SEND ERROR:', error);
     throw error;
   }
-
-  console.log('[email] EMAIL SENT SUCCESSFULLY:', data);
-  return data;
 };
 
 export const sendVerificationEmail = async (email, otp) => {
