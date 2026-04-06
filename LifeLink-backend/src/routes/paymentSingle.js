@@ -87,7 +87,17 @@ router.post('/create-order', async (req, res) => {
       // don't block returning order to frontend
     }
 
-    return res.json({ success: true, data: { id: order.id, amount: order.amount } })
+    return res.json({
+      success: true,
+      data: {
+        id: order.id,
+        orderId: order.id,
+        amount: order.amount,
+        currency: order.currency || 'INR',
+        key_id,
+        key_mode: String(key_id).startsWith('rzp_test_') ? 'test' : 'live'
+      }
+    })
   } catch (err) {
     console.error('create-order handler error', err)
     return res.status(500).json({ success: false, message: 'Internal Server Error' })

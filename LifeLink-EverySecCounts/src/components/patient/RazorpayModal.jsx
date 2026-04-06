@@ -14,6 +14,32 @@ import { CheckCircle, Loader2, CreditCard, Smartphone, Building2 } from 'lucide-
 import { cn } from '@/lib/utils';
 import { serverUrl } from '@/lib/serverConfig';
 
+let razorpayScriptPromise = null;
+
+const loadRazorpayScript = () => {
+  if (typeof window !== 'undefined' && window.Razorpay) return Promise.resolve(true)
+  if (razorpayScriptPromise) return razorpayScriptPromise
+
+  razorpayScriptPromise = new Promise((resolve, reject) => {
+    const existingScript = document.querySelector('script[data-razorpay-checkout="true"]')
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve(true), { once: true })
+      existingScript.addEventListener('error', () => reject(new Error('Razorpay SDK failed to load')), { once: true })
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    script.async = true
+    script.dataset.razorpayCheckout = 'true'
+    script.onload = () => resolve(true)
+    script.onerror = () => reject(new Error('Razorpay SDK failed to load'))
+    document.body.appendChild(script)
+  })
+
+  return razorpayScriptPromise
+}
+
 const RazorpayModal = ({ 
   isOpen, 
   onClose, 
@@ -31,16 +57,6 @@ const RazorpayModal = ({
   const [isSuccess, setIsSuccess] = useState(false);
   const [receipt, setReceipt] = useState(null);
   const razorpayRef = useRef(null);
-
-  // Load external Razorpay checkout script
-  const loadRazorpayScript = () => new Promise((resolve, reject) => {
-    if (window.Razorpay) return resolve(true)
-    const script = document.createElement('script')
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
-    script.onload = () => resolve(true)
-    script.onerror = () => reject(new Error('Razorpay SDK failed to load'))
-    document.body.appendChild(script)
-  })
 
   // Callback to handle payment verification
   const handlePaymentVerification = useCallback(async (response) => {
@@ -85,6 +101,7 @@ const RazorpayModal = ({
 
   const handlePayment = async () => {
     // Create order on backend, then open Razorpay Checkout (UPI-only)
+    if (isProcessing) return
     setIsProcessing(true)
     try {
       if (!hospitalId) throw new Error('Hospital information missing')
@@ -132,17 +149,34 @@ const RazorpayModal = ({
           email: user.email || '',
           contact: user.phone || ''
         },
-        // Explicitly surface UPI in Checkout so test UPI IDs can be used
-        method: { upi: true },
+        // Explicitly enable the major payment methods. UPI is surfaced both by method flags and display config.
+        method: {
+          upi: true,
+          card: true,
+          netbanking: true,
+          wallet: true
+        },
         config: {
           display: {
             blocks: {
               upi: {
                 name: 'Pay via UPI',
                 instruments: [{ method: 'upi' }]
+              },
+              cards: {
+                name: 'Pay via Card',
+                instruments: [{ method: 'card' }]
+              },
+              netbanking: {
+                name: 'Pay via Netbanking',
+                instruments: [{ method: 'netbanking' }]
+              },
+              wallet: {
+                name: 'Pay via Wallet',
+                instruments: [{ method: 'wallet' }]
               }
             },
-            sequence: ['block.upi'],
+            sequence: ['block.upi', 'block.cards', 'block.netbanking', 'block.wallet'],
             preferences: {
               show_default_blocks: true
             }
