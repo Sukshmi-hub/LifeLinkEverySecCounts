@@ -74,6 +74,44 @@ const AADHAAR_FRAUD_TERMS = [
 const FILE_HINTS = ['ration', 'nfsa', 'food', 'card']
 const AADHAAR_NUMBER_REGEX = /\b\d{4}\s?\d{4}\s?\d{4}\b/
 
+const BLOOD_MEDICAL_TERMS = [
+  'hemoglobin',
+  'hb',
+  'rbc',
+  'wbc',
+  'platelet',
+  'cbc',
+  'complete blood count',
+  'hematology',
+  'blood test',
+  'report',
+  'lab',
+]
+
+const BLOOD_LAB_TERMS = [
+  'laboratory',
+  'diagnostics',
+  'pathology',
+  'clinic',
+  'hospital laboratory',
+  'medical laboratory',
+]
+
+const BLOOD_FRAUD_TERMS = [
+  'aadhaar',
+  'aadhar',
+  'pan card',
+  'passport',
+  'ration card',
+  'invoice',
+  'bill',
+  'selfie',
+  'profile photo',
+]
+
+const BLOOD_NUMERIC_REGEX = /\d+(?:\.\d+)?\s?(g\/dl|mg\/dl|%)/gi
+const BLOOD_TABLE_ROW_REGEX = /(hemoglobin|hb|rbc|wbc|platelet|cbc)\s*[:\-]\s*\d+(?:\.\d+)?/gi
+
 function normalizeText(text = '') {
   return String(text)
     .toLowerCase()
@@ -633,10 +671,210 @@ async function validateAadhaarFile(file) {
   }
 }
 
+function classifyBloodReportText(text) {
+  const normalized = normalizeText(text)
+  const medical = countMatches(normalized, BLOOD_MEDICAL_TERMS)
+  const lab = countMatches(normalized, BLOOD_LAB_TERMS)
+  const fraud = countMatches(normalized, BLOOD_FRAUD_TERMS)
+  const numericMatches = String(text || '').match(BLOOD_NUMERIC_REGEX) || []
+  const tableMatches = String(text || '').match(BLOOD_TABLE_ROW_REGEX) || []
+  const lineCount = String(text || '').split(/\r?\n/).filter(Boolean).length
+  const length = normalized.length
+
+  if (!length || length < 30) {
+    return {
+      status: 'retry',
+      isValid: false,
+      confidence: 0.05,
+      reason: 'OCR text is too short or unreadable. Please upload a clearer image or searchable PDF.',
+      detectedType: 'unknown',
+      positive: medical,
+      negative: fraud,
+      numericMatches: [],
+      tableMatches: [],
+      labMatches: lab,
+    }
+  }
+
+  if (fraud.count > 0) {
+    return {
+      status: 'invalid',
+      isValid: false,
+      confidence: 0.05,
+      reason: `Text matches other document type keywords: ${fraud.found.slice(0, 3).join(', ')}`,
+      detectedType: 'other_document',
+      positive: medical,
+      negative: fraud,
+      numericMatches,
+      tableMatches,
+      labMatches: lab,
+    }
+  }
+
+  const hasLabContext = lab.count > 0
+  const hasEnoughMedicalTerms = medical.count >= 3
+  const hasEnoughNumericValues = numericMatches.length >= 2
+  const hasTableLikeStructure = tableMatches.length >= 2 || lineCount >= 8
+  const confidence = Math.max(
+    0,
+    Math.min(
+      0.99,
+      (medical.count * 0.18) +
+      (hasLabContext ? 0.18 : 0) +
+      (hasEnoughNumericValues ? 0.22 : 0) +
+      (hasTableLikeStructure ? 0.18 : 0) -
+      (fraud.count * 0.4)
+    )
+  )
+
+  if (hasEnoughMedicalTerms && hasEnoughNumericValues && hasLabContext) {
+    return {
+      status: 'valid',
+      isValid: true,
+      confidence,
+      reason: 'Blood report keywords and lab values detected.',
+      detectedType: 'blood_report',
+      positive: medical,
+      negative: fraud,
+      numericMatches,
+      tableMatches,
+      labMatches: lab,
+    }
+  }
+
+  return {
+    status: 'invalid',
+    isValid: false,
+    confidence,
+    reason: 'Required blood report keywords, lab context, or numeric values were not found.',
+    detectedType: 'unknown',
+    positive: medical,
+    negative: fraud,
+    numericMatches,
+    tableMatches,
+    labMatches: lab,
+  }
+}
+
+async function runOptionalOpenAiBloodCheck(extractedText) {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey || String(process.env.ENABLE_OPENAI_BLOOD_REPORT_CHECK || '').toLowerCase() !== 'true') {
+    return null
+  }
+
+  const model = process.env.OPENAI_BLOOD_REPORT_MODEL || 'gpt-4.1-mini'
+  const payload = {
+    model,
+    input: [
+      {
+        role: 'system',
+        content: [
+          {
+            type: 'input_text',
+            text: 'You validate medical documents. Return only strict JSON with keys is_blood_report, confidence, reason. Answer based only on the extracted text.'
+          }
+        ]
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: `Is this text from a blood test report?\n\nExtracted text:\n${extractedText}\n\nReturn JSON only.`
+          }
+        ]
+      }
+    ],
+    temperature: 0
+  }
+
+  const resp = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!resp.ok) {
+    const detail = await resp.text().catch(() => '')
+    throw new Error(`OpenAI blood validation failed: ${resp.status} ${detail}`)
+  }
+
+  const data = await resp.json()
+  const outputText = extractOpenAiOutputText(data)
+  if (!outputText) return null
+
+  try {
+    const parsed = JSON.parse(outputText)
+    return {
+      is_blood_report: Boolean(parsed.is_blood_report),
+      confidence: Number(parsed.confidence || 0),
+      reason: String(parsed.reason || ''),
+    }
+  } catch (err) {
+    return null
+  }
+}
+
+async function validateBloodReportFile(file) {
+  if (!file) {
+    return {
+      isValid: false,
+      status: 'invalid',
+      reason: 'No file uploaded',
+      confidence: 0,
+      detectedType: 'unknown',
+      extractedText: '',
+      extractedTextPreview: '',
+    }
+  }
+
+  const extractedText = await extractTextFromFile(file)
+  let heuristic = classifyBloodReportText(extractedText)
+  const ai = await runOptionalOpenAiBloodCheck(extractedText).catch(() => null)
+
+  if (ai && typeof ai.is_blood_report === 'boolean') {
+    const aiConfidence = Number(ai.confidence || 0)
+    if (ai.is_blood_report && aiConfidence >= 0.6 && heuristic.status !== 'invalid') {
+      heuristic = {
+        ...heuristic,
+        status: 'valid',
+        isValid: true,
+        confidence: Math.max(heuristic.confidence, aiConfidence),
+        reason: ai.reason || heuristic.reason,
+        aiAnalysis: ai,
+      }
+    } else if (!ai.is_blood_report && aiConfidence >= 0.75) {
+      heuristic = {
+        ...heuristic,
+        status: 'invalid',
+        isValid: false,
+        confidence: Math.max(heuristic.confidence, aiConfidence),
+        reason: ai.reason || 'AI model did not identify this as a blood report.',
+        aiAnalysis: ai,
+      }
+    } else {
+      heuristic = {
+        ...heuristic,
+        aiAnalysis: ai,
+      }
+    }
+  }
+
+  return {
+    ...heuristic,
+    extractedText,
+    extractedTextPreview: previewText(extractedText),
+  }
+}
+
 export {
   ACCEPTED_EXTENSIONS,
   classifyText,
   extractTextFromFile,
+  validateBloodReportFile,
   validateAadhaarFile,
   validateRationCardFile,
 }

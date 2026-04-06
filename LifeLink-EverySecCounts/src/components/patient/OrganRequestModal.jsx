@@ -44,6 +44,9 @@ const OrganRequestModal = ({ isOpen, onClose }) => {
   const [aadhaarValidation, setAadhaarValidation] = useState(null);
   const [aadhaarLoading, setAadhaarLoading] = useState(false);
   const [aadhaarError, setAadhaarError] = useState('');
+  const [bloodReportValidation, setBloodReportValidation] = useState(null);
+  const [bloodReportLoading, setBloodReportLoading] = useState(false);
+  const [bloodReportError, setBloodReportError] = useState('');
   const [additionalDocs, setAdditionalDocs] = useState([]);
 
   // Cleanup object URLs to avoid memory leaks
@@ -72,6 +75,54 @@ const OrganRequestModal = ({ isOpen, onClose }) => {
       preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : '',
     }));
     setter(prev => [...prev, ...newFiles]);
+  };
+
+  const validateBloodReportUpload = async (file) => {
+    setBloodReportLoading(true);
+    setBloodReportError('');
+    setBloodReportValidation(null);
+    try {
+      const form = new FormData();
+      form.append('document', file);
+      const res = await fetch(`${serverUrl}/api/documents/validate-blood-report`, {
+        method: 'POST',
+        body: form,
+      });
+      const json = await res.json().catch(() => ({}));
+      setBloodReportValidation(json);
+      if (!res.ok || !json.isValid) {
+        const message = json.status === 'retry'
+          ? 'OCR failed. Please upload a clearer blood report image or searchable PDF.'
+          : (json.message || 'Invalid blood report document');
+        setBloodReportError(message);
+        toast.error(message);
+        return false;
+      }
+      toast.success('Valid Blood Report ✅');
+      return true;
+    } catch (err) {
+      const message = err?.message || 'Failed to validate blood report';
+      setBloodReportError(message);
+      setBloodReportValidation({ success: false, isValid: false, status: 'retry', message });
+      toast.error(message);
+      return false;
+    } finally {
+      setBloodReportLoading(false);
+    }
+  };
+
+  const handleBloodReportChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (medicalReports[0]?.preview) {
+      URL.revokeObjectURL(medicalReports[0].preview);
+    }
+    const newItem = {
+      file,
+      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : '',
+    };
+    setMedicalReports([newItem]);
+    await validateBloodReportUpload(file);
   };
 
   const validateAadhaarUpload = async (file) => {
@@ -129,7 +180,8 @@ const OrganRequestModal = ({ isOpen, onClose }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!organType) return toast.error('Please select an organ type');
-    if (medicalReports.length === 0) return toast.error('At least one medical report is mandatory');
+    if (medicalReports.length === 0) return toast.error('Blood report is mandatory');
+    if (!bloodReportValidation?.isValid) return toast.error(bloodReportError || 'Please upload a valid blood report');
     if (!prescription || !prescription.file) return toast.error('Prescription is required');
     if (!identityProof || !identityProof.file) return toast.error('Aadhaar Card is required');
     if (!aadhaarValidation?.isValid) return toast.error(aadhaarError || 'Please upload a valid Aadhaar card');
@@ -274,13 +326,34 @@ const OrganRequestModal = ({ isOpen, onClose }) => {
                 <h3 className="text-sm font-semibold flex items-center gap-2"><FileText className="w-4 h-4" /> Required Documents</h3>
                 
                 <MultiFileUploadCard 
-                    label="Medical Reports" 
-                    description="Diagnostic scans and lab results (Required)" 
+                    label="Blood Report" 
+                    description="CBC / hematology lab report (Required)" 
                     files={medicalReports} 
                     required 
-                    onFileChange={e => handleMultipleFileChange(e, setMedicalReports)} 
+                    multiple={false}
+                    onFileChange={handleBloodReportChange} 
                     onRemove={i => removeFile(i, setMedicalReports)} 
                 />
+                <div className="rounded-lg border border-dashed bg-muted/30 p-3 text-sm">
+                  {bloodReportLoading ? (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Validating blood report...
+                    </div>
+                  ) : bloodReportValidation?.isValid ? (
+                    <div className="flex items-center gap-2 text-success">
+                      <CheckCircle className="w-4 h-4" />
+                      <span>Valid Blood Report ✅</span>
+                    </div>
+                  ) : bloodReportValidation && bloodReportValidation.isValid === false ? (
+                    <div className="flex items-center gap-2 text-destructive">
+                      <FileText className="w-4 h-4" />
+                      <span>{bloodReportError || bloodReportValidation.message || 'Invalid Document ❌'}</span>
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground">Upload JPG, PNG, or PDF for blood report validation.</p>
+                  )}
+                </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <SingleFileUploadCard 
@@ -362,7 +435,7 @@ const SingleFileUploadCard = ({ label, icon: Icon, file, onFileChange, onRemove,
   </Card>
 );
 
-const MultiFileUploadCard = ({ label, description, files, onFileChange, onRemove }) => (
+const MultiFileUploadCard = ({ label, description, files, onFileChange, onRemove, multiple = true }) => (
   <Card className="border-dashed">
     <CardContent className="p-4">
       <div className="flex justify-between items-start mb-2">
@@ -381,7 +454,7 @@ const MultiFileUploadCard = ({ label, description, files, onFileChange, onRemove
           </div>
         ))}
       </div>
-      <Input type="file" multiple onChange={onFileChange} className="text-xs h-9 cursor-pointer" />
+      <Input type="file" multiple={multiple} onChange={onFileChange} className="text-xs h-9 cursor-pointer" />
     </CardContent>
   </Card>
 );

@@ -12,7 +12,7 @@ import Donor from '../models/Donor.js'
 import Message from '../models/Message.js'
 import Hospital from '../models/Hospital.js'
 import { createCertificateForDonor } from '../controllers/certificateController.js'
-import { validateAadhaarFile, validateRationCardFile } from '../utils/rationCardValidation.js'
+import { validateAadhaarFile, validateBloodReportFile, validateRationCardFile } from '../utils/rationCardValidation.js'
 const router = express.Router()
 
 // Ensure uploads folder exists
@@ -495,6 +495,11 @@ async function cleanupUploadedFiles(files = {}) {
       if (file?.path) paths.push(file.path)
     }
   }
+  if (files.bloodReports) {
+    for (const file of files.bloodReports) {
+      if (file?.path) paths.push(file.path)
+    }
+  }
   await Promise.all(paths.map(async (filePath) => {
     try {
       await fs.promises.unlink(filePath)
@@ -520,21 +525,23 @@ router.post('/', authenticate, upload.fields([
 
     if (!user) return res.status(401).json({ success: false, message: 'Authentication required' })
     if (!hospital) return res.status(400).json({ success: false, message: 'hospital id required' })
-    if (!req.files?.idProof?.[0]) {
+    if (!req.files?.medicalReports?.length) {
       await cleanupUploadedFiles(req.files || {})
-      return res.status(400).json({ success: false, message: 'Aadhaar card is required' })
+      return res.status(400).json({ success: false, message: 'Blood report is required' })
     }
 
-    const aadhaarValidation = await validateAadhaarFile(req.files.idProof[0])
-    if (!aadhaarValidation.isValid) {
-      await cleanupUploadedFiles(req.files || {})
-      return res.status(400).json({
-        success: false,
-        message: aadhaarValidation.status === 'retry'
-          ? 'OCR failed. Please upload a clearer Aadhaar image or searchable PDF.'
-          : aadhaarValidation.reason || 'Invalid Aadhaar document',
-        validation: aadhaarValidation,
-      })
+    for (const file of req.files.medicalReports) {
+      const bloodValidation = await validateBloodReportFile(file)
+      if (!bloodValidation.isValid) {
+        await cleanupUploadedFiles(req.files || {})
+        return res.status(400).json({
+          success: false,
+          message: bloodValidation.status === 'retry'
+            ? 'OCR failed. Please upload a clearer blood report image or searchable PDF.'
+            : bloodValidation.reason || 'Invalid blood report document',
+          validation: bloodValidation,
+        })
+      }
     }
 
     // Resolve Patient document for this user to store the correct patientId reference
