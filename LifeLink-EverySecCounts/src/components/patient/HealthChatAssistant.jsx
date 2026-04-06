@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Bot, Send, Sparkles, Trash2, Loader2, ShieldAlert, UserCircle2, FileText, AlertTriangle } from 'lucide-react'
+import { Bot, Send, Trash2, Loader2, ShieldAlert, FileText, AlertTriangle, Upload, CheckCircle2, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
 const starterMessages = [
@@ -97,6 +97,12 @@ const buildLocalMedicalReply = (message, severity) => {
   return 'I can explain general health topics in simple terms, but I cannot diagnose or prescribe treatment. For serious symptoms, worsening problems, or anything urgent, please consult a doctor.'
 }
 
+const summarizeOCRText = (text = '') => {
+  const clean = String(text || '').replace(/\s+/g, ' ').trim()
+  if (!clean) return ''
+  return clean.slice(0, 5000)
+}
+
 const TypingDots = () => (
   <div className="flex items-center gap-1 px-4 py-3">
     <span className="h-2 w-2 rounded-full bg-primary animate-bounce [animation-delay:-0.2s]" />
@@ -113,6 +119,9 @@ const HealthChatAssistant = () => {
   const [sessionId, setSessionId] = useState(null)
   const [patientInfo, setPatientInfo] = useState({ age: '', gender: '', bloodGroup: '' })
   const [reportData, setReportData] = useState('')
+  const [reportFileName, setReportFileName] = useState('')
+  const [reportOCRStatus, setReportOCRStatus] = useState('idle')
+  const [reportUploadError, setReportUploadError] = useState('')
   const [reportMeta, setReportMeta] = useState({ values: { hemoglobin: null, wbc: null, platelets: null }, severity: 'Normal', flags: [], summary: 'No report data provided' })
   const bottomRef = useRef(null)
   const messageListRef = useRef(null)
@@ -176,6 +185,47 @@ const HealthChatAssistant = () => {
   useEffect(() => {
     setReportMeta(parseReportSummary(reportData))
   }, [reportData])
+
+  const handleReportUpload = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setReportFileName(file.name)
+    setReportOCRStatus('uploading')
+    setReportUploadError('')
+
+    try {
+      const token = localStorage.getItem('token')
+      const endpoint = `${serverUrl}/api/documents/validate-medical-report`
+      const formData = new FormData()
+      formData.append('document', file)
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: formData,
+      })
+
+      const json = await res.json().catch(() => ({}))
+      console.log('[HealthChat] medical report OCR response', json)
+
+      if (!json?.extractedText && !json?.extractedTextPreview) {
+        throw new Error(json?.message || 'OCR did not return readable text')
+      }
+
+      const extracted = summarizeOCRText(json.extractedText || json.extractedTextPreview)
+      setReportData(extracted)
+      setReportOCRStatus(json.isValid ? 'valid' : 'review')
+      toast.success(json.isValid ? 'Report text detected and added to context' : 'Text extracted from report. Review the summary before sending.')
+    } catch (error) {
+      console.error('[HealthChat] report OCR failed', error)
+      setReportOCRStatus('error')
+      setReportUploadError(error?.message || 'Could not read the uploaded report')
+      toast.error(error?.message || 'Could not read the uploaded report')
+    } finally {
+      event.target.value = ''
+    }
+  }
 
   const appendSuggestion = (text) => {
     setInput(text)
@@ -315,7 +365,7 @@ const HealthChatAssistant = () => {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col gap-4">
       <Card className="border-0 shadow-sm bg-gradient-to-br from-red-50 via-white to-rose-50">
         <CardContent className="p-5 md:p-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -362,129 +412,170 @@ const HealthChatAssistant = () => {
         </CardContent>
       </Card>
 
-      <Card className="mt-4 border shadow-sm">
-        <CardContent className="p-4 md:p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <FileText className="w-4 h-4 text-primary" />
-            <h2 className="font-semibold">Medical Context</h2>
-          </div>
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Age</label>
-              <Input
-                value={patientInfo.age}
-                onChange={(e) => setPatientInfo((prev) => ({ ...prev, age: e.target.value }))}
-                placeholder="Age"
-                inputMode="numeric"
-              />
+      <div className="flex-1 min-h-0 grid gap-4 xl:grid-cols-2">
+        <Card className="border shadow-sm h-full">
+          <CardContent className="p-4 md:p-5 h-full flex flex-col gap-4">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-primary" />
+              <h2 className="font-semibold">Medical Context</h2>
             </div>
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Gender</label>
-              <Input
-                value={patientInfo.gender}
-                onChange={(e) => setPatientInfo((prev) => ({ ...prev, gender: e.target.value }))}
-                placeholder="Gender"
-              />
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">Age</label>
+                <Input
+                  value={patientInfo.age}
+                  onChange={(e) => setPatientInfo((prev) => ({ ...prev, age: e.target.value }))}
+                  placeholder="Age"
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">Gender</label>
+                <Input
+                  value={patientInfo.gender}
+                  onChange={(e) => setPatientInfo((prev) => ({ ...prev, gender: e.target.value }))}
+                  placeholder="Gender"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">Blood Group</label>
+                <Input
+                  value={patientInfo.bloodGroup}
+                  onChange={(e) => setPatientInfo((prev) => ({ ...prev, bloodGroup: e.target.value }))}
+                  placeholder="e.g. O+"
+                />
+              </div>
             </div>
+
             <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Blood Group</label>
-              <Input
-                value={patientInfo.bloodGroup}
-                onChange={(e) => setPatientInfo((prev) => ({ ...prev, bloodGroup: e.target.value }))}
-                placeholder="e.g. O+"
-              />
-            </div>
-          </div>
-
-          <div className="mt-4 space-y-2">
-            <label className="text-xs font-medium text-muted-foreground">Report Data or OCR Summary</label>
-            <Textarea
-              value={reportData}
-              onChange={(e) => setReportData(e.target.value)}
-              placeholder={`Paste key report values here, for example:\nHemoglobin: 8.5\nWBC: 12000\nPlatelets: 200000`}
-              className="min-h-[120px] resize-none rounded-2xl border-2 border-border focus-visible:ring-0 focus-visible:border-primary"
-            />
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Badge variant={reportMeta.severity === 'Critical' ? 'destructive' : reportMeta.severity === 'High' ? 'secondary' : 'outline'}>Severity: {reportMeta.severity}</Badge>
-            {reportMeta.flags.length > 0 ? (
-              reportMeta.flags.map((flag) => (
-                <Badge key={flag.label} variant="outline" className="gap-1">
-                  <AlertTriangle className="w-3 h-3" />
-                  {flag.label}
-                </Badge>
-              ))
-            ) : (
-              <Badge variant="outline">No obvious high-risk values</Badge>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="mt-4 flex-1 min-h-0 rounded-3xl border bg-background shadow-sm overflow-hidden flex flex-col">
-        <div ref={messageListRef} className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 space-y-4">
-          {hydrating ? (
-            <div className="flex justify-center py-10 text-sm text-muted-foreground">Loading your conversation...</div>
-          ) : (
-            messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.role === 'assistant' ? 'justify-start' : 'justify-end'}`}
-              >
-                <div
-                  className={`max-w-[90%] md:max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${
-                    message.role === 'assistant'
-                      ? 'bg-muted text-foreground rounded-bl-md'
-                      : 'bg-primary text-primary-foreground rounded-br-md'
-                  }`}
-                >
-                  <div className="whitespace-pre-wrap">{message.content}</div>
+              <label className="text-xs font-medium text-muted-foreground">Upload Report for Auto OCR</label>
+              <div className="rounded-2xl border border-dashed border-border bg-white/70 p-4">
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                      <Upload className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">PDF, JPG, or PNG report</p>
+                      <p className="text-xs text-muted-foreground">We will extract the text automatically and fill the context box.</p>
+                    </div>
+                  </div>
+                  <Input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleReportUpload} className="cursor-pointer" />
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    {reportOCRStatus === 'uploading' && (
+                      <Badge variant="outline" className="gap-1"><Loader2 className="w-3 h-3 animate-spin" />Reading report...</Badge>
+                    )}
+                    {reportOCRStatus === 'valid' && (
+                      <Badge variant="outline" className="gap-1 text-green-700"><CheckCircle2 className="w-3 h-3" />Report text detected</Badge>
+                    )}
+                    {reportOCRStatus === 'review' && (
+                      <Badge variant="outline" className="gap-1"><AlertTriangle className="w-3 h-3" />Text extracted</Badge>
+                    )}
+                    {reportOCRStatus === 'error' && (
+                      <Badge variant="destructive" className="gap-1"><XCircle className="w-3 h-3" />OCR failed</Badge>
+                    )}
+                    {reportFileName ? <span className="text-muted-foreground truncate">{reportFileName}</span> : null}
+                  </div>
+                  {reportUploadError ? (
+                    <p className="text-xs text-destructive">{reportUploadError}</p>
+                  ) : null}
                 </div>
               </div>
-            ))
-          )}
+            </div>
 
-          {loading && (
-            <div className="flex justify-start">
-              <div className="rounded-2xl bg-muted text-foreground shadow-sm rounded-bl-md">
-                <TypingDots />
+            <div className="flex-1 min-h-0 space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">Report Data or OCR Summary</label>
+              <Textarea
+                value={reportData}
+                onChange={(e) => setReportData(e.target.value)}
+                placeholder={`Paste key report values here, for example:\nHemoglobin: 8.5\nWBC: 12000\nPlatelets: 200000`}
+                className="min-h-[260px] h-full resize-none rounded-2xl border-2 border-border focus-visible:ring-0 focus-visible:border-primary"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={reportMeta.severity === 'Critical' ? 'destructive' : reportMeta.severity === 'High' ? 'secondary' : 'outline'}>Severity: {reportMeta.severity}</Badge>
+              {reportMeta.flags.length > 0 ? (
+                reportMeta.flags.map((flag) => (
+                  <Badge key={flag.label} variant="outline" className="gap-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    {flag.label}
+                  </Badge>
+                ))
+              ) : (
+                <Badge variant="outline">No obvious high-risk values</Badge>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border shadow-sm h-full flex flex-col min-h-0">
+          <CardContent className="p-0 h-full flex flex-col min-h-0">
+            <div ref={messageListRef} className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 space-y-4">
+              {hydrating ? (
+                <div className="flex justify-center py-10 text-sm text-muted-foreground">Loading your conversation...</div>
+              ) : (
+                messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`flex ${message.role === 'assistant' ? 'justify-start' : 'justify-end'}`}
+                  >
+                    <div
+                      className={`max-w-[90%] md:max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${
+                        message.role === 'assistant'
+                          ? 'bg-muted text-foreground rounded-bl-md'
+                          : 'bg-primary text-primary-foreground rounded-br-md'
+                      }`}
+                    >
+                      <div className="whitespace-pre-wrap">{message.content}</div>
+                    </div>
+                  </div>
+                ))
+              )}
+
+              {loading && (
+                <div className="flex justify-start">
+                  <div className="rounded-2xl bg-muted text-foreground shadow-sm rounded-bl-md">
+                    <TypingDots />
+                  </div>
+                </div>
+              )}
+              <div ref={bottomRef} className="h-px w-full" />
+            </div>
+
+            <div className="border-t bg-white p-4 md:p-5">
+              <div className="max-w-5xl mx-auto">
+                <div className="flex flex-col gap-3 md:flex-row">
+                  <Textarea
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder="Ask about symptoms, lab values, surgery prep, medications, or general health guidance..."
+                    className="min-h-[96px] resize-none rounded-2xl border-2 border-border focus-visible:ring-0 focus-visible:border-primary"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        submitMessage()
+                      }
+                    }}
+                  />
+                  <Button
+                    onClick={() => submitMessage()}
+                    disabled={!canSend}
+                    type="button"
+                    className="md:h-auto md:min-h-[96px] md:px-6 gap-2 rounded-2xl"
+                  >
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    Send
+                  </Button>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  This assistant provides general information only. For emergencies or worsening symptoms, contact a doctor or emergency services immediately.
+                </p>
               </div>
             </div>
-          )}
-          <div ref={bottomRef} className="h-px w-full" />
-        </div>
-
-        <div className="border-t bg-white p-4 md:p-5">
-          <div className="max-w-5xl mx-auto">
-            <div className="flex flex-col gap-3 md:flex-row">
-              <Textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask about symptoms, lab values, surgery prep, medications, or general health guidance..."
-                className="min-h-[96px] resize-none rounded-2xl border-2 border-border focus-visible:ring-0 focus-visible:border-primary"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    submitMessage()
-                  }
-                }}
-              />
-              <Button
-                onClick={() => submitMessage()}
-                disabled={!canSend}
-                type="button"
-                className="md:h-auto md:min-h-[96px] md:px-6 gap-2 rounded-2xl"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                Send
-              </Button>
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              This assistant provides general information only. For emergencies or worsening symptoms, contact a doctor or emergency services immediately.
-            </p>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
