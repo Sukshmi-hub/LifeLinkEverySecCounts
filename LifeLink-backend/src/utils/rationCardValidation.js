@@ -132,6 +132,74 @@ const BLOOD_FRAUD_TERMS = [
 const BLOOD_NUMERIC_REGEX = /\d+(?:\.\d+)?\s?(g\/dl|mg\/dl|%)/gi
 const BLOOD_TABLE_ROW_REGEX = /(hemoglobin|hb|rbc|wbc|platelet|cbc)\s*[:\-]\s*\d+(?:\.\d+)?/gi
 
+const MEDICAL_CORE_TERMS = [
+  'medical report',
+  'patient',
+  'diagnosis',
+  'treatment',
+  'clinical',
+  'hospital',
+  'doctor',
+  'physician',
+  'admission',
+  'laboratory',
+  'findings',
+  'discharge',
+  'summary',
+  'case sheet',
+]
+
+const MEDICAL_PATIENT_TERMS = [
+  'patient name',
+  'name',
+  'age',
+  'gender',
+  'blood group',
+  'address',
+]
+
+const MEDICAL_DIAGNOSIS_TERMS = [
+  'diagnosis',
+  'symptoms',
+  'condition',
+  'clinical findings',
+  'provisional diagnosis',
+  'final diagnosis',
+]
+
+const MEDICAL_TREATMENT_TERMS = [
+  'treatment plan',
+  'medication',
+  'therapy',
+  'procedure',
+  'prescribed',
+  'advised',
+]
+
+const MEDICAL_AUTH_TERMS = [
+  'doctor',
+  'physician',
+  'signature',
+  'date',
+  'registration',
+  'reg no',
+  'registration number',
+  'medical officer',
+]
+
+const MEDICAL_FRAUD_TERMS = [
+  'aadhaar',
+  'aadhar',
+  'pan card',
+  'ration card',
+  'fitness certificate',
+  'invoice',
+  'bill',
+  'passport',
+  'selfie',
+  'profile photo',
+]
+
 const FITNESS_CORE_TERMS = [
   'fitness certificate',
   'medically fit',
@@ -844,6 +912,222 @@ function classifyBloodReportText(text) {
   }
 }
 
+function classifyMedicalReportText(text) {
+  const normalized = normalizeText(text)
+  const core = countMatches(normalized, MEDICAL_CORE_TERMS)
+  const patient = countMatches(normalized, MEDICAL_PATIENT_TERMS)
+  const diagnosis = countMatches(normalized, MEDICAL_DIAGNOSIS_TERMS)
+  const treatment = countMatches(normalized, MEDICAL_TREATMENT_TERMS)
+  const auth = countMatches(normalized, MEDICAL_AUTH_TERMS)
+  const fraud = countMatches(normalized, MEDICAL_FRAUD_TERMS)
+  const hasSections =
+    normalized.includes('patient information') ||
+    normalized.includes('diagnosis') ||
+    normalized.includes('treatment') ||
+    normalized.includes('clinical findings') ||
+    normalized.includes('medical report') ||
+    normalized.includes('discharge summary')
+  const lineCount = String(text || '').split(/\r?\n/).filter(Boolean).length
+  const length = normalized.length
+
+  if (!length || length < 25) {
+    return {
+      status: 'retry',
+      isValid: false,
+      confidence: 0.05,
+      reason: 'OCR text is too short or unreadable. Please upload a clearer medical report image or searchable PDF.',
+      detectedType: 'unknown',
+      positive: core,
+      patient,
+      diagnosis,
+      treatment,
+      auth,
+      negative: fraud,
+    }
+  }
+
+  if (fraud.count > 0) {
+    return {
+      status: 'invalid',
+      isValid: false,
+      confidence: 0.05,
+      reason: `Text matches other document type keywords: ${fraud.found.slice(0, 3).join(', ')}`,
+      detectedType: 'other_document',
+      positive: core,
+      patient,
+      diagnosis,
+      treatment,
+      auth,
+      negative: fraud,
+    }
+  }
+
+  const hasEnoughCore = core.count >= 3
+  const hasEnoughPatient = patient.count >= 2
+  const hasDiagnosis = diagnosis.count >= 1
+  const hasTreatment = treatment.count >= 1
+  const hasAuth = auth.count >= 1
+  const hasStructure = hasSections || lineCount >= 10
+
+  const confidence = Math.max(
+    0,
+    Math.min(
+      0.99,
+      (core.count * 0.16) +
+      (patient.count * 0.14) +
+      (diagnosis.count * 0.16) +
+      (treatment.count * 0.16) +
+      (auth.count * 0.12) +
+      (hasStructure ? 0.12 : 0) -
+      (fraud.count * 0.45)
+    )
+  )
+
+  if (hasEnoughCore && hasEnoughPatient && hasDiagnosis && hasTreatment && hasAuth) {
+    return {
+      status: 'valid',
+      isValid: true,
+      confidence,
+      reason: 'Medical report keywords and structure detected.',
+      detectedType: 'medical_report',
+      positive: core,
+      patient,
+      diagnosis,
+      treatment,
+      auth,
+      negative: fraud,
+    }
+  }
+
+  return {
+    status: 'invalid',
+    isValid: false,
+    confidence,
+    reason: 'Required medical report keywords, patient details, diagnosis, treatment, or doctor authentication were not found.',
+    detectedType: 'unknown',
+    positive: core,
+    patient,
+    diagnosis,
+    treatment,
+    auth,
+    negative: fraud,
+  }
+}
+
+async function runOptionalOpenAiMedicalCheck(extractedText) {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey || String(process.env.ENABLE_OPENAI_MEDICAL_REPORT_CHECK || '').toLowerCase() !== 'true') {
+    return null
+  }
+
+  const model = process.env.OPENAI_MEDICAL_REPORT_MODEL || 'gpt-4.1-mini'
+  const payload = {
+    model,
+    input: [
+      {
+        role: 'system',
+        content: [
+          {
+            type: 'input_text',
+            text: 'You validate medical reports. Return only strict JSON with keys is_medical_report, confidence, reason. Answer based only on the extracted text.'
+          }
+        ]
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: `Is this text from a medical report document?\n\nExtracted text:\n${extractedText}\n\nReturn JSON only.`
+          }
+        ]
+      }
+    ],
+    temperature: 0
+  }
+
+  const resp = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!resp.ok) {
+    const detail = await resp.text().catch(() => '')
+    throw new Error(`OpenAI medical validation failed: ${resp.status} ${detail}`)
+  }
+
+  const data = await resp.json()
+  const outputText = extractOpenAiOutputText(data)
+  if (!outputText) return null
+
+  try {
+    const parsed = JSON.parse(outputText)
+    return {
+      is_medical_report: Boolean(parsed.is_medical_report),
+      confidence: Number(parsed.confidence || 0),
+      reason: String(parsed.reason || ''),
+    }
+  } catch (err) {
+    return null
+  }
+}
+
+async function validateMedicalReportFile(file) {
+  if (!file) {
+    return {
+      isValid: false,
+      status: 'invalid',
+      reason: 'No file uploaded',
+      confidence: 0,
+      detectedType: 'unknown',
+      extractedText: '',
+      extractedTextPreview: '',
+    }
+  }
+
+  const extractedText = await extractTextFromFile(file)
+  let heuristic = classifyMedicalReportText(extractedText)
+  const ai = await runOptionalOpenAiMedicalCheck(extractedText).catch(() => null)
+
+  if (ai && typeof ai.is_medical_report === 'boolean') {
+    const aiConfidence = Number(ai.confidence || 0)
+    if (ai.is_medical_report && aiConfidence >= 0.6 && heuristic.status !== 'invalid') {
+      heuristic = {
+        ...heuristic,
+        status: 'valid',
+        isValid: true,
+        confidence: Math.max(heuristic.confidence, aiConfidence),
+        reason: ai.reason || heuristic.reason,
+        aiAnalysis: ai,
+      }
+    } else if (!ai.is_medical_report && aiConfidence >= 0.75) {
+      heuristic = {
+        ...heuristic,
+        status: 'invalid',
+        isValid: false,
+        confidence: Math.max(heuristic.confidence, aiConfidence),
+        reason: ai.reason || 'AI model did not identify this as a medical report.',
+        aiAnalysis: ai,
+      }
+    } else {
+      heuristic = {
+        ...heuristic,
+        aiAnalysis: ai,
+      }
+    }
+  }
+
+  return {
+    ...heuristic,
+    extractedText,
+    extractedTextPreview: previewText(extractedText),
+  }
+}
+
 async function runOptionalOpenAiBloodCheck(extractedText) {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey || String(process.env.ENABLE_OPENAI_BLOOD_REPORT_CHECK || '').toLowerCase() !== 'true') {
@@ -1173,6 +1457,7 @@ export {
   ACCEPTED_EXTENSIONS,
   classifyText,
   extractTextFromFile,
+  validateMedicalReportFile,
   validateFitnessCertificateFile,
   validateBloodReportFile,
   validateAadhaarFile,

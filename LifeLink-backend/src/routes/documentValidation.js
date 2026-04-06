@@ -1,6 +1,6 @@
 import express from 'express'
 import multer from 'multer'
-import { validateAadhaarFile, validateBloodReportFile, validateFitnessCertificateFile, validateRationCardFile } from '../utils/rationCardValidation.js'
+import { validateAadhaarFile, validateBloodReportFile, validateFitnessCertificateFile, validateMedicalReportFile, validateRationCardFile } from '../utils/rationCardValidation.js'
 
 const router = express.Router()
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
@@ -122,6 +122,38 @@ router.post('/validate-fitness-certificate', upload.single('document'), async (r
     })
   } catch (err) {
     console.error('validate-fitness-certificate error:', err)
+    const message = err && err.message ? err.message : 'Failed to validate document'
+    const retry = /ocr|read|parse|tesseract|pdf/i.test(message)
+    return res.status(400).json({
+      success: false,
+      isValid: false,
+      status: retry ? 'retry' : 'invalid',
+      message: retry ? 'OCR failed. Please upload a clearer image or searchable PDF.' : message,
+    })
+  }
+})
+
+router.post('/validate-medical-report', upload.single('document'), async (req, res) => {
+  try {
+    const file = req.file
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        isValid: false,
+        status: 'invalid',
+        message: 'Please upload a medical report image or PDF.',
+      })
+    }
+
+    const result = await validateMedicalReportFile(file)
+
+    return res.status(result.isValid ? 200 : 400).json({
+      success: result.isValid,
+      ...result,
+      message: result.reason,
+    })
+  } catch (err) {
+    console.error('validate-medical-report error:', err)
     const message = err && err.message ? err.message : 'Failed to validate document'
     const retry = /ocr|read|parse|tesseract|pdf/i.test(message)
     return res.status(400).json({

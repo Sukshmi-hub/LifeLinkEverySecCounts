@@ -42,6 +42,9 @@ const FundRequestModal = ({ isOpen, onClose, initialData = null, fixed = false }
   const [hospitalChargesFee, setHospitalChargesFee] = useState('');
   const [processingFee, setProcessingFee] = useState('');
   const [document, setDocument] = useState(null);
+  const [documentValidation, setDocumentValidation] = useState(null);
+  const [isValidatingDocument, setIsValidatingDocument] = useState(false);
+  const [documentValidationError, setDocumentValidationError] = useState('');
   const [prescription, setPrescription] = useState(null);
   const [rationCard, setRationCard] = useState(null);
   const [rationValidation, setRationValidation] = useState(null);
@@ -53,11 +56,14 @@ const FundRequestModal = ({ isOpen, onClose, initialData = null, fixed = false }
   const [selectedHospital, setSelectedHospital] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const documentValidationSeq = useRef(0);
   const rationValidationSeq = useRef(0);
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       setDocument(e.target.files[0]);
+      setDocumentValidation(null);
+      setDocumentValidationError('');
     }
   };
 
@@ -66,6 +72,65 @@ const FundRequestModal = ({ isOpen, onClose, initialData = null, fixed = false }
       setPrescription(e.target.files[0]);
     }
   }
+
+  const validateMedicalReport = async (file) => {
+    const seq = ++documentValidationSeq.current;
+    setIsValidatingDocument(true);
+    setDocumentValidation(null);
+    setDocumentValidationError('');
+
+    try {
+      const form = new FormData();
+      form.append('document', file);
+
+      const res = await fetch(`${serverUrl}/api/documents/validate-medical-report`, {
+        method: 'POST',
+        body: form,
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (seq !== documentValidationSeq.current) return;
+
+      setDocumentValidation(json);
+      if (!res.ok || json.isValid === false) {
+        const msg = json.status === 'retry'
+          ? 'OCR failed. Please upload a clearer medical report image or searchable PDF.'
+          : (json.message || 'Invalid medical report document');
+        setDocumentValidationError(msg);
+        toast.error(msg);
+        return;
+      }
+
+      setDocumentValidationError('');
+      toast.success('Valid Medical Report ✅');
+    } catch (err) {
+      if (seq !== documentValidationSeq.current) return;
+      const msg = err?.message || 'Failed to validate medical report';
+      setDocumentValidationError(msg);
+      setDocumentValidation({
+        success: false,
+        isValid: false,
+        status: 'retry',
+        message: msg,
+      });
+      toast.error(msg);
+    } finally {
+      if (seq === documentValidationSeq.current) {
+        setIsValidatingDocument(false);
+      }
+    }
+  };
+
+  const handleMedicalReportChange = (e) => {
+    const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+    setDocument(file);
+    setDocumentValidation(null);
+    setDocumentValidationError('');
+
+    if (file) {
+      validateMedicalReport(file);
+    }
+  };
 
   const validateRationCard = async (file) => {
     const seq = ++rationValidationSeq.current;
@@ -219,6 +284,11 @@ const FundRequestModal = ({ isOpen, onClose, initialData = null, fixed = false }
       return;
     }
 
+    if (!documentValidation?.isValid) {
+      toast.error(documentValidationError || 'Please upload a valid medical report before submitting');
+      return;
+    }
+
     if (!rationCard) {
       toast.error('Please upload your ration card for NGO support validation');
       return;
@@ -266,6 +336,8 @@ const FundRequestModal = ({ isOpen, onClose, initialData = null, fixed = false }
       setReason('');
       setDescription('');
       setDocument(null);
+      setDocumentValidation(null);
+      setDocumentValidationError('');
       setPrescription(null);
       setRationCard(null);
       setIsSuccess(false);
@@ -392,7 +464,7 @@ const FundRequestModal = ({ isOpen, onClose, initialData = null, fixed = false }
                   <input
                     type="file"
                     accept=".pdf,.jpg,.jpeg,.png"
-                    onChange={handleFileChange}
+                    onChange={handleMedicalReportChange}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                   />
                   <div className="flex items-center gap-3 p-4 border-2 border-dashed border-border rounded-lg hover:border-primary/50 transition-colors">
@@ -416,6 +488,32 @@ const FundRequestModal = ({ isOpen, onClose, initialData = null, fixed = false }
                       </>
                     )}
                   </div>
+                </div>
+                <div className="mt-2 rounded-lg border border-border bg-muted/30 p-3 min-h-[56px] flex items-center gap-2">
+                  {isValidatingDocument ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                      <span className="text-sm">Validating medical report with OCR...</span>
+                    </>
+                  ) : documentValidation?.isValid ? (
+                    <>
+                      <CheckCircle className="w-4 h-4 text-success" />
+                      <div>
+                        <p className="text-sm font-medium text-success">Valid Medical Report ✅</p>
+                        <p className="text-xs text-muted-foreground">{documentValidation.reason || 'Document passed validation.'}</p>
+                      </div>
+                    </>
+                  ) : documentValidation && documentValidation.isValid === false ? (
+                    <>
+                      <AlertTriangle className="w-4 h-4 text-destructive" />
+                      <div>
+                        <p className="text-sm font-medium text-destructive">Invalid Document ❌</p>
+                        <p className="text-xs text-muted-foreground">{documentValidationError || documentValidation.message || 'Please re-upload a valid medical report.'}</p>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Upload a medical report to validate it before submitting.</p>
+                  )}
                 </div>
               </div>
               
@@ -514,7 +612,7 @@ const FundRequestModal = ({ isOpen, onClose, initialData = null, fixed = false }
                 <Button type="button" variant="outline" onClick={onClose} className="flex-1">
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isSubmitting} className="flex-1">
+                <Button type="submit" disabled={isSubmitting || !documentValidation?.isValid} className="flex-1">
                   {isSubmitting ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />

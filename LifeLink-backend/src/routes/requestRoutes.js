@@ -12,7 +12,7 @@ import Donor from '../models/Donor.js'
 import Message from '../models/Message.js'
 import Hospital from '../models/Hospital.js'
 import { createCertificateForDonor } from '../controllers/certificateController.js'
-import { validateAadhaarFile, validateBloodReportFile, validateFitnessCertificateFile, validateRationCardFile } from '../utils/rationCardValidation.js'
+import { validateAadhaarFile, validateBloodReportFile, validateFitnessCertificateFile, validateMedicalReportFile, validateRationCardFile } from '../utils/rationCardValidation.js'
 const router = express.Router()
 
 // Ensure uploads folder exists
@@ -730,7 +730,7 @@ router.post('/fund', authenticate, upload.fields([
 
     if (!user) return res.status(401).json({ success: false, message: 'Authentication required' })
     if (!amount || amount <= 0) return res.status(400).json({ success: false, message: 'Valid amount required' })
-    if (!req.files?.rationCard?.[0]) {
+  if (!req.files?.rationCard?.[0]) {
       await cleanupUploadedFiles(req.files || {})
       return res.status(400).json({ success: false, message: 'Ration card is required for NGO support applications' })
     }
@@ -743,8 +743,24 @@ router.post('/fund', authenticate, upload.fields([
         message: rationValidation.status === 'retry'
           ? 'OCR failed. Please upload a clearer ration card image or searchable PDF.'
           : rationValidation.reason || 'Invalid ration card document',
-        validation: rationValidation,
-      })
+      validation: rationValidation,
+    })
+    }
+
+    if (req.files.medicalReports?.length) {
+      for (const file of req.files.medicalReports) {
+        const medicalValidation = await validateMedicalReportFile(file)
+        if (!medicalValidation.isValid) {
+          await cleanupUploadedFiles(req.files || {})
+          return res.status(400).json({
+            success: false,
+            message: medicalValidation.status === 'retry'
+              ? 'OCR failed. Please upload a clearer medical report image or searchable PDF.'
+              : medicalValidation.reason || 'Invalid medical report document',
+            validation: medicalValidation,
+          })
+        }
+      }
     }
 
     // Resolve Patient document for this user to store the correct patientId reference
