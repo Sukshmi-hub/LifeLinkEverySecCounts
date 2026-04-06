@@ -1,0 +1,267 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { serverUrl } from '@/lib/serverConfig'
+import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+import { Bot, Send, Sparkles, Trash2, Loader2, ShieldAlert } from 'lucide-react'
+import { toast } from 'sonner'
+
+const starterMessages = [
+  {
+    id: 'welcome',
+    role: 'assistant',
+    content: 'Hi, I am your health assistant. Ask a general health question and I will explain it in simple language. I cannot diagnose or prescribe medicine.',
+    createdAt: new Date().toISOString(),
+  },
+]
+
+const quickQuestions = [
+  'What does low hemoglobin mean?',
+  'What should I do before surgery?',
+  'What are symptoms of anemia?',
+  'When should I see a doctor urgently?',
+]
+
+const normalizeMessages = (messages = []) => messages
+  .filter((m) => m && m.content)
+  .map((m, idx) => ({
+    id: String(m.id || m._id || `${m.role || 'msg'}-${idx}`),
+    role: m.role === 'assistant' ? 'assistant' : 'user',
+    content: String(m.content || ''),
+    createdAt: m.createdAt || new Date().toISOString(),
+  }))
+
+const TypingDots = () => (
+  <div className="flex items-center gap-1 px-4 py-3">
+    <span className="h-2 w-2 rounded-full bg-primary animate-bounce [animation-delay:-0.2s]" />
+    <span className="h-2 w-2 rounded-full bg-primary animate-bounce [animation-delay:-0.1s]" />
+    <span className="h-2 w-2 rounded-full bg-primary animate-bounce" />
+  </div>
+)
+
+const HealthChatAssistant = () => {
+  const [messages, setMessages] = useState(starterMessages)
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [hydrating, setHydrating] = useState(true)
+  const [sessionId, setSessionId] = useState(null)
+  const bottomRef = useRef(null)
+
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const res = await fetch(`${serverUrl}/api/health-chat/history`, {
+          headers: { Authorization: token ? `Bearer ${token}` : '' },
+        })
+        const json = await res.json().catch(() => ({}))
+        if (res.ok && json.success) {
+          setSessionId(json.sessionId || null)
+          const history = normalizeMessages(json.messages)
+          setMessages(history.length ? history : starterMessages)
+        }
+      } catch (err) {
+        // keep starter message
+      } finally {
+        setHydrating(false)
+      }
+    }
+
+    loadHistory()
+  }, [])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, loading])
+
+  const canSend = useMemo(() => Boolean(input.trim()) && !loading, [input, loading])
+
+  const submitMessage = async (text) => {
+    const messageText = String(text || input).trim()
+    if (!messageText || loading) return
+
+    const userMessage = {
+      id: `local-${Date.now()}`,
+      role: 'user',
+      content: messageText,
+      createdAt: new Date().toISOString(),
+    }
+
+    setMessages((prev) => [...prev, userMessage])
+    setInput('')
+    setLoading(true)
+
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`${serverUrl}/api/health-chat/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : '',
+        },
+        body: JSON.stringify({ message: messageText, sessionId }),
+      })
+
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.success) {
+        throw new Error(json.message || 'Something went wrong')
+      }
+
+      setSessionId(json.sessionId || sessionId)
+      const history = normalizeMessages(json.messages)
+      setMessages(history.length ? history : [
+        userMessage,
+        {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: json.reply || 'Something went wrong. Please try again.',
+          createdAt: new Date().toISOString(),
+        },
+      ])
+    } catch (err) {
+      const fallback = {
+        id: `assistant-fallback-${Date.now()}`,
+        role: 'assistant',
+        content: 'Something went wrong. Please try again.',
+        createdAt: new Date().toISOString(),
+      }
+      setMessages((prev) => [...prev, fallback])
+      toast.error(err?.message || 'Something went wrong')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const clearHistory = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      await fetch(`${serverUrl}/api/health-chat/history`, {
+        method: 'DELETE',
+        headers: { Authorization: token ? `Bearer ${token}` : '' },
+      })
+    } catch (err) {
+      // ignore
+    }
+    setSessionId(null)
+    setMessages(starterMessages)
+    setInput('')
+    toast.success('Conversation cleared')
+  }
+
+  return (
+    <div className="h-full flex flex-col">
+      <Card className="border-0 shadow-sm bg-gradient-to-br from-red-50 via-white to-rose-50">
+        <CardContent className="p-5 md:p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center shadow-md">
+                  <Bot className="w-6 h-6" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-foreground">Health Assistant</h1>
+                  <p className="text-sm text-muted-foreground">Simple answers for general health questions.</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <Badge variant="secondary" className="gap-1">
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  Not for diagnosis
+                </Badge>
+                <Badge variant="outline">Consult a doctor for serious symptoms</Badge>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={clearHistory} className="gap-2">
+                <Trash2 className="w-4 h-4" />
+                Clear Chat
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {quickQuestions.map((q) => (
+              <button
+                key={q}
+                type="button"
+                onClick={() => submitMessage(q)}
+                disabled={loading}
+                className="text-left rounded-xl border border-border bg-white/80 px-4 py-3 text-sm text-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors disabled:opacity-60"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="mt-4 flex-1 min-h-0 rounded-3xl border bg-background shadow-sm overflow-hidden flex flex-col">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+          {hydrating ? (
+            <div className="flex justify-center py-10 text-sm text-muted-foreground">Loading your conversation...</div>
+          ) : (
+            messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex ${message.role === 'assistant' ? 'justify-start' : 'justify-end'}`}
+              >
+                <div
+                  className={`max-w-[90%] md:max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${
+                    message.role === 'assistant'
+                      ? 'bg-muted text-foreground rounded-bl-md'
+                      : 'bg-primary text-primary-foreground rounded-br-md'
+                  }`}
+                >
+                  <div className="whitespace-pre-wrap">{message.content}</div>
+                </div>
+              </div>
+            ))
+          )}
+
+          {loading && (
+            <div className="flex justify-start">
+              <div className="rounded-2xl bg-muted text-foreground shadow-sm rounded-bl-md">
+                <TypingDots />
+              </div>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        <div className="border-t bg-white p-4 md:p-5">
+          <div className="max-w-5xl mx-auto">
+            <div className="flex flex-col gap-3 md:flex-row">
+              <Textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask about symptoms, lab values, surgery prep, medications, or general health guidance..."
+                className="min-h-[96px] resize-none rounded-2xl border-2 border-border focus-visible:ring-0 focus-visible:border-primary"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    submitMessage()
+                  }
+                }}
+              />
+              <Button
+                onClick={() => submitMessage()}
+                disabled={!canSend}
+                className="md:h-auto md:min-h-[96px] md:px-6 gap-2 rounded-2xl"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                Send
+              </Button>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              This assistant provides general information only. For emergencies or worsening symptoms, contact a doctor or emergency services immediately.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default HealthChatAssistant

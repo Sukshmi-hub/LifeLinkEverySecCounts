@@ -30,6 +30,7 @@ import RequestFundsPage from "./pages/patient/RequestFundsPage";
 import PaymentPage from "./pages/patient/PaymentPage";
 import PatientProfilePage from "./pages/patient/PatientProfilePage";
 import PatientMessagesPage from "./pages/patient/PatientMessagesPage";
+import PatientHealthChatPage from "./pages/patient/PatientHealthChatPage";
 import PatientPaymentDemo from "./components/patient/PatientPaymentDemo";
 import DonorDashboard from "./pages/donor/DonorDashboard";
 import DonorRegister from "./pages/donor/DonorRegister";
@@ -77,6 +78,7 @@ const App = () => (
                     <Route path="/patient/payment" element={<ProtectedRoute allowedRoles={['patient']}><PaymentPage /></ProtectedRoute>} />
                     <Route path="/patient/profile" element={<ProtectedRoute allowedRoles={['patient']}><PatientProfilePage /></ProtectedRoute>} />
                     <Route path="/patient/messages" element={<ProtectedRoute allowedRoles={['patient']}><ErrorBoundary><PatientMessagesPage /></ErrorBoundary></ProtectedRoute>} />
+                    <Route path="/patient/assistant" element={<ProtectedRoute allowedRoles={['patient']}><PatientHealthChatPage /></ProtectedRoute>} />
                     {/* Patient settings removed from routes */}
 
                     {/* ========================================== */}

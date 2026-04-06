@@ -25,6 +25,7 @@ import paymentsRoutes from './routes/payments.js'
 import certificatesRoutes from './routes/certificates.js'
 import paymentSingleRoutes from './routes/paymentSingle.js'
 import documentValidationRoutes from './routes/documentValidation.js'
+import healthChatRoutes from './routes/healthChat.js'
 import dotsRoutes from './routes/dotsRoutes.js'
 import tributesRoutes from './routes/tributes.js'
 import adminRoutes from './routes/adminRoutes.js'
@@ -122,6 +123,7 @@ app.use('/api/payments', paymentsRoutes)
 app.use('/api/certificates', certificatesRoutes)
 app.use('/api/payment', paymentSingleRoutes)
 app.use('/api/documents', documentValidationRoutes)
+app.use('/api/health-chat', healthChatRoutes)
 app.use('/api/donors', donorRoutes)
 app.use('/api/hospitals', hospitalRoutes)
 app.use('/api/requests', requestRoutes)

@@ -9,6 +9,7 @@ import {
   User, 
   LogOut,
   MessageCircle,
+  Bot,
   Menu,
   X
 } from 'lucide-react';
@@ -19,6 +20,7 @@ import LifeLinkLogo from '@/components/LifeLinkLogo';
 const menuItems = [
   { icon: FileText, label: 'Request', path: '/patient/request', dotName: 'requests' },
   { icon: MessageCircle, label: 'Messages', path: '/patient/messages', dotName: 'messages' },
+  { icon: Bot, label: 'Health Chat', path: '/patient/assistant', dotName: null },
   { icon: CreditCard, label: 'Payments', path: '/patient/payment', dotName: 'payments' },
   { icon: HandHeart, label: 'Request Funds', path: '/patient/request-funds', dotName: 'alerts' },
   { icon: User, label: 'Profile', path: '/patient/profile', dotName: null },
