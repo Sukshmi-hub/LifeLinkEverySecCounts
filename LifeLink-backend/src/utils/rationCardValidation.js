@@ -54,7 +54,25 @@ const SOFT_NEGATIVE_TERMS = [
   'aadhar',
 ]
 
+const AADHAAR_KEY_TERMS = [
+  'aadhaar',
+  'government of india',
+  'unique identification authority of india',
+  'uidai',
+]
+
+const AADHAAR_FRAUD_TERMS = [
+  'pan card',
+  'passport',
+  'ration card',
+  'driving licence',
+  'driver license',
+  'selfie',
+  'profile photo',
+]
+
 const FILE_HINTS = ['ration', 'nfsa', 'food', 'card']
+const AADHAAR_NUMBER_REGEX = /\b\d{4}\s?\d{4}\s?\d{4}\b/
 
 function normalizeText(text = '') {
   return String(text)
@@ -333,6 +351,68 @@ async function runOptionalOpenAiCheck(extractedText) {
   }
 }
 
+async function runOptionalOpenAiAadhaarCheck(extractedText) {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey || String(process.env.ENABLE_OPENAI_AADHAAR_CHECK || '').toLowerCase() !== 'true') {
+    return null
+  }
+
+  const model = process.env.OPENAI_AADHAAR_MODEL || 'gpt-4.1-mini'
+  const payload = {
+    model,
+    input: [
+      {
+        role: 'system',
+        content: [
+          {
+            type: 'input_text',
+            text: 'You validate Indian identity documents. Return only strict JSON with keys is_aadhaar_card, confidence, reason. Answer based only on the extracted text.'
+          }
+        ]
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: `Is this text from an Aadhaar card document?\n\nExtracted text:\n${extractedText}\n\nReturn JSON only.`
+          }
+        ]
+      }
+    ],
+    temperature: 0
+  }
+
+  const resp = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!resp.ok) {
+    const detail = await resp.text().catch(() => '')
+    throw new Error(`OpenAI Aadhaar validation failed: ${resp.status} ${detail}`)
+  }
+
+  const data = await resp.json()
+  const outputText = extractOpenAiOutputText(data)
+  if (!outputText) return null
+
+  try {
+    const parsed = JSON.parse(outputText)
+    return {
+      is_aadhaar_card: Boolean(parsed.is_aadhaar_card),
+      confidence: Number(parsed.confidence || 0),
+      reason: String(parsed.reason || ''),
+    }
+  } catch (err) {
+    return null
+  }
+}
+
 function extractOpenAiOutputText(responseJson) {
   if (!responseJson) return ''
   if (typeof responseJson.output_text === 'string') return responseJson.output_text.trim()
@@ -399,9 +479,164 @@ async function validateRationCardFile(file) {
   }
 }
 
+function classifyAadhaarText(text) {
+  const normalized = normalizeText(text)
+  const fraud = countMatches(normalized, AADHAAR_FRAUD_TERMS)
+  const keyMatches = countMatches(normalized, AADHAAR_KEY_TERMS)
+  const aadhaarNumberMatch = String(text || '').match(AADHAAR_NUMBER_REGEX)
+  const optionalFields = countMatches(normalized, ['dob', 'date of birth', 'male', 'female', 'address'])
+
+  if (!String(text || '').trim() || String(text || '').trim().length < 30) {
+    return {
+      status: 'retry',
+      isValid: false,
+      confidence: 0.05,
+      reason: 'OCR text is too short or unreadable. Please upload a clearer image or searchable PDF.',
+      detectedType: 'unknown',
+      positive: keyMatches,
+      negative: fraud,
+      aadhaarNumber: null,
+      optionalFields,
+    }
+  }
+
+  if (fraud.count > 0) {
+    return {
+      status: 'invalid',
+      isValid: false,
+      confidence: 0.05,
+      reason: `Text matches other document type keywords: ${fraud.found.slice(0, 3).join(', ')}`,
+      detectedType: inferDocumentType(normalized),
+      positive: keyMatches,
+      negative: fraud,
+      aadhaarNumber: null,
+      optionalFields,
+    }
+  }
+
+  if (!aadhaarNumberMatch) {
+    return {
+      status: 'invalid',
+      isValid: false,
+      confidence: 0.2,
+      reason: 'Aadhaar number pattern not found.',
+      detectedType: 'unknown',
+      positive: keyMatches,
+      negative: fraud,
+      aadhaarNumber: null,
+      optionalFields,
+    }
+  }
+
+  if (keyMatches.count < 2) {
+    return {
+      status: 'invalid',
+      isValid: false,
+      confidence: 0.35,
+      reason: 'At least two Aadhaar keywords were not found.',
+      detectedType: 'unknown',
+      aadhaarNumber: aadhaarNumberMatch[0],
+      positive: keyMatches,
+      negative: fraud,
+      optionalFields,
+    }
+  }
+
+  const baseConfidence = Math.max(
+    0,
+    Math.min(
+      0.99,
+      (aadhaarNumberMatch ? 0.4 : 0) +
+      (keyMatches.count * 0.2) +
+      (optionalFields.count > 0 ? 0.1 : 0) -
+      (fraud.count * 0.45)
+    )
+  )
+
+  if (keyMatches.count >= 2 && fraud.count === 0) {
+    return {
+      status: 'valid',
+      isValid: true,
+      confidence: baseConfidence,
+      reason: 'Aadhaar keywords and number pattern detected.',
+      detectedType: 'aadhaar_card',
+      aadhaarNumber: aadhaarNumberMatch[0],
+      positive: keyMatches,
+      negative: fraud,
+      optionalFields,
+    }
+  }
+
+  return {
+    status: 'invalid',
+    isValid: false,
+    confidence: baseConfidence,
+    reason: 'Required Aadhaar keywords were not found.',
+    detectedType: 'unknown',
+    aadhaarNumber: aadhaarNumberMatch[0],
+    positive: keyMatches,
+    negative: fraud,
+    optionalFields,
+  }
+}
+
+async function validateAadhaarFile(file) {
+  if (!file) {
+    return {
+      isValid: false,
+      status: 'invalid',
+      reason: 'No file uploaded',
+      confidence: 0,
+      detectedType: 'unknown',
+      extractedText: '',
+      extractedTextPreview: '',
+      aadhaarNumber: null,
+    }
+  }
+
+  const extractedText = await extractTextFromFile(file)
+  let heuristic = classifyAadhaarText(extractedText)
+  const ai = await runOptionalOpenAiAadhaarCheck(extractedText).catch(() => null)
+
+  if (ai && typeof ai.is_aadhaar_card === 'boolean') {
+    const aiConfidence = Number(ai.confidence || 0)
+    if (ai.is_aadhaar_card && aiConfidence >= 0.6 && heuristic.status !== 'invalid') {
+      heuristic = {
+        ...heuristic,
+        status: 'valid',
+        isValid: true,
+        confidence: Math.max(heuristic.confidence, aiConfidence),
+        reason: ai.reason || heuristic.reason,
+        aiAnalysis: ai,
+      }
+    } else if (!ai.is_aadhaar_card && aiConfidence >= 0.75) {
+      heuristic = {
+        ...heuristic,
+        status: 'invalid',
+        isValid: false,
+        confidence: Math.max(heuristic.confidence, aiConfidence),
+        reason: ai.reason || 'AI model did not identify this as an Aadhaar card.',
+        aiAnalysis: ai,
+      }
+    } else {
+      heuristic = {
+        ...heuristic,
+        aiAnalysis: ai,
+      }
+    }
+  }
+
+  return {
+    ...heuristic,
+    extractedText,
+    extractedTextPreview: previewText(extractedText),
+  }
+}
+
 export {
   ACCEPTED_EXTENSIONS,
   classifyText,
   extractTextFromFile,
+  validateAadhaarFile,
   validateRationCardFile,
 }

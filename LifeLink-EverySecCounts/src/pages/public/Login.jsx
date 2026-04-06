@@ -22,6 +22,8 @@ import {
   Lock,
   Loader2,
   CheckCircle,
+  AlertTriangle,
+  Upload,
   Stethoscope,
   HeartHandshake,
   Building2,
@@ -76,6 +78,10 @@ const Login = () => {
     country: '',
     full_address: ''
   });
+  const [patientAadhaarFile, setPatientAadhaarFile] = useState(null);
+  const [patientAadhaarValidation, setPatientAadhaarValidation] = useState(null);
+  const [patientAadhaarLoading, setPatientAadhaarLoading] = useState(false);
+  const [patientAadhaarError, setPatientAadhaarError] = useState('');
 
   const [donorData, setDonorData] = useState({
     age: '',
@@ -92,6 +98,10 @@ const Login = () => {
     emergencyName: '',
     emergencyPhone: '',
   });
+  const [donorAadhaarFile, setDonorAadhaarFile] = useState(null);
+  const [donorAadhaarValidation, setDonorAadhaarValidation] = useState(null);
+  const [donorAadhaarLoading, setDonorAadhaarLoading] = useState(false);
+  const [donorAadhaarError, setDonorAadhaarError] = useState('');
 
   const [hospitalData, setHospitalData] = useState({
     address: '',
@@ -321,6 +331,14 @@ const Login = () => {
         toast({ title: 'Invalid Patient Age', description: 'Patient age must be between 0 and 110.', variant: 'destructive' });
         return false;
       }
+      if (!patientAadhaarFile) {
+        toast({ title: 'Aadhaar Upload Required', description: 'Please upload your Aadhaar card image or PDF.', variant: 'destructive' });
+        return false;
+      }
+      if (!patientAadhaarValidation?.isValid) {
+        toast({ title: 'Invalid Aadhaar', description: patientAadhaarError || 'Please upload a valid Aadhaar card.', variant: 'destructive' });
+        return false;
+      }
     }
     if (commonData.role === 'donor') {
       const ageNum = Number(donorData.age);
@@ -336,8 +354,74 @@ const Login = () => {
         toast({ title: 'Invalid Emergency Phone', description: 'Emergency contact must be 10 digits.', variant: 'destructive' });
         return false;
       }
+      if (!donorAadhaarFile) {
+        toast({ title: 'Aadhaar Upload Required', description: 'Please upload your Aadhaar card image or PDF.', variant: 'destructive' });
+        return false;
+      }
+      if (!donorAadhaarValidation?.isValid) {
+        toast({ title: 'Invalid Aadhaar', description: donorAadhaarError || 'Please upload a valid Aadhaar card.', variant: 'destructive' });
+        return false;
+      }
     }
     return true;
+  };
+
+  const validateAadhaarUpload = async (file, role) => {
+    const form = new FormData();
+    form.append('document', file);
+    const setLoading = role === 'patient' ? setPatientAadhaarLoading : setDonorAadhaarLoading;
+    const setValidation = role === 'patient' ? setPatientAadhaarValidation : setDonorAadhaarValidation;
+    const setError = role === 'patient' ? setPatientAadhaarError : setDonorAadhaarError;
+
+    setLoading(true);
+    setError('');
+    setValidation(null);
+    try {
+      const response = await fetch(`${serverUrl}/api/documents/validate-aadhaar`, {
+        method: 'POST',
+        body: form,
+      });
+      const result = await response.json().catch(() => ({}));
+      setValidation(result);
+      if (!response.ok || !result.isValid) {
+        const message = result.status === 'retry'
+          ? 'OCR failed. Please upload a clearer Aadhaar image or searchable PDF.'
+          : (result.message || 'Invalid Aadhaar document');
+        setError(message);
+        toast({ title: 'Invalid Aadhaar', description: message, variant: 'destructive' });
+        return false;
+      }
+      toast({ title: 'Valid Aadhaar ✅', description: 'Aadhaar verification passed.' });
+      return true;
+    } catch (err) {
+      const message = err?.message || 'Failed to validate Aadhaar';
+      setError(message);
+      setValidation({ success: false, isValid: false, status: 'retry', message });
+      toast({ title: 'Validation Error', description: message, variant: 'destructive' });
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePatientAadhaarChange = async (e) => {
+    const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+    setPatientAadhaarFile(file);
+    setPatientAadhaarValidation(null);
+    setPatientAadhaarError('');
+    if (file) {
+      await validateAadhaarUpload(file, 'patient');
+    }
+  };
+
+  const handleDonorAadhaarChange = async (e) => {
+    const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+    setDonorAadhaarFile(file);
+    setDonorAadhaarValidation(null);
+    setDonorAadhaarError('');
+    if (file) {
+      await validateAadhaarUpload(file, 'donor');
+    }
   };
 
   const handleGetEmailOtp = async () => {
@@ -750,6 +834,41 @@ const Login = () => {
                   </div>
 
                   <Input placeholder="12 Digit Aadhaar" maxLength={12} value={patientData.aadhaarNumber} onChange={(e) => setPatientData({...patientData, aadhaarNumber: e.target.value.replace(/\D/g, '')})} />
+                  <div className="space-y-2">
+                    <Label htmlFor="patient-aadhaar-upload">Upload Aadhaar Card *</Label>
+                    <div className="relative">
+                      <Input
+                        id="patient-aadhaar-upload"
+                        type="file"
+                        accept=".jpg,.jpeg,.png,.pdf"
+                        onChange={handlePatientAadhaarChange}
+                        className="cursor-pointer"
+                      />
+                    </div>
+                    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-sm">
+                      {patientAadhaarLoading ? (
+                        <div className="flex items-center gap-2 text-slate-600">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Validating Aadhaar...
+                        </div>
+                      ) : patientAadhaarValidation?.isValid ? (
+                        <div className="flex items-center gap-2 text-green-600">
+                          <CheckCircle className="w-4 h-4" />
+                          <span>Valid Aadhaar ✅</span>
+                        </div>
+                      ) : patientAadhaarValidation && patientAadhaarValidation.isValid === false ? (
+                        <div className="flex items-center gap-2 text-red-600">
+                          <AlertTriangle className="w-4 h-4" />
+                          <span>{patientAadhaarError || patientAadhaarValidation.message || 'Invalid Document ❌'}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <Upload className="w-4 h-4" />
+                          <span>Upload JPG, PNG, or PDF to validate Aadhaar.</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -786,6 +905,39 @@ const Login = () => {
                     <Input placeholder="Emergency Phone" value={donorData.emergencyPhone} onChange={(e) => setDonorData({...donorData, emergencyPhone: e.target.value.replace(/\D/g, '')})} required maxLength={10} />
                   </div>
                   <Input placeholder="12 Digit Aadhaar" maxLength={12} value={donorData.aadhaarNumber} onChange={(e) => setDonorData({...donorData, aadhaarNumber: e.target.value.replace(/\D/g, '')})} />
+                  <div className="space-y-2">
+                    <Label htmlFor="donor-aadhaar-upload">Upload Aadhaar Card *</Label>
+                    <Input
+                      id="donor-aadhaar-upload"
+                      type="file"
+                      accept=".jpg,.jpeg,.png,.pdf"
+                      onChange={handleDonorAadhaarChange}
+                      className="cursor-pointer"
+                    />
+                    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-sm">
+                      {donorAadhaarLoading ? (
+                        <div className="flex items-center gap-2 text-slate-600">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Validating Aadhaar...
+                        </div>
+                      ) : donorAadhaarValidation?.isValid ? (
+                        <div className="flex items-center gap-2 text-green-600">
+                          <CheckCircle className="w-4 h-4" />
+                          <span>Valid Aadhaar ✅</span>
+                        </div>
+                      ) : donorAadhaarValidation && donorAadhaarValidation.isValid === false ? (
+                        <div className="flex items-center gap-2 text-red-600">
+                          <AlertTriangle className="w-4 h-4" />
+                          <span>{donorAadhaarError || donorAadhaarValidation.message || 'Invalid Document ❌'}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <Upload className="w-4 h-4" />
+                          <span>Upload JPG, PNG, or PDF to validate Aadhaar.</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 
