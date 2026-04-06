@@ -142,6 +142,14 @@ const FITNESS_CORE_TERMS = [
   'fit to donate',
   'fit for donation',
   'fit for surgery',
+  'state of good health',
+  'physically fit',
+  'fit to pursue',
+  'fit to resume',
+  'fit to resume his her duties',
+  'fit to resume duties',
+  'medically examined',
+  'this is to certify',
 ]
 
 const FITNESS_DOCTOR_TERMS = [
@@ -158,6 +166,13 @@ const FITNESS_PATIENT_TERMS = [
   'age',
   'gender',
   'patient',
+  'mr',
+  'ms',
+  'mrs',
+  'occupat',
+  'address',
+  'rank occupation',
+  'certify that',
 ]
 
 const FITNESS_DATE_SIGNATURE_TERMS = [
@@ -986,6 +1001,19 @@ function classifyFitnessCertificateText(text) {
   const hasDoctor = doctor.count >= 1
   const hasPatient = patient.count >= 1
   const hasMeta = meta.count >= 1
+  const looksLikeCertificateBody =
+    normalized.includes('certify that') ||
+    normalized.includes('state of good health') ||
+    normalized.includes('fit to resume') ||
+    normalized.includes('physically fit')
+  const adjustedHasEnoughCore = hasEnoughCore || (looksLikeCertificateBody && core.count >= 1)
+  const adjustedHasPatient = hasPatient || (
+    normalized.includes('mr ms') ||
+    normalized.includes('mr ms') ||
+    normalized.includes('age') ||
+    normalized.includes('gender') ||
+    normalized.includes('name')
+  )
   const confidence = Math.max(
     0,
     Math.min(
@@ -998,7 +1026,7 @@ function classifyFitnessCertificateText(text) {
     )
   )
 
-  if (hasEnoughCore && hasDoctor && hasPatient && hasMeta) {
+  if (adjustedHasEnoughCore && hasDoctor && adjustedHasPatient && hasMeta) {
     return {
       status: 'valid',
       isValid: true,
