@@ -84,8 +84,14 @@ const BLOOD_MEDICAL_TERMS = [
   'complete blood count',
   'hematology',
   'blood test',
+  'blood test report',
   'report',
   'lab',
+  'differential count',
+  'parameter',
+  'result',
+  'units',
+  'reference range',
 ]
 
 const BLOOD_LAB_TERMS = [
@@ -95,6 +101,20 @@ const BLOOD_LAB_TERMS = [
   'clinic',
   'hospital laboratory',
   'medical laboratory',
+  'citycare diagnostics',
+  'diagnostic centre',
+  'diagnostic center',
+]
+
+const BLOOD_STRONG_HEADER_TERMS = [
+  'blood test report',
+  'complete blood count',
+  'cbc',
+  'hematology',
+  'reference range',
+  'parameter',
+  'result',
+  'lab report',
 ]
 
 const BLOOD_FRAUD_TERMS = [
@@ -675,6 +695,7 @@ function classifyBloodReportText(text) {
   const normalized = normalizeText(text)
   const medical = countMatches(normalized, BLOOD_MEDICAL_TERMS)
   const lab = countMatches(normalized, BLOOD_LAB_TERMS)
+  const strongHeader = countMatches(normalized, BLOOD_STRONG_HEADER_TERMS)
   const fraud = countMatches(normalized, BLOOD_FRAUD_TERMS)
   const numericMatches = String(text || '').match(BLOOD_NUMERIC_REGEX) || []
   const tableMatches = String(text || '').match(BLOOD_TABLE_ROW_REGEX) || []
@@ -712,14 +733,18 @@ function classifyBloodReportText(text) {
   }
 
   const hasLabContext = lab.count > 0
-  const hasEnoughMedicalTerms = medical.count >= 3
+  const hasStrongBloodContext = strongHeader.count >= 2 || (strongHeader.count >= 1 && medical.count >= 2)
+  const hasEnoughMedicalTerms = medical.count >= 3 || (hasStrongBloodContext && medical.count >= 2)
   const hasEnoughNumericValues = numericMatches.length >= 2
   const hasTableLikeStructure = tableMatches.length >= 2 || lineCount >= 8
+  const looksLikeLabSheet = hasTableLikeStructure || strongHeader.count >= 1
+  const hasRequiredContext = hasLabContext || strongHeader.count >= 1 || looksLikeLabSheet
   const confidence = Math.max(
     0,
     Math.min(
       0.99,
       (medical.count * 0.18) +
+      (strongHeader.count * 0.12) +
       (hasLabContext ? 0.18 : 0) +
       (hasEnoughNumericValues ? 0.22 : 0) +
       (hasTableLikeStructure ? 0.18 : 0) -
@@ -727,7 +752,7 @@ function classifyBloodReportText(text) {
     )
   )
 
-  if (hasEnoughMedicalTerms && hasEnoughNumericValues && hasLabContext) {
+  if (hasEnoughMedicalTerms && hasEnoughNumericValues && hasRequiredContext) {
     return {
       status: 'valid',
       isValid: true,
