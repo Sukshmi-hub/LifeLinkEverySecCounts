@@ -115,6 +115,7 @@ const HealthChatAssistant = () => {
   const [reportData, setReportData] = useState('')
   const [reportMeta, setReportMeta] = useState({ values: { hemoglobin: null, wbc: null, platelets: null }, severity: 'Normal', flags: [], summary: 'No report data provided' })
   const bottomRef = useRef(null)
+  const messageListRef = useRef(null)
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -160,7 +161,14 @@ const HealthChatAssistant = () => {
   }, [])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const scrollToBottom = () => {
+      const container = messageListRef.current
+      if (!container) return
+      container.scrollTop = container.scrollHeight
+    }
+
+    const raf = window.requestAnimationFrame(scrollToBottom)
+    return () => window.cancelAnimationFrame(raf)
   }, [messages, loading])
 
   const canSend = useMemo(() => Boolean(input.trim()) && !loading, [input, loading])
@@ -171,6 +179,9 @@ const HealthChatAssistant = () => {
 
   const appendSuggestion = (text) => {
     setInput(text)
+    window.requestAnimationFrame(() => {
+      submitMessage(text)
+    })
   }
 
   const submitMessage = async (text) => {
@@ -412,7 +423,7 @@ const HealthChatAssistant = () => {
       </Card>
 
       <div className="mt-4 flex-1 min-h-0 rounded-3xl border bg-background shadow-sm overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+        <div ref={messageListRef} className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 space-y-4">
           {hydrating ? (
             <div className="flex justify-center py-10 text-sm text-muted-foreground">Loading your conversation...</div>
           ) : (
@@ -441,7 +452,7 @@ const HealthChatAssistant = () => {
               </div>
             </div>
           )}
-          <div ref={bottomRef} />
+          <div ref={bottomRef} className="h-px w-full" />
         </div>
 
         <div className="border-t bg-white p-4 md:p-5">
