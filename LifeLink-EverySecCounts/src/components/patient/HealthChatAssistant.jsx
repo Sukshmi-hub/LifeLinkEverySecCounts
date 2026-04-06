@@ -183,8 +183,14 @@ const HealthChatAssistant = () => {
       content: messageText,
       createdAt: new Date().toISOString(),
     }
+    const localReply = {
+      id: `assistant-local-${Date.now()}`,
+      role: 'assistant',
+      content: buildLocalMedicalReply(messageText, reportMeta),
+      createdAt: new Date().toISOString(),
+    }
 
-    setMessages((prev) => [...prev, userMessage])
+    setMessages((prev) => [...prev, userMessage, localReply])
     setInput('')
     setLoading(true)
 
@@ -251,19 +257,30 @@ const HealthChatAssistant = () => {
         {
           id: `assistant-${Date.now()}`,
           role: 'assistant',
-          content: json.reply || 'Something went wrong. Please try again.',
+          content: json.reply || localReply.content,
           createdAt: new Date().toISOString(),
         },
       ])
     } catch (err) {
       console.error('[HealthChat] send failed', err)
-      const fallback = {
-        id: `assistant-fallback-${Date.now()}`,
-        role: 'assistant',
-        content: buildLocalMedicalReply(messageText, reportMeta),
-        createdAt: new Date().toISOString(),
-      }
-      setMessages((prev) => [...prev, fallback])
+      setMessages((prev) => {
+        const next = [...prev]
+        const lastAssistantIndex = [...next].reverse().findIndex((m) => m.role === 'assistant')
+        if (lastAssistantIndex !== -1) {
+          const index = next.length - 1 - lastAssistantIndex
+          next[index] = {
+            ...next[index],
+            content: buildLocalMedicalReply(messageText, reportMeta),
+          }
+          return next
+        }
+        return [...next, {
+          id: `assistant-fallback-${Date.now()}`,
+          role: 'assistant',
+          content: buildLocalMedicalReply(messageText, reportMeta),
+          createdAt: new Date().toISOString(),
+        }]
+      })
       toast.error(err?.message || 'Something went wrong')
     } finally {
       setLoading(false)
