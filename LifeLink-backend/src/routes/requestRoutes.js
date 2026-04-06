@@ -475,6 +475,16 @@ async function cleanupUploadedFiles(files = {}) {
       if (file?.path) paths.push(file.path)
     }
   }
+  if (files.fitnessCertificate) {
+    for (const file of files.fitnessCertificate) {
+      if (file?.path) paths.push(file.path)
+    }
+  }
+  if (files.bloodGroupReport) {
+    for (const file of files.bloodGroupReport) {
+      if (file?.path) paths.push(file.path)
+    }
+  }
   if (files.prescription) {
     for (const file of files.prescription) {
       if (file?.path) paths.push(file.path)
@@ -843,7 +853,8 @@ router.post('/fund', authenticate, upload.fields([
 
 // Create a new donor registration / donation intent (donor submits intent)
 router.post('/donor', authenticate, upload.fields([
-  { name: 'medicalReports', maxCount: 10 },
+  { name: 'fitnessCertificate', maxCount: 1 },
+  { name: 'bloodGroupReport', maxCount: 1 },
   { name: 'idProof', maxCount: 1 },
   { name: 'additionalDocs', maxCount: 10 },
 ]), async (req, res) => {
@@ -856,6 +867,42 @@ router.post('/donor', authenticate, upload.fields([
 
     if (!user) return res.status(401).json({ success: false, message: 'Authentication required' })
     if (!hospital) return res.status(400).json({ success: false, message: 'hospital id required' })
+    if (!req.files?.fitnessCertificate?.[0]) {
+      await cleanupUploadedFiles(req.files || {})
+      return res.status(400).json({ success: false, message: 'Fitness certificate is required for donor registration' })
+    }
+    if (!req.files?.bloodGroupReport?.[0]) {
+      await cleanupUploadedFiles(req.files || {})
+      return res.status(400).json({ success: false, message: 'Blood report is required for donor registration' })
+    }
+    if (!req.files?.idProof?.[0]) {
+      await cleanupUploadedFiles(req.files || {})
+      return res.status(400).json({ success: false, message: 'Aadhaar card is required for donor registration' })
+    }
+
+    const bloodValidation = await validateBloodReportFile(req.files.bloodGroupReport[0])
+    if (!bloodValidation.isValid) {
+      await cleanupUploadedFiles(req.files || {})
+      return res.status(400).json({
+        success: false,
+        message: bloodValidation.status === 'retry'
+          ? 'OCR failed. Please upload a clearer blood report image or searchable PDF.'
+          : bloodValidation.reason || 'Invalid blood report document',
+        validation: bloodValidation,
+      })
+    }
+
+    const aadhaarValidation = await validateAadhaarFile(req.files.idProof[0])
+    if (!aadhaarValidation.isValid) {
+      await cleanupUploadedFiles(req.files || {})
+      return res.status(400).json({
+        success: false,
+        message: aadhaarValidation.status === 'retry'
+          ? 'OCR failed. Please upload a clearer Aadhaar image or searchable PDF.'
+          : aadhaarValidation.reason || 'Invalid Aadhaar document',
+        validation: aadhaarValidation,
+      })
+    }
 
     // Try to find donor profile for this user. If missing, create a minimal donor document
     let donorDoc = await Donor.findOne({ userId: user._id })
@@ -893,8 +940,11 @@ router.post('/donor', authenticate, upload.fields([
     if (req.files) {
       const baseUrl = '/uploads/requests'
       reqDoc.files = reqDoc.files || {}
-      if (req.files.medicalReports) {
-        reqDoc.files.medicalReports = req.files.medicalReports.map(f => `${baseUrl}/${f.filename}`)
+      if (req.files.fitnessCertificate && req.files.fitnessCertificate[0]) {
+        reqDoc.files.fitnessCertificate = `${baseUrl}/${req.files.fitnessCertificate[0].filename}`
+      }
+      if (req.files.bloodGroupReport && req.files.bloodGroupReport[0]) {
+        reqDoc.files.bloodGroupReport = `${baseUrl}/${req.files.bloodGroupReport[0].filename}`
       }
       if (req.files.idProof && req.files.idProof[0]) {
         reqDoc.files.idProof = `${baseUrl}/${req.files.idProof[0].filename}`

@@ -60,7 +60,13 @@ const DonateModal = ({ isOpen, onClose }) => {
   // Document uploads state
   const [fitnessCertificate, setFitnessCertificate] = useState(null);
   const [bloodGroupReport, setBloodGroupReport] = useState(null);
+  const [bloodReportValidation, setBloodReportValidation] = useState(null);
+  const [bloodReportLoading, setBloodReportLoading] = useState(false);
+  const [bloodReportError, setBloodReportError] = useState('');
   const [identityProof, setIdentityProof] = useState(null);
+  const [aadhaarValidation, setAadhaarValidation] = useState(null);
+  const [aadhaarLoading, setAadhaarLoading] = useState(false);
+  const [aadhaarError, setAadhaarError] = useState('');
   const [otherDocuments, setOtherDocuments] = useState([]);
 
   const [consentChecks, setConsentChecks] = useState({
@@ -72,7 +78,12 @@ const DonateModal = ({ isOpen, onClose }) => {
   });
 
   const allConsentsChecked = Object.values(consentChecks).every(Boolean);
-  const documentsValid = fitnessCertificate !== null && bloodGroupReport !== null;
+  const documentsValid =
+    fitnessCertificate !== null &&
+    bloodGroupReport !== null &&
+    bloodReportValidation?.isValid === true &&
+    identityProof !== null &&
+    aadhaarValidation?.isValid === true;
 
   const handleFileChange = (e, setter) => {
     const file = e.target.files?.[0];
@@ -82,6 +93,71 @@ const DonateModal = ({ isOpen, onClose }) => {
         preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : '',
       });
     }
+  };
+
+  const validateUploadedDocument = async (file, endpoint, setValidation, setLoading, setError) => {
+    if (!file) return null;
+    setLoading(true);
+    setError('');
+    try {
+      const formData = new FormData();
+      formData.append('document', file);
+
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${serverUrl}${endpoint}`, {
+        method: 'POST',
+        body: formData,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      const data = await res.json().catch(() => ({}));
+      const result = {
+        isValid: Boolean(data?.isValid),
+        status: data?.status || (res.ok ? 'valid' : 'invalid'),
+        reason: data?.message || data?.reason || '',
+        confidence: data?.confidence ?? null,
+        extractedTextPreview: data?.extractedTextPreview || '',
+      };
+      setValidation(result);
+      if (!result.isValid) {
+        setError(result.reason || 'Invalid document');
+      }
+      return result;
+    } catch (err) {
+      const message = err?.message || 'Validation failed';
+      setError(message);
+      setValidation({
+        isValid: false,
+        status: 'invalid',
+        reason: message,
+        confidence: 0,
+      });
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const validateBloodReportUpload = async (file) => {
+    if (!file) return;
+    await validateUploadedDocument(
+      file,
+      '/api/documents/validate-blood-report',
+      setBloodReportValidation,
+      setBloodReportLoading,
+      setBloodReportError
+    );
+  };
+
+  const validateAadhaarUpload = async (file) => {
+    if (!file) return;
+    await validateUploadedDocument(
+      file,
+      '/api/documents/validate-aadhaar',
+      setAadhaarValidation,
+      setAadhaarLoading,
+      setAadhaarError
+    );
   };
 
   const handleMultipleFileChange = (e, setter) => {
@@ -107,7 +183,11 @@ const DonateModal = ({ isOpen, onClose }) => {
 
   const handleProceedToConsent = () => {
     if (!documentsValid) {
-      toast({ title: 'Required Documents Missing', description: 'Please upload Fitness Certificate and Blood Report.', variant: 'destructive' });
+      toast({
+        title: 'Required Documents Missing',
+        description: 'Please upload Fitness Certificate, Blood Report, and Aadhaar Card with valid verification.',
+        variant: 'destructive'
+      });
       return;
     }
     setStep('consent');
@@ -131,8 +211,8 @@ const DonateModal = ({ isOpen, onClose }) => {
       form.append('message', `Donor intent for ${organ?.name || 'donation'}`);
 
       // Attach files
-      if (fitnessCertificate && fitnessCertificate.file) form.append('medicalReports', fitnessCertificate.file);
-      if (bloodGroupReport && bloodGroupReport.file) form.append('medicalReports', bloodGroupReport.file);
+      if (fitnessCertificate && fitnessCertificate.file) form.append('fitnessCertificate', fitnessCertificate.file);
+      if (bloodGroupReport && bloodGroupReport.file) form.append('bloodGroupReport', bloodGroupReport.file);
       if (identityProof && identityProof.file) form.append('idProof', identityProof.file);
       otherDocuments.forEach(d => { if (d.file) form.append('additionalDocs', d.file) });
 
@@ -180,7 +260,13 @@ const DonateModal = ({ isOpen, onClose }) => {
     setSelectedOrgan(null);
     setFitnessCertificate(null);
     setBloodGroupReport(null);
+    setBloodReportValidation(null);
+    setBloodReportLoading(false);
+    setBloodReportError('');
     setIdentityProof(null);
+    setAadhaarValidation(null);
+    setAadhaarLoading(false);
+    setAadhaarError('');
     setOtherDocuments([]);
     setConsentChecks({ voluntary: false, risks: false, pressure: false, verification: false, terms: false });
     onClose();
@@ -282,8 +368,74 @@ const DonateModal = ({ isOpen, onClose }) => {
             </DialogHeader>
             <div className="mt-4 space-y-2">
               <FileUploadCard label="Fitness Certificate" description="From a registered practitioner" icon={FileText} required file={fitnessCertificate} onFileChange={(e) => handleFileChange(e, setFitnessCertificate)} onRemove={() => setFitnessCertificate(null)} />
-              <FileUploadCard label="Blood Group Report" description="Official lab report" icon={Droplet} required file={bloodGroupReport} onFileChange={(e) => handleFileChange(e, setBloodGroupReport)} onRemove={() => setBloodGroupReport(null)} />
-              <FileUploadCard label="Identity Proof" description="Aadhaar or Government ID" icon={CreditCard} file={identityProof} onFileChange={(e) => handleFileChange(e, setIdentityProof)} onRemove={() => setIdentityProof(null)} />
+              <FileUploadCard
+                label="Blood Report"
+                description="CBC / hematology lab report"
+                icon={Droplet}
+                required
+                file={bloodGroupReport}
+                onFileChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  handleFileChange(e, setBloodGroupReport);
+                  await validateBloodReportUpload(file);
+                }}
+                onRemove={() => {
+                  setBloodGroupReport(null);
+                  setBloodReportValidation(null);
+                  setBloodReportError('');
+                }}
+              />
+              {bloodReportLoading && <p className="text-xs text-muted-foreground">Validating blood report...</p>}
+              {bloodReportValidation?.isValid && (
+                <div className="flex items-center gap-2 text-xs text-green-600">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Valid Blood Report ✅</span>
+                </div>
+              )}
+              {bloodReportValidation && !bloodReportValidation.isValid && (
+                <div className="flex items-center gap-2 text-xs text-destructive">
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>Invalid Document ❌ {bloodReportValidation.reason ? `- ${bloodReportValidation.reason}` : ''}</span>
+                </div>
+              )}
+              {bloodReportError && !bloodReportValidation?.isValid && (
+                <p className="text-xs text-destructive">{bloodReportError}</p>
+              )}
+              <FileUploadCard
+                label="Aadhaar Card"
+                description="UIDAI Aadhaar document"
+                icon={CreditCard}
+                required
+                file={identityProof}
+                onFileChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  handleFileChange(e, setIdentityProof);
+                  await validateAadhaarUpload(file);
+                }}
+                onRemove={() => {
+                  setIdentityProof(null);
+                  setAadhaarValidation(null);
+                  setAadhaarError('');
+                }}
+              />
+              {aadhaarLoading && <p className="text-xs text-muted-foreground">Validating Aadhaar card...</p>}
+              {aadhaarValidation?.isValid && (
+                <div className="flex items-center gap-2 text-xs text-green-600">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Valid Aadhaar ✅</span>
+                </div>
+              )}
+              {aadhaarValidation && !aadhaarValidation.isValid && (
+                <div className="flex items-center gap-2 text-xs text-destructive">
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>Invalid Document ❌ {aadhaarValidation.reason ? `- ${aadhaarValidation.reason}` : ''}</span>
+                </div>
+              )}
+              {aadhaarError && !aadhaarValidation?.isValid && (
+                <p className="text-xs text-destructive">{aadhaarError}</p>
+              )}
             </div>
             <div className="flex justify-between mt-6">
               <Button variant="outline" onClick={() => setStep('select')}><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>

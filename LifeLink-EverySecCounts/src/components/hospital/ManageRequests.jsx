@@ -889,7 +889,7 @@ const ManageRequests = () => {
                         )}
                         {idProof && (
                           <div>
-                            <p className="text-xs text-muted-foreground">Identity Proof:</p>
+                            <p className="text-xs text-muted-foreground">Aadhaar Card:</p>
                             {renderFileLink(idProof)}
                           </div>
                         )}
@@ -1085,8 +1085,8 @@ const ManageRequests = () => {
                       )}
                       {organDetails.raw.files.idProof && (
                         <div>
-                          <p className="text-xs text-muted-foreground">ID Proof:</p>
-                          <a href={organDetails.raw.files.idProof.startsWith('/') ? `${serverUrl}${organDetails.raw.files.idProof}` : organDetails.raw.files.idProof} target="_blank" rel="noreferrer" className="text-sm text-primary">Open ID Proof</a>
+                          <p className="text-xs text-muted-foreground">Aadhaar Card:</p>
+                          <a href={organDetails.raw.files.idProof.startsWith('/') ? `${serverUrl}${organDetails.raw.files.idProof}` : organDetails.raw.files.idProof} target="_blank" rel="noreferrer" className="text-sm text-primary">Open Aadhaar Card</a>
                         </div>
                       )}
                     </div>
