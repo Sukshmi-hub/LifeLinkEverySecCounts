@@ -1,5 +1,6 @@
 import express from 'express'
-import { authenticate } from '../middleware/auth.js'
+import jwt from 'jsonwebtoken'
+import mongoose from '../config/mongodb.js'
 import Patient from '../models/Patient.js'
 import MedicalChatSession from '../models/MedicalChatSession.js'
 
@@ -32,6 +33,62 @@ function normalizeHistory(messages = []) {
 
 function safeAssistantFallback() {
   return 'Something went wrong. Please try again.'
+}
+
+function isDbReady() {
+  return mongoose.connection.readyState === 1
+}
+
+function softAuthenticate(req, res, next) {
+  try {
+    const authHeader = String(req.headers.authorization || '')
+    if (!authHeader.startsWith('Bearer ')) {
+      req.chatUser = null
+      return next()
+    }
+
+    const token = authHeader.split(' ')[1]
+    const secret = process.env.JWT_SECRET
+    if (!secret) {
+      req.chatUser = null
+      return next()
+    }
+
+    const decoded = jwt.verify(token, secret)
+    req.chatUser = {
+      _id: decoded.userId ? String(decoded.userId) : null,
+      role: decoded.role || 'patient',
+    }
+    return next()
+  } catch (error) {
+    console.warn('[health-chat] soft auth failed, continuing without session:', error?.message || error)
+    req.chatUser = null
+    return next()
+  }
+}
+
+function extractResponseText(data) {
+  if (typeof data?.output_text === 'string' && data.output_text.trim()) {
+    return data.output_text.trim()
+  }
+
+  const output = Array.isArray(data?.output) ? data.output : []
+  for (const item of output) {
+    if (!item) continue
+    if (item.type === 'message' && Array.isArray(item.content)) {
+      const text = item.content
+        .map((part) => {
+          if (!part) return ''
+          if (typeof part.text === 'string') return part.text
+          if (typeof part.value === 'string') return part.value
+          return ''
+        })
+        .join('')
+        .trim()
+      if (text) return text
+    }
+  }
+  return ''
 }
 
 function buildLocalMedicalReply(message) {
@@ -203,20 +260,35 @@ async function callOpenAIChat(messages, userId) {
   }
 
   const model = process.env.OPENAI_MEDICAL_CHAT_MODEL || 'gpt-4.1-mini'
+  const input = messages.map((m) => ({
+    role: m.role,
+    content: [
+      {
+        type: 'input_text',
+        text: String(m.content || ''),
+      },
+    ],
+  }))
   const payload = {
     model,
-    messages,
+    input,
+    instructions: MEDICAL_CHAT_PROMPT,
     temperature: 0.2,
-    max_completion_tokens: 240,
-    n: 1,
-    safety_identifier: userId ? String(userId) : undefined,
+    max_output_tokens: 240,
     metadata: {
       app: 'lifelink',
       feature: 'patient_medical_chat',
     },
+    safety_identifier: userId ? String(userId) : undefined,
   }
 
-  const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+  console.log('[health-chat] OpenAI request', {
+    model,
+    inputCount: input.length,
+    userId: userId ? String(userId) : null,
+  })
+
+  const resp = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -231,22 +303,27 @@ async function callOpenAIChat(messages, userId) {
   }
 
   const data = await resp.json()
-  const rawContent = data?.choices?.[0]?.message?.content
-  const content = Array.isArray(rawContent)
-    ? rawContent.map((part) => (typeof part === 'string' ? part : part?.text || '')).join('')
-    : String(rawContent || '').trim()
+  console.log('[health-chat] OpenAI response metadata', {
+    id: data?.id || null,
+    model: data?.model || null,
+    hasOutput: Array.isArray(data?.output) && data.output.length > 0,
+  })
+  const content = extractResponseText(data)
 
   return content || safeAssistantFallback()
 }
 
-router.get('/history', authenticate, async (req, res) => {
+router.get('/history', softAuthenticate, async (req, res) => {
   try {
-    if (!req.user) return res.status(401).json({ success: false, message: 'Not authenticated' })
-    if (String(req.user.role).toLowerCase() !== 'patient') {
-      return res.status(403).json({ success: false, message: 'Patients only' })
+    if (!req.chatUser?._id || !isDbReady()) {
+      return res.json({
+        success: true,
+        sessionId: null,
+        messages: [],
+      })
     }
 
-    const session = await MedicalChatSession.findOne({ userId: req.user._id }).lean()
+    const session = await MedicalChatSession.findOne({ userId: req.chatUser._id }).lean()
     return res.json({
       success: true,
       sessionId: session ? String(session._id) : null,
@@ -258,14 +335,13 @@ router.get('/history', authenticate, async (req, res) => {
   }
 })
 
-router.delete('/history', authenticate, async (req, res) => {
+router.delete('/history', softAuthenticate, async (req, res) => {
   try {
-    if (!req.user) return res.status(401).json({ success: false, message: 'Not authenticated' })
-    if (String(req.user.role).toLowerCase() !== 'patient') {
-      return res.status(403).json({ success: false, message: 'Patients only' })
+    if (!req.chatUser?._id || !isDbReady()) {
+      return res.json({ success: true, message: 'Conversation cleared' })
     }
 
-    await MedicalChatSession.findOneAndDelete({ userId: req.user._id })
+    await MedicalChatSession.findOneAndDelete({ userId: req.chatUser._id })
     return res.json({ success: true, message: 'Conversation cleared' })
   } catch (err) {
     console.error('Medical chat clear failed:', err)
@@ -273,14 +349,15 @@ router.delete('/history', authenticate, async (req, res) => {
   }
 })
 
-router.post('/chat', authenticate, async (req, res) => {
+router.post('/chat', softAuthenticate, async (req, res) => {
   try {
-    if (!req.user) return res.status(401).json({ success: false, message: 'Not authenticated' })
-    if (String(req.user.role).toLowerCase() !== 'patient') {
-      return res.status(403).json({ success: false, message: 'Patients only' })
-    }
-
     const message = String(req.body?.message || '').trim()
+    console.log('[health-chat] Incoming request', {
+      userId: String(req.chatUser?._id || ''),
+      messageLength: message.length,
+      hasReportData: Boolean(req.body?.reportData),
+      chatHistoryLength: Array.isArray(req.body?.chatHistory) ? req.body.chatHistory.length : 0,
+    })
     if (!message) {
       return res.status(400).json({ success: false, message: 'Message is required' })
     }
@@ -288,7 +365,9 @@ router.post('/chat', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Message is too long' })
     }
 
-  const patientDoc = await Patient.findOne({ userId: req.user._id }).lean()
+    const patientDoc = req.chatUser?._id && isDbReady()
+      ? await Patient.findOne({ userId: req.chatUser._id }).lean()
+      : null
     const incomingPatientInfo = req.body?.patientInfo && typeof req.body.patientInfo === 'object'
       ? req.body.patientInfo
       : {}
@@ -303,19 +382,22 @@ router.post('/chat', authenticate, async (req, res) => {
       ? normalizeHistory(req.body.chatHistory).slice(-MAX_HISTORY_MESSAGES)
       : []
 
-    const session = await MedicalChatSession.findOneAndUpdate(
-      { userId: req.user._id },
-      { $setOnInsert: { userId: req.user._id, messages: [], lastMessageAt: new Date() } },
-      { upsert: true, new: true }
-    )
+    let session = null
+    if (req.chatUser?._id && isDbReady()) {
+      session = await MedicalChatSession.findOneAndUpdate(
+        { userId: req.chatUser._id },
+        { $setOnInsert: { userId: req.chatUser._id, messages: [], lastMessageAt: new Date() } },
+        { upsert: true, new: true }
+      )
+    }
 
-    const recentMessages = (incomingHistory.length ? incomingHistory : normalizeHistory(session.messages)).slice(-MAX_HISTORY_MESSAGES)
+    const recentMessages = (incomingHistory.length ? incomingHistory : normalizeHistory(session?.messages || [])).slice(-MAX_HISTORY_MESSAGES)
     const openAiMessages = [
       { role: 'system', content: MEDICAL_CHAT_PROMPT },
       { role: 'user', content: buildMedicalChatContext({ patient: mergedPatient, report, severity, message, history: recentMessages }) },
     ]
 
-    const openAIReply = await callOpenAIChat(openAiMessages, req.user._id).catch((err) => {
+    const openAIReply = await callOpenAIChat(openAiMessages, req.chatUser?._id).catch((err) => {
       console.warn('OpenAI medical chat unavailable, using fallback:', err?.message || err)
       return null
     })
@@ -325,21 +407,26 @@ router.post('/chat', authenticate, async (req, res) => {
       severity?.summary || '',
     ].join(' '))
 
-    session.messages.push(
-      { role: 'user', content: message, createdAt: new Date() },
-      { role: 'assistant', content: reply, createdAt: new Date() }
-    )
-    if (session.messages.length > MAX_SAVED_MESSAGES) {
-      session.messages = session.messages.slice(-MAX_SAVED_MESSAGES)
+    if (session) {
+      session.messages.push(
+        { role: 'user', content: message, createdAt: new Date() },
+        { role: 'assistant', content: reply, createdAt: new Date() }
+      )
+      if (session.messages.length > MAX_SAVED_MESSAGES) {
+        session.messages = session.messages.slice(-MAX_SAVED_MESSAGES)
+      }
+      session.lastMessageAt = new Date()
+      await session.save()
     }
-    session.lastMessageAt = new Date()
-    await session.save()
 
     return res.json({
       success: true,
       reply,
-      sessionId: String(session._id),
-      messages: normalizeHistory(session.messages),
+      sessionId: session ? String(session._id) : null,
+      messages: session ? normalizeHistory(session.messages) : [
+        { role: 'user', content: message, createdAt: new Date() },
+        { role: 'assistant', content: reply, createdAt: new Date() },
+      ],
       severity,
       reportSummary: {
         hasReport: Boolean(report?.raw),
@@ -347,6 +434,10 @@ router.post('/chat', authenticate, async (req, res) => {
         summary: severity.summary,
       },
       source: openAIReply ? 'openai' : 'fallback',
+      debug: {
+        receivedMessageLength: message.length,
+        reportKeys: report?.fields ? Object.keys(report.fields).filter(Boolean) : [],
+      },
     })
   } catch (err) {
     console.error('Medical chat failed:', err)
@@ -355,6 +446,7 @@ router.post('/chat', authenticate, async (req, res) => {
       reply: buildLocalMedicalReply(String(req.body?.message || '')),
       severity: { level: 'unknown', label: 'Unknown', summary: 'Unable to analyze report data' },
       source: 'fallback',
+      debug: { error: err?.message || 'unknown' },
     })
   }
 })

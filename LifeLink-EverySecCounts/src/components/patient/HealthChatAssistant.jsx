@@ -157,7 +157,17 @@ const HealthChatAssistant = () => {
 
     try {
       const token = localStorage.getItem('token')
-      const res = await fetch(`${serverUrl}/api/health-chat/chat`, {
+      const endpoint = `${serverUrl}/api/health-chat/chat`
+      console.log('[HealthChat] sending request', {
+        endpoint,
+        messageText,
+        patientInfo,
+        reportDataLength: String(reportData || '').length,
+        chatHistoryLength: messages.slice(-12).length,
+        hasToken: Boolean(token),
+      })
+
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -172,9 +182,25 @@ const HealthChatAssistant = () => {
         }),
       })
 
-      const json = await res.json().catch(() => ({}))
+      console.log('[HealthChat] received response', {
+        status: res.status,
+        ok: res.ok,
+        url: endpoint,
+      })
+
+      const rawText = await res.text()
+      console.log('[HealthChat] raw response body', rawText)
+      let json = {}
+      try {
+        json = rawText ? JSON.parse(rawText) : {}
+      } catch (parseErr) {
+        console.error('[HealthChat] failed to parse JSON', parseErr)
+        throw new Error(`Server returned non-JSON response: ${rawText.slice(0, 200)}`)
+      }
+
+      console.log('[HealthChat] parsed response body', json)
       if (!json.success) {
-        throw new Error(json.message || 'Something went wrong')
+        throw new Error(json.message || `Request failed with status ${res.status}`)
       }
 
       setSessionId(json.sessionId || sessionId)
@@ -189,6 +215,7 @@ const HealthChatAssistant = () => {
         },
       ])
     } catch (err) {
+      console.error('[HealthChat] send failed', err)
       const fallback = {
         id: `assistant-fallback-${Date.now()}`,
         role: 'assistant',
