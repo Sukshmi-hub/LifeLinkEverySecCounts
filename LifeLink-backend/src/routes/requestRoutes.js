@@ -12,7 +12,7 @@ import Donor from '../models/Donor.js'
 import Message from '../models/Message.js'
 import Hospital from '../models/Hospital.js'
 import { createCertificateForDonor } from '../controllers/certificateController.js'
-import { validateAadhaarFile, validateBloodReportFile, validateRationCardFile } from '../utils/rationCardValidation.js'
+import { validateAadhaarFile, validateBloodReportFile, validateFitnessCertificateFile, validateRationCardFile } from '../utils/rationCardValidation.js'
 const router = express.Router()
 
 // Ensure uploads folder exists
@@ -878,6 +878,18 @@ router.post('/donor', authenticate, upload.fields([
     if (!req.files?.idProof?.[0]) {
       await cleanupUploadedFiles(req.files || {})
       return res.status(400).json({ success: false, message: 'Aadhaar card is required for donor registration' })
+    }
+
+    const fitnessValidation = await validateFitnessCertificateFile(req.files.fitnessCertificate[0])
+    if (!fitnessValidation.isValid) {
+      await cleanupUploadedFiles(req.files || {})
+      return res.status(400).json({
+        success: false,
+        message: fitnessValidation.status === 'retry'
+          ? 'OCR failed. Please upload a clearer fitness certificate image or searchable PDF.'
+          : fitnessValidation.reason || 'Invalid fitness certificate document',
+        validation: fitnessValidation,
+      })
     }
 
     const bloodValidation = await validateBloodReportFile(req.files.bloodGroupReport[0])

@@ -59,6 +59,9 @@ const DonateModal = ({ isOpen, onClose }) => {
   
   // Document uploads state
   const [fitnessCertificate, setFitnessCertificate] = useState(null);
+  const [fitnessValidation, setFitnessValidation] = useState(null);
+  const [fitnessLoading, setFitnessLoading] = useState(false);
+  const [fitnessError, setFitnessError] = useState('');
   const [bloodGroupReport, setBloodGroupReport] = useState(null);
   const [bloodReportValidation, setBloodReportValidation] = useState(null);
   const [bloodReportLoading, setBloodReportLoading] = useState(false);
@@ -80,6 +83,7 @@ const DonateModal = ({ isOpen, onClose }) => {
   const allConsentsChecked = Object.values(consentChecks).every(Boolean);
   const documentsValid =
     fitnessCertificate !== null &&
+    fitnessValidation?.isValid === true &&
     bloodGroupReport !== null &&
     bloodReportValidation?.isValid === true &&
     identityProof !== null &&
@@ -136,6 +140,17 @@ const DonateModal = ({ isOpen, onClose }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const validateFitnessUpload = async (file) => {
+    if (!file) return;
+    await validateUploadedDocument(
+      file,
+      '/api/documents/validate-fitness-certificate',
+      setFitnessValidation,
+      setFitnessLoading,
+      setFitnessError
+    );
   };
 
   const validateBloodReportUpload = async (file) => {
@@ -259,6 +274,9 @@ const DonateModal = ({ isOpen, onClose }) => {
     setStep('select');
     setSelectedOrgan(null);
     setFitnessCertificate(null);
+    setFitnessValidation(null);
+    setFitnessLoading(false);
+    setFitnessError('');
     setBloodGroupReport(null);
     setBloodReportValidation(null);
     setBloodReportLoading(false);
@@ -367,7 +385,40 @@ const DonateModal = ({ isOpen, onClose }) => {
               <DialogDescription>Verified documents are required for legal donation.</DialogDescription>
             </DialogHeader>
             <div className="mt-4 space-y-2">
-              <FileUploadCard label="Fitness Certificate" description="From a registered practitioner" icon={FileText} required file={fitnessCertificate} onFileChange={(e) => handleFileChange(e, setFitnessCertificate)} onRemove={() => setFitnessCertificate(null)} />
+              <FileUploadCard
+                label="Fitness Certificate"
+                description="From a registered practitioner"
+                icon={FileText}
+                required
+                file={fitnessCertificate}
+                onFileChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  handleFileChange(e, setFitnessCertificate);
+                  await validateFitnessUpload(file);
+                }}
+                onRemove={() => {
+                  setFitnessCertificate(null);
+                  setFitnessValidation(null);
+                  setFitnessError('');
+                }}
+              />
+              {fitnessLoading && <p className="text-xs text-muted-foreground">Validating fitness certificate...</p>}
+              {fitnessValidation?.isValid && (
+                <div className="flex items-center gap-2 text-xs text-green-600">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Valid Fitness Certificate ✅</span>
+                </div>
+              )}
+              {fitnessValidation && !fitnessValidation.isValid && (
+                <div className="flex items-center gap-2 text-xs text-destructive">
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>Invalid Document ❌ {fitnessValidation.reason ? `- ${fitnessValidation.reason}` : ''}</span>
+                </div>
+              )}
+              {fitnessError && !fitnessValidation?.isValid && (
+                <p className="text-xs text-destructive">{fitnessError}</p>
+              )}
               <FileUploadCard
                 label="Blood Report"
                 description="CBC / hematology lab report"

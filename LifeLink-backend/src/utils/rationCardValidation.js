@@ -132,6 +132,54 @@ const BLOOD_FRAUD_TERMS = [
 const BLOOD_NUMERIC_REGEX = /\d+(?:\.\d+)?\s?(g\/dl|mg\/dl|%)/gi
 const BLOOD_TABLE_ROW_REGEX = /(hemoglobin|hb|rbc|wbc|platelet|cbc)\s*[:\-]\s*\d+(?:\.\d+)?/gi
 
+const FITNESS_CORE_TERMS = [
+  'fitness certificate',
+  'medically fit',
+  'fit for',
+  'physical fitness',
+  'medical certificate',
+  'certified that',
+  'fit to donate',
+  'fit for donation',
+  'fit for surgery',
+]
+
+const FITNESS_DOCTOR_TERMS = [
+  'doctor',
+  'dr.',
+  'medical officer',
+  'physician',
+  'hospital',
+  'clinic',
+]
+
+const FITNESS_PATIENT_TERMS = [
+  'name',
+  'age',
+  'gender',
+  'patient',
+]
+
+const FITNESS_DATE_SIGNATURE_TERMS = [
+  'date',
+  'signature',
+  'seal',
+  'registration number',
+  'regn no',
+  'reg no',
+]
+
+const FITNESS_FRAUD_TERMS = [
+  'aadhaar',
+  'aadhar',
+  'pan card',
+  'ration card',
+  'blood report',
+  'invoice',
+  'bill',
+  'passport',
+]
+
 function normalizeText(text = '') {
   return String(text)
     .toLowerCase()
@@ -895,10 +943,209 @@ async function validateBloodReportFile(file) {
   }
 }
 
+function classifyFitnessCertificateText(text) {
+  const normalized = normalizeText(text)
+  const core = countMatches(normalized, FITNESS_CORE_TERMS)
+  const doctor = countMatches(normalized, FITNESS_DOCTOR_TERMS)
+  const patient = countMatches(normalized, FITNESS_PATIENT_TERMS)
+  const meta = countMatches(normalized, FITNESS_DATE_SIGNATURE_TERMS)
+  const fraud = countMatches(normalized, FITNESS_FRAUD_TERMS)
+  const length = normalized.length
+
+  if (!length || length < 25) {
+    return {
+      status: 'retry',
+      isValid: false,
+      confidence: 0.05,
+      reason: 'OCR text is too short or unreadable. Please upload a clearer fitness certificate image or searchable PDF.',
+      detectedType: 'unknown',
+      positive: core,
+      doctor,
+      patient,
+      meta,
+      negative: fraud,
+    }
+  }
+
+  if (fraud.count > 0) {
+    return {
+      status: 'invalid',
+      isValid: false,
+      confidence: 0.05,
+      reason: `Text matches other document type keywords: ${fraud.found.slice(0, 3).join(', ')}`,
+      detectedType: 'other_document',
+      positive: core,
+      doctor,
+      patient,
+      meta,
+      negative: fraud,
+    }
+  }
+
+  const hasEnoughCore = core.count >= 2
+  const hasDoctor = doctor.count >= 1
+  const hasPatient = patient.count >= 1
+  const hasMeta = meta.count >= 1
+  const confidence = Math.max(
+    0,
+    Math.min(
+      0.99,
+      (core.count * 0.22) +
+      (doctor.count * 0.16) +
+      (patient.count * 0.14) +
+      (hasMeta ? 0.16 : 0) -
+      (fraud.count * 0.45)
+    )
+  )
+
+  if (hasEnoughCore && hasDoctor && hasPatient && hasMeta) {
+    return {
+      status: 'valid',
+      isValid: true,
+      confidence,
+      reason: 'Fitness certificate keywords and authority details detected.',
+      detectedType: 'fitness_certificate',
+      positive: core,
+      doctor,
+      patient,
+      meta,
+      negative: fraud,
+    }
+  }
+
+  return {
+    status: 'invalid',
+    isValid: false,
+    confidence,
+    reason: 'Required fitness certificate keywords, doctor details, patient details, or date/signature indicators were not found.',
+    detectedType: 'unknown',
+    positive: core,
+    doctor,
+    patient,
+    meta,
+    negative: fraud,
+  }
+}
+
+async function runOptionalOpenAiFitnessCheck(extractedText) {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey || String(process.env.ENABLE_OPENAI_FITNESS_CERT_CHECK || '').toLowerCase() !== 'true') {
+    return null
+  }
+
+  const model = process.env.OPENAI_FITNESS_CERT_MODEL || 'gpt-4.1-mini'
+  const payload = {
+    model,
+    input: [
+      {
+        role: 'system',
+        content: [
+          {
+            type: 'input_text',
+            text: 'You validate medical certificates. Return only strict JSON with keys is_fitness_certificate, confidence, reason. Answer based only on the extracted text.'
+          }
+        ]
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: `Is this text from a fitness certificate issued by a doctor?\n\nExtracted text:\n${extractedText}\n\nReturn JSON only.`
+          }
+        ]
+      }
+    ],
+    temperature: 0
+  }
+
+  const resp = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!resp.ok) {
+    const detail = await resp.text().catch(() => '')
+    throw new Error(`OpenAI fitness validation failed: ${resp.status} ${detail}`)
+  }
+
+  const data = await resp.json()
+  const outputText = extractOpenAiOutputText(data)
+  if (!outputText) return null
+
+  try {
+    const parsed = JSON.parse(outputText)
+    return {
+      is_fitness_certificate: Boolean(parsed.is_fitness_certificate),
+      confidence: Number(parsed.confidence || 0),
+      reason: String(parsed.reason || ''),
+    }
+  } catch (err) {
+    return null
+  }
+}
+
+async function validateFitnessCertificateFile(file) {
+  if (!file) {
+    return {
+      isValid: false,
+      status: 'invalid',
+      reason: 'No file uploaded',
+      confidence: 0,
+      detectedType: 'unknown',
+      extractedText: '',
+      extractedTextPreview: '',
+    }
+  }
+
+  const extractedText = await extractTextFromFile(file)
+  let heuristic = classifyFitnessCertificateText(extractedText)
+  const ai = await runOptionalOpenAiFitnessCheck(extractedText).catch(() => null)
+
+  if (ai && typeof ai.is_fitness_certificate === 'boolean') {
+    const aiConfidence = Number(ai.confidence || 0)
+    if (ai.is_fitness_certificate && aiConfidence >= 0.6 && heuristic.status !== 'invalid') {
+      heuristic = {
+        ...heuristic,
+        status: 'valid',
+        isValid: true,
+        confidence: Math.max(heuristic.confidence, aiConfidence),
+        reason: ai.reason || heuristic.reason,
+        aiAnalysis: ai,
+      }
+    } else if (!ai.is_fitness_certificate && aiConfidence >= 0.75) {
+      heuristic = {
+        ...heuristic,
+        status: 'invalid',
+        isValid: false,
+        confidence: Math.max(heuristic.confidence, aiConfidence),
+        reason: ai.reason || 'AI model did not identify this as a fitness certificate.',
+        aiAnalysis: ai,
+      }
+    } else {
+      heuristic = {
+        ...heuristic,
+        aiAnalysis: ai,
+      }
+    }
+  }
+
+  return {
+    ...heuristic,
+    extractedText,
+    extractedTextPreview: previewText(extractedText),
+  }
+}
+
 export {
   ACCEPTED_EXTENSIONS,
   classifyText,
   extractTextFromFile,
+  validateFitnessCertificateFile,
   validateBloodReportFile,
   validateAadhaarFile,
   validateRationCardFile,
