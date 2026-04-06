@@ -3,8 +3,9 @@ import { serverUrl } from '@/lib/serverConfig'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Bot, Send, Sparkles, Trash2, Loader2, ShieldAlert } from 'lucide-react'
+import { Bot, Send, Sparkles, Trash2, Loader2, ShieldAlert, UserCircle2, FileText, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 
 const starterMessages = [
@@ -17,10 +18,10 @@ const starterMessages = [
 ]
 
 const quickQuestions = [
-  'What does low hemoglobin mean?',
-  'What should I do before surgery?',
-  'What are symptoms of anemia?',
-  'When should I see a doctor urgently?',
+  'Explain my report',
+  'Is my condition serious?',
+  'What should I do?',
+  'Diet suggestions',
 ]
 
 const normalizeMessages = (messages = []) => messages
@@ -29,8 +30,39 @@ const normalizeMessages = (messages = []) => messages
     id: String(m.id || m._id || `${m.role || 'msg'}-${idx}`),
     role: m.role === 'assistant' ? 'assistant' : 'user',
     content: String(m.content || ''),
-    createdAt: m.createdAt || new Date().toISOString(),
-  }))
+  createdAt: m.createdAt || new Date().toISOString(),
+}))
+
+const parseReportSummary = (text = '') => {
+  const raw = String(text || '')
+  const readValue = (regex) => {
+    const match = raw.match(regex)
+    if (!match) return null
+    const val = Number(String(match[1]).replace(/,/g, ''))
+    return Number.isFinite(val) ? val : null
+  }
+
+  const hemoglobin = readValue(/(?:hemoglobin|hb)\s*[:=-]\s*([0-9]+(?:\.[0-9]+)?)/i)
+  const wbc = readValue(/(?:wbc|white blood cell count)\s*[:=-]\s*([0-9]+(?:\.[0-9]+)?)/i)
+  const platelets = readValue(/(?:platelets?|plt)\s*[:=-]\s*([0-9]+(?:\.[0-9]+)?)/i)
+
+  const flags = []
+  if (hemoglobin != null && hemoglobin < 9) flags.push({ label: `Hemoglobin ${hemoglobin} is low`, level: 'low' })
+  if (platelets != null && platelets < 50000) flags.push({ label: `Platelets ${platelets} are critically low`, level: 'critical' })
+  if (wbc != null && wbc > 11000) flags.push({ label: `WBC ${wbc} is high`, level: 'high' })
+
+  const severity = flags.some(f => f.level === 'critical') ? 'Critical'
+    : flags.some(f => f.level === 'high') ? 'High'
+    : flags.some(f => f.level === 'low') ? 'Low'
+    : 'Normal'
+
+  return {
+    values: { hemoglobin, wbc, platelets },
+    severity,
+    flags,
+    summary: flags.length ? flags.map(f => f.label).join('; ') : 'No obvious high-risk pattern detected',
+  }
+}
 
 const TypingDots = () => (
   <div className="flex items-center gap-1 px-4 py-3">
@@ -46,9 +78,31 @@ const HealthChatAssistant = () => {
   const [loading, setLoading] = useState(false)
   const [hydrating, setHydrating] = useState(true)
   const [sessionId, setSessionId] = useState(null)
+  const [patientInfo, setPatientInfo] = useState({ age: '', gender: '', bloodGroup: '' })
+  const [reportData, setReportData] = useState('')
+  const [reportMeta, setReportMeta] = useState({ values: { hemoglobin: null, wbc: null, platelets: null }, severity: 'Normal', flags: [], summary: 'No report data provided' })
   const bottomRef = useRef(null)
 
   useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const res = await fetch(`${serverUrl}/api/patient/me`, {
+          headers: { Authorization: token ? `Bearer ${token}` : '' },
+        })
+        const json = await res.json().catch(() => ({}))
+        if (res.ok && json.success && json.data) {
+          setPatientInfo({
+            age: json.data.age ?? '',
+            gender: json.data.gender ?? '',
+            bloodGroup: json.data.bloodGroup ?? json.data.blood_type ?? '',
+          })
+        }
+      } catch (err) {
+        // keep defaults
+      }
+    }
+
     const loadHistory = async () => {
       try {
         const token = localStorage.getItem('token')
@@ -68,6 +122,7 @@ const HealthChatAssistant = () => {
       }
     }
 
+    loadProfile()
     loadHistory()
   }, [])
 
@@ -76,6 +131,14 @@ const HealthChatAssistant = () => {
   }, [messages, loading])
 
   const canSend = useMemo(() => Boolean(input.trim()) && !loading, [input, loading])
+
+  useEffect(() => {
+    setReportMeta(parseReportSummary(reportData))
+  }, [reportData])
+
+  const appendSuggestion = (text) => {
+    setInput(text)
+  }
 
   const submitMessage = async (text) => {
     const messageText = String(text || input).trim()
@@ -100,7 +163,13 @@ const HealthChatAssistant = () => {
           'Content-Type': 'application/json',
           Authorization: token ? `Bearer ${token}` : '',
         },
-        body: JSON.stringify({ message: messageText, sessionId }),
+        body: JSON.stringify({
+          message: messageText,
+          sessionId,
+          patientInfo,
+          reportData,
+          chatHistory: messages.slice(-12),
+        }),
       })
 
       const json = await res.json().catch(() => ({}))
@@ -186,13 +255,73 @@ const HealthChatAssistant = () => {
               <button
                 key={q}
                 type="button"
-                onClick={() => submitMessage(q)}
+                onClick={() => q === 'Explain my report' ? appendSuggestion('Can you explain my report in simple language?') : q === 'Is my condition serious?' ? appendSuggestion('Based on my report, is my condition serious?') : q === 'What should I do?' ? appendSuggestion('What should I do next based on my report?') : appendSuggestion('Give me diet suggestions for my condition.')}
                 disabled={loading}
                 className="text-left rounded-xl border border-border bg-white/80 px-4 py-3 text-sm text-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors disabled:opacity-60"
               >
                 {q}
               </button>
             ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-4 border shadow-sm">
+        <CardContent className="p-4 md:p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <FileText className="w-4 h-4 text-primary" />
+            <h2 className="font-semibold">Medical Context</h2>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">Age</label>
+              <Input
+                value={patientInfo.age}
+                onChange={(e) => setPatientInfo((prev) => ({ ...prev, age: e.target.value }))}
+                placeholder="Age"
+                inputMode="numeric"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">Gender</label>
+              <Input
+                value={patientInfo.gender}
+                onChange={(e) => setPatientInfo((prev) => ({ ...prev, gender: e.target.value }))}
+                placeholder="Gender"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">Blood Group</label>
+              <Input
+                value={patientInfo.bloodGroup}
+                onChange={(e) => setPatientInfo((prev) => ({ ...prev, bloodGroup: e.target.value }))}
+                placeholder="e.g. O+"
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">Report Data or OCR Summary</label>
+            <Textarea
+              value={reportData}
+              onChange={(e) => setReportData(e.target.value)}
+              placeholder={`Paste key report values here, for example:\nHemoglobin: 8.5\nWBC: 12000\nPlatelets: 200000`}
+              className="min-h-[120px] resize-none rounded-2xl border-2 border-border focus-visible:ring-0 focus-visible:border-primary"
+            />
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Badge variant={reportMeta.severity === 'Critical' ? 'destructive' : reportMeta.severity === 'High' ? 'secondary' : 'outline'}>Severity: {reportMeta.severity}</Badge>
+            {reportMeta.flags.length > 0 ? (
+              reportMeta.flags.map((flag) => (
+                <Badge key={flag.label} variant="outline" className="gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  {flag.label}
+                </Badge>
+              ))
+            ) : (
+              <Badge variant="outline">No obvious high-risk values</Badge>
+            )}
           </div>
         </CardContent>
       </Card>
