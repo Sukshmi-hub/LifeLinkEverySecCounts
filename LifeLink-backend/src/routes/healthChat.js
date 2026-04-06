@@ -32,10 +32,53 @@ function safeAssistantFallback() {
   return 'Something went wrong. Please try again.'
 }
 
+function buildLocalMedicalReply(message) {
+  const text = String(message || '').toLowerCase()
+
+  if (/chest pain|trouble breathing|shortness of breath|faint|fainting|stroke|one side|severe bleeding|allergic reaction|suicidal|confusion/i.test(text)) {
+    return [
+      'This could be urgent.',
+      'Please seek emergency medical care now or call local emergency services.',
+      'If possible, have someone stay with you until help arrives.',
+    ].join(' ')
+  }
+
+  if (/hemoglobin|hb|anemia|anaemia/i.test(text)) {
+    return [
+      'Low hemoglobin can mean your blood may carry less oxygen than normal.',
+      'Common causes include iron deficiency, vitamin deficiencies, blood loss, or some chronic illnesses.',
+      'A doctor may suggest tests and treatment based on the cause.',
+      'If you feel very weak, dizzy, short of breath, or have chest pain, please see a doctor promptly.',
+    ].join(' ')
+  }
+
+  if (/before surgery|surgery prep|pre[- ]?op|operation/i.test(text)) {
+    return [
+      'Before surgery, follow your doctor or hospital instructions carefully.',
+      'Common steps may include fasting, telling the doctor about medicines, allergies, and past illnesses, and arranging transportation and support after the procedure.',
+      'Do not stop or start medicines unless your doctor tells you to.',
+    ].join(' ')
+  }
+
+  if (/anemia|anaemia/i.test(text)) {
+    return [
+      'Common symptoms of anemia include tiredness, weakness, dizziness, pale skin, shortness of breath, and fast heartbeat.',
+      'The exact cause matters, so a doctor may recommend blood tests and treatment.',
+      'If symptoms are severe or sudden, seek medical care.',
+    ].join(' ')
+  }
+
+  return [
+    'I can explain general health topics in simple terms, but I cannot diagnose or prescribe treatment.',
+    'For serious symptoms, worsening problems, or anything urgent, please consult a doctor.',
+    'If you share the main symptom, report value, or question, I can give a simple general explanation.',
+  ].join(' ')
+}
+
 async function callOpenAIChat(messages, userId) {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
-    throw new Error('OPENAI_API_KEY is not configured')
+    return null
   }
 
   const model = process.env.OPENAI_MEDICAL_CHAT_MODEL || 'gpt-4.1-mini'
@@ -137,7 +180,11 @@ router.post('/chat', authenticate, async (req, res) => {
       { role: 'user', content: message },
     ]
 
-    const reply = await callOpenAIChat(openAiMessages, req.user._id)
+    const openAIReply = await callOpenAIChat(openAiMessages, req.user._id).catch((err) => {
+      console.warn('OpenAI medical chat unavailable, using fallback:', err?.message || err)
+      return null
+    })
+    const reply = openAIReply || buildLocalMedicalReply(message)
 
     session.messages.push(
       { role: 'user', content: message, createdAt: new Date() },
@@ -154,10 +201,15 @@ router.post('/chat', authenticate, async (req, res) => {
       reply,
       sessionId: String(session._id),
       messages: normalizeHistory(session.messages),
+      source: openAIReply ? 'openai' : 'fallback',
     })
   } catch (err) {
     console.error('Medical chat failed:', err)
-    return res.status(500).json({ success: false, message: safeAssistantFallback() })
+    return res.status(200).json({
+      success: true,
+      reply: buildLocalMedicalReply(String(req.body?.message || '')),
+      source: 'fallback',
+    })
   }
 })
 

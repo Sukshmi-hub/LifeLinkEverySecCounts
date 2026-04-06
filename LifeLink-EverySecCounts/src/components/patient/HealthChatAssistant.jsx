@@ -104,7 +104,7 @@ const HealthChatAssistant = () => {
       })
 
       const json = await res.json().catch(() => ({}))
-      if (!res.ok || !json.success) {
+      if (!json.success) {
         throw new Error(json.message || 'Something went wrong')
       }
 
