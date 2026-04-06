@@ -19,6 +19,7 @@ const MEDICAL_CHAT_PROMPT = [
 const MAX_HISTORY_MESSAGES = 12
 const MAX_SAVED_MESSAGES = 24
 const SEVERITY_ORDER = { critical: 3, high: 2, low: 1, normal: 0 }
+const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_CHAT_TIMEOUT_MS || 10000)
 
 function normalizeHistory(messages = []) {
   return messages
@@ -288,14 +289,23 @@ async function callOpenAIChat(messages, userId) {
     userId: userId ? String(userId) : null,
   })
 
-  const resp = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(payload),
-  })
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(new Error('OpenAI request timed out')), OPENAI_TIMEOUT_MS)
+
+  let resp
+  try {
+    resp = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timeoutId)
+  }
 
   if (!resp.ok) {
     const detail = await resp.text().catch(() => '')

@@ -42,9 +42,9 @@ const parseReportSummary = (text = '') => {
     return Number.isFinite(val) ? val : null
   }
 
-  const hemoglobin = readValue(/(?:hemoglobin|hb)\s*[:=-]\s*([0-9]+(?:\.[0-9]+)?)/i)
-  const wbc = readValue(/(?:wbc|white blood cell count)\s*[:=-]\s*([0-9]+(?:\.[0-9]+)?)/i)
-  const platelets = readValue(/(?:platelets?|plt)\s*[:=-]\s*([0-9]+(?:\.[0-9]+)?)/i)
+  const hemoglobin = readValue(/(?:hemoglobin|hb)\s*[:=\-]?\s*([0-9]+(?:\.[0-9]+)?)/i)
+  const wbc = readValue(/(?:wbc|white blood cell count)\s*[:=\-]?\s*([0-9]+(?:\.[0-9]+)?)/i)
+  const platelets = readValue(/(?:platelets?|plt)\s*[:=\-]?\s*([0-9]+(?:\.[0-9]+)?)/i)
 
   const flags = []
   if (hemoglobin != null && hemoglobin < 9) flags.push({ label: `Hemoglobin ${hemoglobin} is low`, level: 'low' })
@@ -62,6 +62,39 @@ const parseReportSummary = (text = '') => {
     flags,
     summary: flags.length ? flags.map(f => f.label).join('; ') : 'No obvious high-risk pattern detected',
   }
+}
+
+const buildLocalMedicalReply = (message, severity) => {
+  const text = String(message || '').toLowerCase()
+
+  if (/chest pain|trouble breathing|shortness of breath|faint|fainting|stroke|one side|severe bleeding|allergic reaction|suicidal|confusion/i.test(text)) {
+    return 'This could be urgent. Please seek emergency medical care now or call local emergency services.'
+  }
+
+  if (/hemoglobin|hb|anemia|anaemia/i.test(text) || severity?.severity === 'Low' || severity?.severity === 'High' || severity?.severity === 'Critical') {
+    const parts = []
+    if (severity?.severity === 'Low') {
+      parts.push('Your hemoglobin looks low, so you may have anemia or another cause of low blood count.')
+    } else if (severity?.severity === 'High' || severity?.severity === 'Critical') {
+      parts.push('Your report has an abnormal pattern that should be reviewed by a doctor.')
+    } else {
+      parts.push('Low hemoglobin can mean your blood may carry less oxygen than normal.')
+    }
+    parts.push('Common causes include iron deficiency, vitamin deficiencies, blood loss, or some chronic illnesses.')
+    parts.push('A doctor may suggest tests and treatment based on the cause.')
+    parts.push('If you feel very weak, dizzy, short of breath, or have chest pain, please see a doctor promptly.')
+    return parts.join(' ')
+  }
+
+  if (/before surgery|surgery prep|pre[- ]?op|operation/i.test(text)) {
+    return 'Before surgery, follow your doctor or hospital instructions carefully. Common steps may include fasting, telling the doctor about medicines, allergies, and past illnesses, and arranging transportation and support after the procedure.'
+  }
+
+  if (/anemia|anaemia/i.test(text)) {
+    return 'Common symptoms of anemia include tiredness, weakness, dizziness, pale skin, shortness of breath, and fast heartbeat. The exact cause matters, so a doctor may recommend blood tests and treatment.'
+  }
+
+  return 'I can explain general health topics in simple terms, but I cannot diagnose or prescribe treatment. For serious symptoms, worsening problems, or anything urgent, please consult a doctor.'
 }
 
 const TypingDots = () => (
@@ -158,6 +191,8 @@ const HealthChatAssistant = () => {
     try {
       const token = localStorage.getItem('token')
       const endpoint = `${serverUrl}/api/health-chat/chat`
+      const controller = new AbortController()
+      const timeout = window.setTimeout(() => controller.abort(), 10000)
       console.log('[HealthChat] sending request', {
         endpoint,
         messageText,
@@ -167,20 +202,26 @@ const HealthChatAssistant = () => {
         hasToken: Boolean(token),
       })
 
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: token ? `Bearer ${token}` : '',
-        },
-        body: JSON.stringify({
-          message: messageText,
-          sessionId,
-          patientInfo,
-          reportData,
-          chatHistory: messages.slice(-12),
-        }),
-      })
+      let res
+      try {
+        res = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: token ? `Bearer ${token}` : '',
+          },
+          body: JSON.stringify({
+            message: messageText,
+            sessionId,
+            patientInfo,
+            reportData,
+            chatHistory: messages.slice(-12),
+          }),
+          signal: controller.signal,
+        })
+      } finally {
+        window.clearTimeout(timeout)
+      }
 
       console.log('[HealthChat] received response', {
         status: res.status,
@@ -219,7 +260,7 @@ const HealthChatAssistant = () => {
       const fallback = {
         id: `assistant-fallback-${Date.now()}`,
         role: 'assistant',
-        content: 'Something went wrong. Please try again.',
+        content: buildLocalMedicalReply(messageText, reportMeta),
         createdAt: new Date().toISOString(),
       }
       setMessages((prev) => [...prev, fallback])
