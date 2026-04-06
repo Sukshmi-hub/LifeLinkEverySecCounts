@@ -365,6 +365,7 @@ router.post('/chat', softAuthenticate, async (req, res) => {
     console.log('[health-chat] Incoming request', {
       userId: String(req.chatUser?._id || ''),
       messageLength: message.length,
+      hasReportData: Boolean(req.body?.reportData),
       chatHistoryLength: Array.isArray(req.body?.chatHistory) ? req.body.chatHistory.length : 0,
     })
     if (!message) {
@@ -374,6 +375,19 @@ router.post('/chat', softAuthenticate, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Message is too long' })
     }
 
+    const patientDoc = req.chatUser?._id && isDbReady()
+      ? await Patient.findOne({ userId: req.chatUser._id }).lean()
+      : null
+    const incomingPatientInfo = req.body?.patientInfo && typeof req.body.patientInfo === 'object'
+      ? req.body.patientInfo
+      : {}
+    const mergedPatient = {
+      age: incomingPatientInfo.age ?? patientDoc?.age ?? null,
+      gender: incomingPatientInfo.gender ?? patientDoc?.gender ?? 'Unknown',
+      bloodGroup: incomingPatientInfo.bloodGroup ?? patientDoc?.blood_type ?? patientDoc?.bloodGroup ?? null,
+    }
+    const report = parseReportData(req.body?.reportData)
+    const severity = deriveSeverity(report)
     const incomingHistory = Array.isArray(req.body?.chatHistory)
       ? normalizeHistory(req.body.chatHistory).slice(-MAX_HISTORY_MESSAGES)
       : []
@@ -390,9 +404,8 @@ router.post('/chat', softAuthenticate, async (req, res) => {
     const recentMessages = (incomingHistory.length ? incomingHistory : normalizeHistory(session?.messages || [])).slice(-MAX_HISTORY_MESSAGES)
     const openAiMessages = [
       { role: 'system', content: MEDICAL_CHAT_PROMPT },
-      ...recentMessages,
-      { role: 'user', content: String(message || '') },
-    ].slice(-MAX_HISTORY_MESSAGES - 2)
+      { role: 'user', content: buildMedicalChatContext({ patient: mergedPatient, report, severity, message, history: recentMessages }) },
+    ]
 
     const openAIReply = await callOpenAIChat(openAiMessages, req.chatUser?._id).catch((err) => {
       console.warn('OpenAI medical chat unavailable, using fallback:', err?.message || err)
@@ -400,6 +413,8 @@ router.post('/chat', softAuthenticate, async (req, res) => {
     })
     const reply = openAIReply || buildLocalMedicalReply([
       message,
+      report?.raw || '',
+      severity?.summary || '',
     ].join(' '))
 
     if (session) {
@@ -422,9 +437,16 @@ router.post('/chat', softAuthenticate, async (req, res) => {
         { role: 'user', content: message, createdAt: new Date() },
         { role: 'assistant', content: reply, createdAt: new Date() },
       ],
+      severity,
+      reportSummary: {
+        hasReport: Boolean(report?.raw),
+        values: severity.values,
+        summary: severity.summary,
+      },
       source: openAIReply ? 'openai' : 'fallback',
       debug: {
         receivedMessageLength: message.length,
+        reportKeys: report?.fields ? Object.keys(report.fields).filter(Boolean) : [],
       },
     })
   } catch (err) {
