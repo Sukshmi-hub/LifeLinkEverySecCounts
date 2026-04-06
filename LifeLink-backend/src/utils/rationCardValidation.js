@@ -134,6 +134,8 @@ const BLOOD_TABLE_ROW_REGEX = /(hemoglobin|hb|rbc|wbc|platelet|cbc)\s*[:\-]\s*\d
 
 const MEDICAL_CORE_TERMS = [
   'medical report',
+  'sample medical report',
+  'medical document',
   'patient',
   'diagnosis',
   'treatment',
@@ -144,9 +146,18 @@ const MEDICAL_CORE_TERMS = [
   'admission',
   'laboratory',
   'findings',
+  'laboratory findings',
   'discharge',
   'summary',
   'case sheet',
+  'patient information',
+  'admission details',
+  'clinical diagnosis',
+  'treatment plan',
+  'physician declaration',
+  'hospital address',
+  'hematology',
+  'transfusion medicine',
 ]
 
 const MEDICAL_PATIENT_TERMS = [
@@ -156,6 +167,7 @@ const MEDICAL_PATIENT_TERMS = [
   'gender',
   'blood group',
   'address',
+  'referring physician',
 ]
 
 const MEDICAL_DIAGNOSIS_TERMS = [
@@ -165,6 +177,8 @@ const MEDICAL_DIAGNOSIS_TERMS = [
   'clinical findings',
   'provisional diagnosis',
   'final diagnosis',
+  'clinical diagnosis',
+  'laboratory findings',
 ]
 
 const MEDICAL_TREATMENT_TERMS = [
@@ -174,6 +188,9 @@ const MEDICAL_TREATMENT_TERMS = [
   'procedure',
   'prescribed',
   'advised',
+  'treatment',
+  'medical recommendation',
+  'donor requirement statement',
 ]
 
 const MEDICAL_AUTH_TERMS = [
@@ -185,6 +202,9 @@ const MEDICAL_AUTH_TERMS = [
   'reg no',
   'registration number',
   'medical officer',
+  'attending physician',
+  'consultant',
+  'dr.',
 ]
 
 const MEDICAL_FRAUD_TERMS = [
@@ -922,10 +942,15 @@ function classifyMedicalReportText(text) {
   const fraud = countMatches(normalized, MEDICAL_FRAUD_TERMS)
   const hasSections =
     normalized.includes('patient information') ||
+    normalized.includes('admission details') ||
     normalized.includes('diagnosis') ||
+    normalized.includes('clinical diagnosis') ||
     normalized.includes('treatment') ||
+    normalized.includes('treatment plan') ||
     normalized.includes('clinical findings') ||
+    normalized.includes('laboratory findings') ||
     normalized.includes('medical report') ||
+    normalized.includes('sample medical report') ||
     normalized.includes('discharge summary')
   const lineCount = String(text || '').split(/\r?\n/).filter(Boolean).length
   const length = normalized.length
