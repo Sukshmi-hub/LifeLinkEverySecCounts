@@ -37,6 +37,18 @@ const normalizeMessages = (messages = []) => messages
     createdAt: m.createdAt || new Date().toISOString(),
   }))
 
+const classifyQuestionType = (message = '') => {
+  const text = String(message || '').toLowerCase().trim()
+  if (/diet suggestion|what food|food suggestion|diet/i.test(text)) return 'diet'
+  if (/before surgery|surgery prep|pre[- ]?op|operation/i.test(text)) return 'surgery'
+  if (/symptom|symptoms of anemia|signs of anemia/i.test(text)) return 'anemia_symptoms'
+  if (/what does low hemoglobin mean|low hemoglobin/i.test(text)) return 'hemoglobin_meaning'
+  if (/is my condition serious|serious|risk|how bad/i.test(text)) return 'seriousness'
+  if (/explain my report|explain report|report/i.test(text)) return 'report'
+  if (/what should i do|what do i do|next step|should i do/i.test(text)) return 'action'
+  return 'general'
+}
+
 const parseReportSummary = (text = '') => {
   const raw = String(text || '')
   const readValue = (regex) => {
@@ -73,32 +85,69 @@ const parseReportSummary = (text = '') => {
 
 const buildLocalMedicalReply = (message, severity) => {
   const text = String(message || '').toLowerCase()
+  const questionType = classifyQuestionType(message)
 
   if (/chest pain|trouble breathing|shortness of breath|faint|fainting|stroke|one side|severe bleeding|allergic reaction|suicidal|confusion/i.test(text)) {
     return 'This could be urgent. Please seek emergency medical care now or call local emergency services.'
   }
 
-  if (/hemoglobin|hb|anemia|anaemia/i.test(text) || severity?.severity === 'Low' || severity?.severity === 'High' || severity?.severity === 'Critical') {
+  if (questionType === 'report') {
+    const hb = severity?.values?.hemoglobin
+    const wbc = severity?.values?.wbc
+    const platelets = severity?.values?.platelets
     const parts = []
-    if (severity?.severity === 'Low') {
-      parts.push('Your hemoglobin looks low, so you may have anemia or another cause of low blood count.')
-    } else if (severity?.severity === 'High' || severity?.severity === 'Critical') {
-      parts.push('Your report has an abnormal pattern that should be reviewed by a doctor.')
-    } else {
-      parts.push('Low hemoglobin can mean your blood may carry less oxygen than normal.')
-    }
-    parts.push('Common causes include iron deficiency, vitamin deficiencies, blood loss, or some chronic illnesses.')
-    parts.push('A doctor may suggest tests and treatment based on the cause.')
-    parts.push('If you feel very weak, dizzy, short of breath, or have chest pain, please see a doctor promptly.')
-    return parts.join(' ')
+    if (hb != null) parts.push(`Hemoglobin: ${hb} (${hb < 9 ? 'low' : 'within the usual range'})`)
+    if (wbc != null) parts.push(`WBC: ${wbc} (${wbc > 11000 ? 'high' : 'within the usual range'})`)
+    if (platelets != null) parts.push(`Platelets: ${platelets} (${platelets < 150000 ? 'low' : 'normal'})`)
+    if (!parts.length) return 'I could not detect any report values clearly. Please paste the key values again.'
+    return parts.join('. ')
   }
 
-  if (/before surgery|surgery prep|pre[- ]?op|operation/i.test(text)) {
+  if (questionType === 'seriousness') {
+    if (severity?.severity === 'Low') {
+      return 'It looks mild to moderate, but it needs attention. Low hemoglobin can be important and should be discussed with a doctor.'
+    }
+    if (severity?.severity === 'High' || severity?.severity === 'Critical') {
+      return 'It needs attention. Your report has abnormal values, so please consult a doctor soon.'
+    }
+    return 'It does not look very serious from the values I can see, but it is still worth discussing with a doctor if you have symptoms.'
+  }
+
+  if (questionType === 'action') {
+    return 'What you should do next:\n- Consult a doctor\n- Share the report values\n- Rest and stay hydrated\n- Follow any test or treatment advice from your doctor'
+  }
+
+  if (questionType === 'diet') {
+    if (severity?.severity === 'Low') {
+      return 'Diet suggestions:\n- Spinach and leafy greens\n- Dates and jaggery\n- Beans, lentils, and chickpeas\n- Iron-rich foods with vitamin C like oranges or lemon'
+    }
+    return 'Diet suggestions:\n- Balanced meals with vegetables, fruits, protein, and enough water\n- Follow your doctor’s advice if you have a specific condition'
+  }
+
+  if (questionType === 'hemoglobin_meaning' || (/hemoglobin|hb|anemia|anaemia/i.test(text) && severity?.values?.hemoglobin != null)) {
+    const hb = severity?.values?.hemoglobin
+    if (hb != null) {
+      if (hb < 9) {
+        return 'Low hemoglobin means your blood may carry less oxygen than normal. It can happen with iron deficiency, blood loss, or other causes.'
+      }
+      if (hb < 12) {
+        return 'Your hemoglobin is a bit low. It may need attention, but the exact meaning depends on your doctor’s assessment.'
+      }
+      return 'Your hemoglobin looks within the usual range.'
+    }
+    return 'Low hemoglobin means your blood may carry less oxygen than normal. A doctor may suggest tests to find the cause.'
+  }
+
+  if (questionType === 'surgery') {
     return 'Before surgery, follow your doctor or hospital instructions carefully. Common steps may include fasting, telling the doctor about medicines, allergies, and past illnesses, and arranging transportation and support after the procedure.'
   }
 
-  if (/anemia|anaemia/i.test(text)) {
-    return 'Common symptoms of anemia include tiredness, weakness, dizziness, pale skin, shortness of breath, and fast heartbeat. The exact cause matters, so a doctor may recommend blood tests and treatment.'
+  if (questionType === 'anemia_symptoms') {
+    return 'Common symptoms of anemia include:\n- Tiredness\n- Weakness\n- Dizziness\n- Pale skin\n- Shortness of breath\n- Fast heartbeat'
+  }
+
+  if (severity?.severity === 'Low' || severity?.severity === 'High' || severity?.severity === 'Critical') {
+    return 'Your report has an abnormal value that should be reviewed by a doctor. If you have symptoms like weakness, dizziness, shortness of breath, or chest pain, please seek medical care promptly.'
   }
 
   return 'I can explain general health topics in simple terms, but I cannot diagnose or prescribe treatment. For serious symptoms, worsening problems, or anything urgent, please consult a doctor.'

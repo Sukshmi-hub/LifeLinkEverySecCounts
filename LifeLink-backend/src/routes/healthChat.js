@@ -14,6 +14,8 @@ const MEDICAL_CHAT_PROMPT = [
   'If the user mentions chest pain, trouble breathing, stroke symptoms, heavy bleeding, fainting, severe allergic reaction, confusion, suicidal thoughts, or another emergency, tell them to seek emergency medical care immediately.',
   'Keep answers concise, practical, and easy to understand.',
   'Use bullet points when helpful.',
+  'Answer only the question the user asked.',
+  'Do not repeat the same explanation if the question is about diet, surgery, symptoms, action steps, or seriousness.',
 ].join(' ')
 
 const MAX_HISTORY_MESSAGES = 12
@@ -34,6 +36,18 @@ function normalizeHistory(messages = []) {
 
 function safeAssistantFallback() {
   return 'Something went wrong. Please try again.'
+}
+
+function classifyQuestionType(message = '') {
+  const text = String(message || '').toLowerCase().trim()
+  if (/diet suggestion|what food|food suggestion|diet/i.test(text)) return 'diet'
+  if (/before surgery|surgery prep|pre[- ]?op|operation/i.test(text)) return 'surgery'
+  if (/symptom|symptoms of anemia|signs of anemia/i.test(text)) return 'anemia_symptoms'
+  if (/what does low hemoglobin mean|low hemoglobin/i.test(text)) return 'hemoglobin_meaning'
+  if (/is my condition serious|serious|risk|how bad/i.test(text)) return 'seriousness'
+  if (/explain my report|explain report|report/i.test(text)) return 'report'
+  if (/what should i do|what do i do|next step|should i do/i.test(text)) return 'action'
+  return 'general'
 }
 
 function isDbReady() {
@@ -94,6 +108,7 @@ function extractResponseText(data) {
 
 function buildLocalMedicalReply(message) {
   const text = String(message || '').toLowerCase()
+  const questionType = classifyQuestionType(text)
 
   if (/chest pain|trouble breathing|shortness of breath|faint|fainting|stroke|one side|severe bleeding|allergic reaction|suicidal|confusion/i.test(text)) {
     return [
@@ -103,7 +118,43 @@ function buildLocalMedicalReply(message) {
     ].join(' ')
   }
 
-  if (/hemoglobin|hb|anemia|anaemia/i.test(text)) {
+  if (questionType === 'report') {
+    return [
+      'Report summary:',
+      '- Hemoglobin: low or normal depending on the value you shared',
+      '- WBC: high or normal depending on the value you shared',
+      '- Platelets: low or normal depending on the value you shared',
+      'If you want, I can explain each value one by one.',
+    ].join(' ')
+  }
+
+  if (questionType === 'seriousness') {
+    return [
+      'From the values you shared, this looks like it may need attention.',
+      'Please discuss it with a doctor, especially if you have weakness, dizziness, shortness of breath, or chest pain.',
+    ].join(' ')
+  }
+
+  if (questionType === 'action') {
+    return [
+      'What you should do next:',
+      '- Consult a doctor',
+      '- Rest and stay hydrated',
+      '- Share the report values with your doctor',
+      '- Follow any test or treatment advice you are given',
+    ].join(' ')
+  }
+
+  if (questionType === 'diet') {
+    return [
+      'Diet suggestions:',
+      '- Iron-rich foods like spinach, dates, jaggery, lentils, and beans',
+      '- Vitamin C foods like oranges or lemon with meals',
+      '- Balanced meals with vegetables, fruits, and protein',
+    ].join(' ')
+  }
+
+  if (questionType === 'hemoglobin_meaning') {
     return [
       'Low hemoglobin can mean your blood may carry less oxygen than normal.',
       'Common causes include iron deficiency, vitamin deficiencies, blood loss, or some chronic illnesses.',
@@ -112,7 +163,7 @@ function buildLocalMedicalReply(message) {
     ].join(' ')
   }
 
-  if (/before surgery|surgery prep|pre[- ]?op|operation/i.test(text)) {
+  if (questionType === 'surgery') {
     return [
       'Before surgery, follow your doctor or hospital instructions carefully.',
       'Common steps may include fasting, telling the doctor about medicines, allergies, and past illnesses, and arranging transportation and support after the procedure.',
@@ -120,7 +171,7 @@ function buildLocalMedicalReply(message) {
     ].join(' ')
   }
 
-  if (/anemia|anaemia/i.test(text)) {
+  if (questionType === 'anemia_symptoms') {
     return [
       'Common symptoms of anemia include tiredness, weakness, dizziness, pale skin, shortness of breath, and fast heartbeat.',
       'The exact cause matters, so a doctor may recommend blood tests and treatment.',
@@ -386,11 +437,12 @@ router.post('/chat', softAuthenticate, async (req, res) => {
       gender: incomingPatientInfo.gender ?? patientDoc?.gender ?? 'Unknown',
       bloodGroup: incomingPatientInfo.bloodGroup ?? patientDoc?.blood_type ?? patientDoc?.bloodGroup ?? null,
     }
-    const report = parseReportData(req.body?.reportData)
-    const severity = deriveSeverity(report)
-    const incomingHistory = Array.isArray(req.body?.chatHistory)
-      ? normalizeHistory(req.body.chatHistory).slice(-MAX_HISTORY_MESSAGES)
-      : []
+  const report = parseReportData(req.body?.reportData)
+  const severity = deriveSeverity(report)
+  const questionType = classifyQuestionType(message)
+  const incomingHistory = Array.isArray(req.body?.chatHistory)
+    ? normalizeHistory(req.body.chatHistory).slice(-MAX_HISTORY_MESSAGES)
+    : []
 
     let session = null
     if (req.chatUser?._id && isDbReady()) {
@@ -405,6 +457,17 @@ router.post('/chat', softAuthenticate, async (req, res) => {
     const openAiMessages = [
       { role: 'system', content: MEDICAL_CHAT_PROMPT },
       { role: 'user', content: buildMedicalChatContext({ patient: mergedPatient, report, severity, message, history: recentMessages }) },
+      { role: 'user', content: [
+        `Question type: ${questionType}`,
+        'Answer only this intent:',
+        questionType === 'report' ? 'Explain the report values briefly and clearly.' : '',
+        questionType === 'seriousness' ? 'Give only the risk level and a short reason.' : '',
+        questionType === 'action' ? 'Give short action steps only.' : '',
+        questionType === 'diet' ? 'Give only food suggestions; no report explanation.' : '',
+        questionType === 'hemoglobin_meaning' ? 'Explain only hemoglobin and do not mention other values unless necessary.' : '',
+        questionType === 'surgery' ? 'Give general pre-surgery precautions only.' : '',
+        questionType === 'anemia_symptoms' ? 'List anemia symptoms only.' : '',
+      ].filter(Boolean).join('\n') },
     ]
 
     const openAIReply = await callOpenAIChat(openAiMessages, req.chatUser?._id).catch((err) => {
@@ -447,6 +510,7 @@ router.post('/chat', softAuthenticate, async (req, res) => {
       debug: {
         receivedMessageLength: message.length,
         reportKeys: report?.fields ? Object.keys(report.fields).filter(Boolean) : [],
+        questionType,
       },
     })
   } catch (err) {
