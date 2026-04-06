@@ -171,7 +171,7 @@ const HealthChatAssistant = () => {
     return () => window.cancelAnimationFrame(raf)
   }, [messages, loading])
 
-  const canSend = useMemo(() => Boolean(input.trim()) && !loading, [input, loading])
+  const canSend = useMemo(() => Boolean(input.trim()), [input])
 
   useEffect(() => {
     setReportMeta(parseReportSummary(reportData))
@@ -186,7 +186,7 @@ const HealthChatAssistant = () => {
 
   const submitMessage = async (text) => {
     const messageText = String(text || input).trim()
-    if (!messageText || loading) return
+    if (!messageText) return
 
     const userMessage = {
       id: `local-${Date.now()}`,
@@ -473,6 +473,7 @@ const HealthChatAssistant = () => {
               <Button
                 onClick={() => submitMessage()}
                 disabled={!canSend}
+                type="button"
                 className="md:h-auto md:min-h-[96px] md:px-6 gap-2 rounded-2xl"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
