@@ -10,19 +10,33 @@ const POSITIVE_TERMS = [
   'national food security act',
   'food security',
   'public distribution system',
+  'priority household',
+  'priority household phh',
+  'ration card no',
+  'ration card number',
+  'government of nct of delhi',
   'family head',
   'state government',
   'department of food',
   'food and civil supplies',
   'food civil supplies',
   'household details',
+  'entitlement details',
+  'family members',
+  'fair price shop details',
+  'fair price shop',
+  'fps id',
+  'valid till',
+  'head of family',
   'fair price shop',
   'household ration',
+  'rice',
+  'wheat',
+  'sugar',
+  'kerosene',
 ]
 
-const NEGATIVE_TERMS = [
-  'aadhaar',
-  'aadhar',
+const HARD_NEGATIVE_TERMS = [
   'pan card',
   'permanent account number',
   'passport',
@@ -33,6 +47,11 @@ const NEGATIVE_TERMS = [
   'profile photo',
   'income tax',
   'government of india unique identification authority',
+]
+
+const SOFT_NEGATIVE_TERMS = [
+  'aadhaar',
+  'aadhar',
 ]
 
 const FILE_HINTS = ['ration', 'nfsa', 'food', 'card']
@@ -65,9 +84,8 @@ function previewText(text, max = 400) {
 
 function inferDocumentType(text) {
   const normalized = normalizeText(text)
-  const negative = countMatches(normalized, NEGATIVE_TERMS)
+  const negative = countMatches(normalized, HARD_NEGATIVE_TERMS)
   if (negative.count > 0) {
-    if (normalized.includes('aadhaar') || normalized.includes('aadhar')) return 'aadhaar'
     if (normalized.includes('pan')) return 'pan'
     if (normalized.includes('passport')) return 'passport'
     return 'other_id'
@@ -80,7 +98,8 @@ function inferDocumentType(text) {
 function classifyText(text) {
   const normalized = normalizeText(text)
   const positive = countMatches(normalized, POSITIVE_TERMS)
-  const negative = countMatches(normalized, NEGATIVE_TERMS)
+  const hardNegative = countMatches(normalized, HARD_NEGATIVE_TERMS)
+  const softNegative = countMatches(normalized, SOFT_NEGATIVE_TERMS)
   const fileHints = countMatches(normalized, FILE_HINTS)
   const length = normalized.length
 
@@ -92,11 +111,11 @@ function classifyText(text) {
       reason: 'OCR text is too short or unreadable. Please upload a clearer image or a searchable PDF.',
       detectedType: 'unknown',
       positive,
-      negative,
+      negative: { ...hardNegative, soft: softNegative },
     }
   }
 
-  if (negative.count > 0 && positive.count === 0) {
+  if (hardNegative.count > 0 && positive.count === 0) {
     return {
       status: 'invalid',
       isValid: false,
@@ -104,23 +123,45 @@ function classifyText(text) {
       reason: `Document looks like ${inferDocumentType(normalized)} rather than a ration card.`,
       detectedType: inferDocumentType(normalized),
       positive,
-      negative,
+      negative: { ...hardNegative, soft: softNegative },
     }
   }
 
-  const strongRationSignals = positive.found.some(term => ['ration card', 'nfsa', 'food security', 'public distribution system'].includes(term))
-  const adminSignals = positive.found.some(term => ['state government', 'department of food', 'food and civil supplies', 'family head'].includes(term))
+  const strongRationSignals = positive.found.some(term => [
+    'ration card',
+    'ration card no',
+    'ration card number',
+    'nfsa',
+    'national food security act',
+    'food security',
+    'public distribution system',
+    'government of nct of delhi',
+    'priority household',
+    'priority household phh',
+  ].includes(term))
+  const adminSignals = positive.found.some(term => [
+    'state government',
+    'department of food',
+    'food and civil supplies',
+    'family head',
+    'head of family',
+    'entitlement details',
+    'fair price shop details',
+    'fps id',
+    'family members',
+  ].includes(term))
 
   const score =
     (positive.count * 0.24) +
     (strongRationSignals ? 0.28 : 0) +
     (adminSignals ? 0.15 : 0) +
     (fileHints.count > 0 ? 0.08 : 0) -
-    (negative.count * 0.35)
+    (hardNegative.count * 0.35) -
+    (softNegative.count > 0 && positive.count === 0 ? 0.12 : 0)
 
   const confidence = Math.max(0, Math.min(0.98, score))
 
-  if (positive.count >= 2 && strongRationSignals && negative.count === 0) {
+  if (positive.count >= 2 && strongRationSignals && hardNegative.count === 0) {
     return {
       status: 'valid',
       isValid: true,
@@ -128,11 +169,11 @@ function classifyText(text) {
       reason: 'Ration card keywords detected.',
       detectedType: 'ration_card',
       positive,
-      negative,
+      negative: { ...hardNegative, soft: softNegative },
     }
   }
 
-  if (positive.count >= 3 && negative.count === 0) {
+  if (positive.count >= 3 && hardNegative.count === 0) {
     return {
       status: 'valid',
       isValid: true,
@@ -140,19 +181,31 @@ function classifyText(text) {
       reason: 'Document text matches a ration card pattern.',
       detectedType: 'ration_card',
       positive,
-      negative,
+      negative: { ...hardNegative, soft: softNegative },
     }
   }
 
-  if (negative.count > 0) {
+  if (hardNegative.count > 0) {
     return {
       status: 'invalid',
       isValid: false,
       confidence,
-      reason: `Text matches other document type keywords: ${negative.found.slice(0, 3).join(', ')}`,
+      reason: `Text matches other document type keywords: ${hardNegative.found.slice(0, 3).join(', ')}`,
       detectedType: inferDocumentType(normalized),
       positive,
-      negative,
+      negative: { ...hardNegative, soft: softNegative },
+    }
+  }
+
+  if (positive.count >= 2 && softNegative.count > 0) {
+    return {
+      status: 'valid',
+      isValid: true,
+      confidence,
+      reason: 'Ration card keywords detected, and Aadhaar text is allowed on genuine ration cards.',
+      detectedType: 'ration_card',
+      positive,
+      negative: { ...hardNegative, soft: softNegative },
     }
   }
 
@@ -163,7 +216,7 @@ function classifyText(text) {
     reason: 'Required ration card keywords were not found.',
     detectedType: 'unknown',
     positive,
-    negative,
+    negative: { ...hardNegative, soft: softNegative },
   }
 }
 
