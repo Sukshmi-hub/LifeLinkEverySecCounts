@@ -37,6 +37,40 @@ const normalizeMessages = (messages = []) => messages
     createdAt: m.createdAt || new Date().toISOString(),
   }))
 
+const parseReportSummary = (text = '') => {
+  const raw = String(text || '')
+  const readValue = (regex) => {
+    const match = raw.match(regex)
+    if (!match) return null
+    const val = Number(String(match[1]).replace(/,/g, ''))
+    return Number.isFinite(val) ? val : null
+  }
+
+  const hemoglobin = readValue(/(?:hemoglobin|hb)\s*[:=\-]?\s*([0-9]+(?:\.[0-9]+)?)/i)
+  const wbc = readValue(/(?:wbc|white blood cell count)\s*[:=\-]?\s*([0-9]+(?:\.[0-9]+)?)/i)
+  const platelets = readValue(/(?:platelets?|plt)\s*[:=\-]?\s*([0-9]+(?:\.[0-9]+)?)/i)
+
+  const flags = []
+  if (hemoglobin != null && hemoglobin < 9) flags.push({ label: `Hemoglobin ${hemoglobin} is low`, level: 'low' })
+  if (platelets != null && platelets < 50000) flags.push({ label: `Platelets ${platelets} are critically low`, level: 'critical' })
+  if (wbc != null && wbc > 11000) flags.push({ label: `WBC ${wbc} is high`, level: 'high' })
+
+  const severity = flags.some((f) => f.level === 'critical')
+    ? 'Critical'
+    : flags.some((f) => f.level === 'high')
+      ? 'High'
+      : flags.some((f) => f.level === 'low')
+        ? 'Low'
+        : 'Normal'
+
+  return {
+    values: { hemoglobin, wbc, platelets },
+    severity,
+    flags,
+    summary: flags.length ? flags.map((f) => f.label).join('; ') : 'No obvious high-risk values',
+  }
+}
+
 const buildLocalMedicalReply = (message, severity) => {
   const text = String(message || '').toLowerCase()
 
@@ -85,8 +119,10 @@ const HealthChatAssistant = () => {
   const [hydrating, setHydrating] = useState(true)
   const [sessionId, setSessionId] = useState(null)
   const [patientInfo, setPatientInfo] = useState({ age: '', gender: '', bloodGroup: '' })
+  const [reportData, setReportData] = useState('hemoglobin 8.5')
   const bottomRef = useRef(null)
   const messageListRef = useRef(null)
+  const reportSummary = useMemo(() => parseReportSummary(reportData), [reportData])
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -164,7 +200,7 @@ const HealthChatAssistant = () => {
     const localReply = {
       id: `assistant-local-${Date.now()}`,
       role: 'assistant',
-      content: buildLocalMedicalReply(messageText),
+      content: buildLocalMedicalReply(messageText, reportSummary),
       createdAt: new Date().toISOString(),
     }
 
@@ -196,6 +232,8 @@ const HealthChatAssistant = () => {
             message: messageText,
             sessionId,
             chatHistory: messages.slice(-12),
+            reportData,
+            patientInfo,
           }),
           signal: controller.signal,
         })
@@ -244,14 +282,14 @@ const HealthChatAssistant = () => {
           const index = next.length - 1 - lastAssistantIndex
           next[index] = {
             ...next[index],
-            content: buildLocalMedicalReply(messageText),
+            content: buildLocalMedicalReply(messageText, reportSummary),
           }
           return next
         }
         return [...next, {
           id: `assistant-fallback-${Date.now()}`,
           role: 'assistant',
-          content: buildLocalMedicalReply(messageText),
+          content: buildLocalMedicalReply(messageText, reportSummary),
           createdAt: new Date().toISOString(),
         }]
       })
@@ -358,6 +396,25 @@ const HealthChatAssistant = () => {
                   placeholder="e.g. O+"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">Report Data or OCR Summary</label>
+              <Textarea
+                value={reportData}
+                onChange={(e) => setReportData(e.target.value)}
+                placeholder="Paste key report values here, for example:\nHemoglobin: 8.5\nWBC: 12000\nPlatelets: 200000"
+                className="min-h-[160px] resize-none rounded-2xl border-2 border-border focus-visible:ring-0 focus-visible:border-primary"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="gap-1">
+                Severity: {reportSummary.severity}
+              </Badge>
+              <Badge variant="secondary" className="gap-1">
+                {reportSummary.summary}
+              </Badge>
             </div>
           </CardContent>
         </Card>
