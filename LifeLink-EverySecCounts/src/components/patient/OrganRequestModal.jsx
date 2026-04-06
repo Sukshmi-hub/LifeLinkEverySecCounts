@@ -41,6 +41,9 @@ const OrganRequestModal = ({ isOpen, onClose }) => {
   const [medicalReports, setMedicalReports] = useState([]);
   const [prescription, setPrescription] = useState(null);
   const [identityProof, setIdentityProof] = useState(null);
+  const [aadhaarValidation, setAadhaarValidation] = useState(null);
+  const [aadhaarLoading, setAadhaarLoading] = useState(false);
+  const [aadhaarError, setAadhaarError] = useState('');
   const [additionalDocs, setAdditionalDocs] = useState([]);
 
   // Cleanup object URLs to avoid memory leaks
@@ -71,6 +74,50 @@ const OrganRequestModal = ({ isOpen, onClose }) => {
     setter(prev => [...prev, ...newFiles]);
   };
 
+  const validateAadhaarUpload = async (file) => {
+    setAadhaarLoading(true);
+    setAadhaarError('');
+    setAadhaarValidation(null);
+    try {
+      const form = new FormData();
+      form.append('document', file);
+      const res = await fetch(`${serverUrl}/api/documents/validate-aadhaar`, {
+        method: 'POST',
+        body: form,
+      });
+      const json = await res.json().catch(() => ({}));
+      setAadhaarValidation(json);
+      if (!res.ok || !json.isValid) {
+        const message = json.status === 'retry'
+          ? 'OCR failed. Please upload a clearer Aadhaar image or searchable PDF.'
+          : (json.message || 'Invalid Aadhaar document');
+        setAadhaarError(message);
+        toast.error(message);
+        return false;
+      }
+      toast.success('Valid Aadhaar ✅');
+      return true;
+    } catch (err) {
+      const message = err?.message || 'Failed to validate Aadhaar';
+      setAadhaarError(message);
+      setAadhaarValidation({ success: false, isValid: false, status: 'retry', message });
+      toast.error(message);
+      return false;
+    } finally {
+      setAadhaarLoading(false);
+    }
+  };
+
+  const handleIdentityProofChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIdentityProof({
+      file,
+      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : '',
+    });
+    await validateAadhaarUpload(file);
+  };
+
   const removeFile = (index, setter) => {
     setter(prev => {
       const newFiles = [...prev];
@@ -84,7 +131,8 @@ const OrganRequestModal = ({ isOpen, onClose }) => {
     if (!organType) return toast.error('Please select an organ type');
     if (medicalReports.length === 0) return toast.error('At least one medical report is mandatory');
     if (!prescription || !prescription.file) return toast.error('Prescription is required');
-    if (!identityProof || !identityProof.file) return toast.error('ID Proof is required');
+    if (!identityProof || !identityProof.file) return toast.error('Aadhaar Card is required');
+    if (!aadhaarValidation?.isValid) return toast.error(aadhaarError || 'Please upload a valid Aadhaar card');
 
     setIsSubmitting(true);
     try {
@@ -244,13 +292,33 @@ const OrganRequestModal = ({ isOpen, onClose }) => {
                     onRemove={() => setPrescription(null)} 
                   />
                   <SingleFileUploadCard 
-                    label="ID Proof" 
+                    label="Aadhaar Card" 
                     icon={CreditCard} 
                     file={identityProof} 
                     required
-                    onFileChange={e => handleFileChange(e, setIdentityProof)} 
+                    onFileChange={handleIdentityProofChange} 
                     onRemove={() => setIdentityProof(null)} 
                   />
+                </div>
+                <div className="rounded-lg border border-dashed bg-muted/30 p-3 text-sm">
+                  {aadhaarLoading ? (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Validating Aadhaar...
+                    </div>
+                  ) : aadhaarValidation?.isValid ? (
+                    <div className="flex items-center gap-2 text-success">
+                      <CheckCircle className="w-4 h-4" />
+                      <span>Valid Aadhaar ✅</span>
+                    </div>
+                  ) : aadhaarValidation && aadhaarValidation.isValid === false ? (
+                    <div className="flex items-center gap-2 text-destructive">
+                      <FileText className="w-4 h-4" />
+                      <span>{aadhaarError || aadhaarValidation.message || 'Invalid Document ❌'}</span>
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground">Upload JPG, PNG, or PDF for Aadhaar validation.</p>
+                  )}
                 </div>
               </div>
 
