@@ -12,6 +12,7 @@ import Donor from '../models/Donor.js'
 import Message from '../models/Message.js'
 import Hospital from '../models/Hospital.js'
 import { createCertificateForDonor } from '../controllers/certificateController.js'
+import { validateRationCardFile } from '../utils/rationCardValidation.js'
 const router = express.Router()
 
 // Ensure uploads folder exists
@@ -467,6 +468,30 @@ router.put('/:id/send-matched-details', authenticate, async (req, res) => {
 })
 const upload = multer({ storage })
 
+async function cleanupUploadedFiles(files = {}) {
+  const paths = []
+  if (files.medicalReports) {
+    for (const file of files.medicalReports) {
+      if (file?.path) paths.push(file.path)
+    }
+  }
+  if (files.prescription) {
+    for (const file of files.prescription) {
+      if (file?.path) paths.push(file.path)
+    }
+  }
+  if (files.rationCard) {
+    for (const file of files.rationCard) {
+      if (file?.path) paths.push(file.path)
+    }
+  }
+  await Promise.all(paths.map(async (filePath) => {
+    try {
+      await fs.promises.unlink(filePath)
+    } catch (e) {}
+  }))
+}
+
 // Create a new organ request (must be authenticated as patient)
 router.post('/', authenticate, upload.fields([
   { name: 'medicalReports', maxCount: 10 },
@@ -662,6 +687,22 @@ router.post('/fund', authenticate, upload.fields([
 
     if (!user) return res.status(401).json({ success: false, message: 'Authentication required' })
     if (!amount || amount <= 0) return res.status(400).json({ success: false, message: 'Valid amount required' })
+    if (!req.files?.rationCard?.[0]) {
+      await cleanupUploadedFiles(req.files || {})
+      return res.status(400).json({ success: false, message: 'Ration card is required for NGO support applications' })
+    }
+
+    const rationValidation = await validateRationCardFile(req.files.rationCard[0])
+    if (!rationValidation.isValid) {
+      await cleanupUploadedFiles(req.files || {})
+      return res.status(400).json({
+        success: false,
+        message: rationValidation.status === 'retry'
+          ? 'OCR failed. Please upload a clearer ration card image or searchable PDF.'
+          : rationValidation.reason || 'Invalid ration card document',
+        validation: rationValidation,
+      })
+    }
 
     // Resolve Patient document for this user to store the correct patientId reference
     let patientDoc = await Patient.findOne({ userId: user._id });

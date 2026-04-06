@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationContext';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { CheckCircle, Loader2, Upload, FileText } from 'lucide-react';
+import { CheckCircle, Loader2, Upload, FileText, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 const reasons = [
@@ -44,12 +44,16 @@ const FundRequestModal = ({ isOpen, onClose, initialData = null, fixed = false }
   const [document, setDocument] = useState(null);
   const [prescription, setPrescription] = useState(null);
   const [rationCard, setRationCard] = useState(null);
+  const [rationValidation, setRationValidation] = useState(null);
+  const [isValidatingRation, setIsValidatingRation] = useState(false);
+  const [rationValidationError, setRationValidationError] = useState('');
   const [ngos, setNgos] = useState([]);
   const [selectedNgo, setSelectedNgo] = useState('');
   const [hospitals, setHospitals] = useState([]);
   const [selectedHospital, setSelectedHospital] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const rationValidationSeq = useRef(0);
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -63,9 +67,62 @@ const FundRequestModal = ({ isOpen, onClose, initialData = null, fixed = false }
     }
   }
 
+  const validateRationCard = async (file) => {
+    const seq = ++rationValidationSeq.current;
+    setIsValidatingRation(true);
+    setRationValidation(null);
+    setRationValidationError('');
+
+    try {
+      const form = new FormData();
+      form.append('document', file);
+
+      const res = await fetch(`${serverUrl}/api/documents/validate-ration-card`, {
+        method: 'POST',
+        body: form,
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (seq !== rationValidationSeq.current) return;
+
+      setRationValidation(json);
+      if (!res.ok || json.isValid === false) {
+        const msg = json.status === 'retry'
+          ? 'OCR failed. Please upload a clearer ration card image or searchable PDF.'
+          : (json.message || 'Invalid ration card document');
+        setRationValidationError(msg);
+        toast.error(msg);
+        return;
+      }
+
+      setRationValidationError('');
+      toast.success('Valid Ration Card ✅');
+    } catch (err) {
+      if (seq !== rationValidationSeq.current) return;
+      const msg = err?.message || 'Failed to validate ration card';
+      setRationValidationError(msg);
+      setRationValidation({
+        success: false,
+        isValid: false,
+        status: 'retry',
+        message: msg,
+      });
+      toast.error(msg);
+    } finally {
+      if (seq === rationValidationSeq.current) {
+        setIsValidatingRation(false);
+      }
+    }
+  };
+
   const handleRationChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setRationCard(e.target.files[0]);
+    const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+    setRationCard(file);
+    setRationValidation(null);
+    setRationValidationError('');
+
+    if (file) {
+      validateRationCard(file);
     }
   }
 
@@ -159,6 +216,16 @@ const FundRequestModal = ({ isOpen, onClose, initialData = null, fixed = false }
 
     if (!document) {
       toast.error('Please upload your medical report (PDF/JPG/PNG)');
+      return;
+    }
+
+    if (!rationCard) {
+      toast.error('Please upload your ration card for NGO support validation');
+      return;
+    }
+
+    if (!rationValidation?.isValid) {
+      toast.error(rationValidationError || 'Please upload a valid ration card before submitting');
       return;
     }
 
@@ -384,7 +451,7 @@ const FundRequestModal = ({ isOpen, onClose, initialData = null, fixed = false }
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Ration Card (Optional)</Label>
+                  <Label>Ration Card *</Label>
                   <div className="relative">
                     <input
                       type="file"
@@ -411,6 +478,35 @@ const FundRequestModal = ({ isOpen, onClose, initialData = null, fixed = false }
                         </>
                       )}
                     </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Aadhaar, PAN, selfies, and other IDs are rejected automatically.
+                  </div>
+                  <div className="mt-2 rounded-lg border border-border bg-muted/30 p-3 min-h-[56px] flex items-center gap-2">
+                    {isValidatingRation ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                        <span className="text-sm">Validating ration card with OCR...</span>
+                      </>
+                    ) : rationValidation?.isValid ? (
+                      <>
+                        <CheckCircle className="w-4 h-4 text-success" />
+                        <div>
+                          <p className="text-sm font-medium text-success">Valid Ration Card ✅</p>
+                          <p className="text-xs text-muted-foreground">{rationValidation.reason || 'Document passed validation.'}</p>
+                        </div>
+                      </>
+                    ) : rationValidation && rationValidation.isValid === false ? (
+                      <>
+                        <AlertTriangle className="w-4 h-4 text-destructive" />
+                        <div>
+                          <p className="text-sm font-medium text-destructive">Invalid Document ❌</p>
+                          <p className="text-xs text-muted-foreground">{rationValidationError || rationValidation.message || 'Please re-upload a valid ration card.'}</p>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Upload a ration card to validate it before submitting.</p>
+                    )}
                   </div>
                 </div>
 
