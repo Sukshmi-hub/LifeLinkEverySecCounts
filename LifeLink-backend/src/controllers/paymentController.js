@@ -362,7 +362,18 @@ export const createRazorpayOrder = async (req, res) => {
     // Return order details and key_id (public) so frontend can open checkout
     const hospitalName = hospital && (hospital.name || hospital.hospitalName || hospital.displayName) || ''
     const summary = { paymentId: payment._id, status: payment.status, amount: payment.amount }
-    return res.json({ success: true, data: { orderId: order.id, amount: order.amount, currency: order.currency, key_id, hospitalName, summary } })
+    return res.json({
+      success: true,
+      data: {
+        orderId: order.id,
+        amount: order.amount,
+        currency: order.currency || 'INR',
+        key_id,
+        key_mode: String(key_id).startsWith('rzp_test_') ? 'test' : 'live',
+        hospitalName,
+        summary
+      }
+    })
   } catch (err) {
     console.error('createRazorpayOrder error', err)
     // re-extract request body values for fallback since they were declared inside try

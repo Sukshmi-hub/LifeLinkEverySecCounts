@@ -104,11 +104,18 @@ const RazorpayModal = ({
       }
       const { orderId, amount: orderAmount, currency, key_id, mock } = json.data
 
-      // If backend returned a mock order (Razorpay auth failed), treat as immediate success
+      if (!key_id) {
+        throw new Error('Razorpay key_id missing from backend response')
+      }
+
+      if (!String(key_id).startsWith('rzp_test_')) {
+        throw new Error('Test mode requires a Razorpay TEST key (rzp_test_...). The backend is returning a live key.')
+      }
+
+      // If backend returned a mock order, do not bypass Checkout in this flow.
+      // That would hide Razorpay method availability issues, including missing UPI.
       if (mock) {
-        setIsSuccess(true)
-        if (onPaymentSuccess) onPaymentSuccess()
-        return
+        throw new Error('Backend returned a mock order instead of a real Razorpay order. Check Razorpay test keys and server auth.')
       }
 
       await loadRazorpayScript()
@@ -125,8 +132,22 @@ const RazorpayModal = ({
           email: user.email || '',
           contact: user.phone || ''
         },
-        // Force UPI only (disable other methods)
-        method: { upi: true, card: false, netbanking: false, wallet: false, emi: false },
+        // Explicitly surface UPI in Checkout so test UPI IDs can be used
+        method: { upi: true },
+        config: {
+          display: {
+            blocks: {
+              upi: {
+                name: 'Pay via UPI',
+                instruments: [{ method: 'upi' }]
+              }
+            },
+            sequence: ['block.upi'],
+            preferences: {
+              show_default_blocks: true
+            }
+          }
+        },
         // Theme and branding
         theme: { color: '#2c3e50' },
         modal: { 
