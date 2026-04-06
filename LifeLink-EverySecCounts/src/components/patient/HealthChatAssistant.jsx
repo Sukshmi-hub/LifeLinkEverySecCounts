@@ -146,6 +146,24 @@ const buildLocalMedicalReply = (message, severity) => {
     return 'Common symptoms of anemia include:\n- Tiredness\n- Weakness\n- Dizziness\n- Pale skin\n- Shortness of breath\n- Fast heartbeat'
   }
 
+  if (questionType === 'general') {
+    if (/fever/.test(text)) {
+      return 'Fever usually means the body is fighting an infection or inflammation. Rest, fluids, and watching for worsening symptoms can help. If it is high or lasts long, see a doctor.'
+    }
+    if (/cold|cough|sore throat|flu/.test(text)) {
+      return 'A cold or mild viral illness often gets better with rest and fluids. Warm liquids may help. If breathing becomes difficult or symptoms worsen, consult a doctor.'
+    }
+    if (/headache/.test(text)) {
+      return 'Headaches can happen from stress, dehydration, lack of sleep, or illness. Rest, water, and less screen strain may help. Seek care if it is sudden, severe, or unusual.'
+    }
+    if (/weakness|fatigue|tired/.test(text)) {
+      return 'Weakness or fatigue can happen from poor sleep, dehydration, stress, anemia, or infection. Rest, fluids, and a balanced diet may help. If it keeps happening, discuss it with a doctor.'
+    }
+    if (/infection/.test(text)) {
+      return 'Infection can cause fever, pain, swelling, or weakness. Rest and fluids are important. If symptoms worsen or breathing becomes difficult, see a doctor.'
+    }
+  }
+
   if (severity?.severity === 'Low' || severity?.severity === 'High' || severity?.severity === 'Critical') {
     return 'Your report has an abnormal value that should be reviewed by a doctor. If you have symptoms like weakness, dizziness, shortness of breath, or chest pain, please seek medical care promptly.'
   }

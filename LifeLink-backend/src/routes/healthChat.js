@@ -16,6 +16,7 @@ const MEDICAL_CHAT_PROMPT = [
   'Use bullet points when helpful.',
   'Answer only the question the user asked.',
   'Do not repeat the same explanation if the question is about diet, surgery, symptoms, action steps, or seriousness.',
+  'If the question is a general health question, answer it directly and briefly without forcing report interpretation.',
 ].join(' ')
 
 const MAX_HISTORY_MESSAGES = 12
@@ -179,6 +180,44 @@ function buildLocalMedicalReply(message) {
     ].join(' ')
   }
 
+  if (questionType === 'general') {
+    if (/fever/.test(text)) {
+      return [
+        'Fever usually means the body is fighting an infection or inflammation.',
+        'Rest, fluids, and watching for worsening symptoms can help.',
+        'If the fever is high, lasts long, or comes with breathing trouble or confusion, see a doctor.',
+      ].join(' ')
+    }
+    if (/cold|cough|sore throat|flu/.test(text)) {
+      return [
+        'A cold or mild viral illness often gets better with rest and fluids.',
+        'Warm liquids and simple home care may help comfort.',
+        'If breathing becomes difficult or symptoms worsen, consult a doctor.',
+      ].join(' ')
+    }
+    if (/headache/.test(text)) {
+      return [
+        'Headaches can happen from stress, dehydration, lack of sleep, or illness.',
+        'Rest, water, and reduced screen strain may help.',
+        'Seek medical help if the headache is sudden, severe, or unusual for you.',
+      ].join(' ')
+    }
+    if (/weakness|fatigue|tired/.test(text)) {
+      return [
+        'Weakness or fatigue can happen from poor sleep, dehydration, stress, anemia, or infection.',
+        'Rest, fluids, and a balanced diet may help.',
+        'If it keeps happening or feels severe, discuss it with a doctor.',
+      ].join(' ')
+    }
+    if (/infection/.test(text)) {
+      return [
+        'Infection means germs may be causing inflammation or illness in the body.',
+        'Rest, fluids, and watching for worsening symptoms are important.',
+        'If you have high fever, swelling, pain, or breathing issues, please see a doctor.',
+      ].join(' ')
+    }
+  }
+
   return [
     'I can explain general health topics in simple terms, but I cannot diagnose or prescribe treatment.',
     'For serious symptoms, worsening problems, or anything urgent, please consult a doctor.',
@@ -295,9 +334,13 @@ function buildMedicalChatContext({ patient, report, severity, message, history }
     'User Question:',
     String(message || ''),
     '',
+    'Question Type:',
+    classifyQuestionType(message),
+    '',
     'Instructions:',
     '- Explain in simple language',
     '- Use report data if available',
+    '- If the question is general health-related, answer it directly without repeating the report.',
     '- Be safe and non-diagnostic',
     '- Suggest doctor if serious',
     '- Do not prescribe medicines',
@@ -457,17 +500,6 @@ router.post('/chat', softAuthenticate, async (req, res) => {
     const openAiMessages = [
       { role: 'system', content: MEDICAL_CHAT_PROMPT },
       { role: 'user', content: buildMedicalChatContext({ patient: mergedPatient, report, severity, message, history: recentMessages }) },
-      { role: 'user', content: [
-        `Question type: ${questionType}`,
-        'Answer only this intent:',
-        questionType === 'report' ? 'Explain the report values briefly and clearly.' : '',
-        questionType === 'seriousness' ? 'Give only the risk level and a short reason.' : '',
-        questionType === 'action' ? 'Give short action steps only.' : '',
-        questionType === 'diet' ? 'Give only food suggestions; no report explanation.' : '',
-        questionType === 'hemoglobin_meaning' ? 'Explain only hemoglobin and do not mention other values unless necessary.' : '',
-        questionType === 'surgery' ? 'Give general pre-surgery precautions only.' : '',
-        questionType === 'anemia_symptoms' ? 'List anemia symptoms only.' : '',
-      ].filter(Boolean).join('\n') },
     ]
 
     const openAIReply = await callOpenAIChat(openAiMessages, req.chatUser?._id).catch((err) => {
