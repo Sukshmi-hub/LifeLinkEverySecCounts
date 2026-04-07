@@ -464,6 +464,15 @@ const HealthChatAssistant = () => {
     try {
       const token = localStorage.getItem('token')
       const endpoint = `${serverUrl}/api/health-chat/chat`
+      const payload = {
+        message: messageText,
+        sessionId,
+        chatHistory: messages.slice(-12),
+        reportData,
+        reportText: reportData,
+        patientInfo,
+      }
+      console.log('[HealthChat] SENDING REPORT:', reportData)
       const controller = new AbortController()
       const timeout = window.setTimeout(() => controller.abort(), 10000)
       console.log('[HealthChat] sending request', {
@@ -481,13 +490,7 @@ const HealthChatAssistant = () => {
             'Content-Type': 'application/json',
             Authorization: token ? `Bearer ${token}` : '',
           },
-          body: JSON.stringify({
-            message: messageText,
-            sessionId,
-            chatHistory: messages.slice(-12),
-            reportData,
-            patientInfo,
-          }),
+          body: JSON.stringify(payload),
           signal: controller.signal,
         })
       } finally {

@@ -86,6 +86,17 @@ function extractKeywordFindings(text = '') {
   return findings
 }
 
+function extractFlexibleNumericValue(text, patterns = []) {
+  const raw = String(text || '')
+  for (const pattern of patterns) {
+    const match = raw.match(pattern)
+    if (!match) continue
+    const value = Number(String(match[1]).replace(/,/g, ''))
+    if (Number.isFinite(value)) return value
+  }
+  return null
+}
+
 function isDbReady() {
   return mongoose.connection.readyState === 1
 }
@@ -337,6 +348,15 @@ function parseReportData(reportData) {
   }
 
   const raw = String(reportData || '')
+  const hemoglobin = extractFlexibleNumericValue(raw, [
+    /(?:hemoglobin|hb)\s*[:=\-]?\s*([0-9]+(?:\.[0-9]+)?)/i,
+  ])
+  const wbc = extractFlexibleNumericValue(raw, [
+    /(?:wbc|white blood cell(?: count)?)\s*[:=\-]?\s*([0-9]+(?:\.[0-9]+)?)/i,
+  ])
+  const platelets = extractFlexibleNumericValue(raw, [
+    /(?:platelets?|plt)\s*[:=\-]?\s*([0-9]+(?:\.[0-9]+)?)/i,
+  ])
   const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
   const fields = {}
   for (const line of lines) {
@@ -349,6 +369,10 @@ function parseReportData(reportData) {
     if (/platelet/.test(key) && fields.platelets == null) fields.platelets = value
     if (/blood group/.test(key) && fields.bloodGroup == null) fields.bloodGroup = value
   }
+
+  if (fields.hemoglobin == null && hemoglobin != null) fields.hemoglobin = hemoglobin
+  if (fields.wbc == null && wbc != null) fields.wbc = wbc
+  if (fields.platelets == null && platelets != null) fields.platelets = platelets
 
   return {
     raw,
@@ -615,10 +639,12 @@ router.delete('/history', softAuthenticate, async (req, res) => {
 router.post('/chat', softAuthenticate, async (req, res) => {
   try {
     const message = String(req.body?.message || '').trim()
+    const incomingReportData = req.body?.reportData ?? req.body?.reportText ?? req.body?.report ?? ''
     console.log('[health-chat] Incoming request', {
       userId: String(req.chatUser?._id || ''),
       messageLength: message.length,
-      hasReportData: Boolean(req.body?.reportData),
+      hasReportData: Boolean(incomingReportData),
+      reportPreview: typeof incomingReportData === 'string' ? incomingReportData.slice(0, 120) : '[object]',
       chatHistoryLength: Array.isArray(req.body?.chatHistory) ? req.body.chatHistory.length : 0,
     })
     if (!message) {
@@ -639,7 +665,7 @@ router.post('/chat', softAuthenticate, async (req, res) => {
       gender: incomingPatientInfo.gender ?? patientDoc?.gender ?? 'Unknown',
       bloodGroup: incomingPatientInfo.bloodGroup ?? patientDoc?.blood_type ?? patientDoc?.bloodGroup ?? null,
     }
-    const report = parseReportData(req.body?.reportData)
+    const report = parseReportData(incomingReportData)
     const severity = deriveSeverity(report)
     const questionType = classifyQuestionType(message)
     const incomingHistory = Array.isArray(req.body?.chatHistory)
@@ -711,8 +737,8 @@ router.post('/chat', softAuthenticate, async (req, res) => {
       success: true,
       reply: withDisclaimer(buildLocalMedicalReply({
         message: String(req.body?.message || ''),
-        report: parseReportData(req.body?.reportData),
-        severity: deriveSeverity(parseReportData(req.body?.reportData)),
+        report: parseReportData(incomingReportData),
+        severity: deriveSeverity(parseReportData(incomingReportData)),
         questionType: classifyQuestionType(String(req.body?.message || '')),
       })),
       severity: { level: 'unknown', label: 'Unknown', summary: 'Unable to analyze report data' },
