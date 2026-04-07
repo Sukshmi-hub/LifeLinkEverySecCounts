@@ -63,9 +63,13 @@ const parseReportSummary = (text = '') => {
   const platelets = readValue(/(?:platelets?|plt)\s*[:=\-]?\s*([0-9]+(?:\.[0-9]+)?)/i)
 
   const flags = []
-  if (hemoglobin != null && hemoglobin < 9) flags.push({ label: `Hemoglobin ${hemoglobin} is low`, level: 'low' })
+  if (hemoglobin != null && hemoglobin < 7) flags.push({ label: `Hemoglobin ${hemoglobin} is very low`, level: 'critical' })
+  else if (hemoglobin != null && hemoglobin < 12) flags.push({ label: `Hemoglobin ${hemoglobin} is low`, level: 'low' })
   if (platelets != null && platelets < 50000) flags.push({ label: `Platelets ${platelets} are critically low`, level: 'critical' })
-  if (wbc != null && wbc > 11000) flags.push({ label: `WBC ${wbc} is high`, level: 'high' })
+  else if (platelets != null && platelets < 150000) flags.push({ label: `Platelets ${platelets} are low`, level: 'low' })
+  else if (platelets != null && platelets > 450000) flags.push({ label: `Platelets ${platelets} are high`, level: 'high' })
+  if (wbc != null && wbc < 4000) flags.push({ label: `WBC ${wbc} is low`, level: 'low' })
+  else if (wbc != null && wbc > 11000) flags.push({ label: `WBC ${wbc} is high`, level: 'high' })
 
   const severity = flags.some((f) => f.level === 'critical')
     ? 'Critical'
@@ -171,6 +175,162 @@ const buildLocalMedicalReply = (message, severity) => {
   return 'I can explain general health topics in simple terms, but I cannot diagnose or prescribe treatment. For serious symptoms, worsening problems, or anything urgent, please consult a doctor.'
 }
 
+const withDisclaimer = (text) => {
+  const disclaimer = 'This is general guidance. Please consult a doctor for medical advice.'
+  const cleanText = String(text || '').trim()
+  return cleanText.includes(disclaimer) ? cleanText : `${cleanText}\n\n${disclaimer}`
+}
+
+const interpretHemoglobin = (hb) => {
+  if (hb == null) return null
+  if (hb < 7) return { label: 'very low', short: 'low' }
+  if (hb < 12) return { label: 'low', short: 'low' }
+  if (hb > 16) return { label: 'high', short: 'high' }
+  return { label: 'normal', short: 'normal' }
+}
+
+const interpretWbc = (wbc) => {
+  if (wbc == null) return null
+  if (wbc < 4000) return { label: 'low', short: 'low' }
+  if (wbc > 11000) return { label: 'high', short: 'high' }
+  return { label: 'normal', short: 'normal' }
+}
+
+const interpretPlatelets = (platelets) => {
+  if (platelets == null) return null
+  if (platelets < 50000) return { label: 'very low', short: 'low' }
+  if (platelets < 150000) return { label: 'low', short: 'low' }
+  if (platelets > 450000) return { label: 'high', short: 'high' }
+  return { label: 'normal', short: 'normal' }
+}
+
+const buildReportAwareReply = ({ message = '', severity = {}, questionType: forcedType = null } = {}) => {
+  const text = String(message || '').toLowerCase()
+  const questionType = forcedType || classifyQuestionType(message)
+  const hb = severity?.values?.hemoglobin
+  const wbc = severity?.values?.wbc
+  const platelets = severity?.values?.platelets
+  const hbInfo = interpretHemoglobin(hb)
+  const wbcInfo = interpretWbc(wbc)
+  const plateletInfo = interpretPlatelets(platelets)
+  const abnormalCount = [hbInfo, wbcInfo, plateletInfo].filter((item) => item && item.short !== 'normal').length
+
+  if (/chest pain|trouble breathing|shortness of breath|faint|fainting|stroke|one side|severe bleeding|allergic reaction|suicidal|confusion/i.test(text)) {
+    return withDisclaimer('This could be urgent. Please seek emergency medical care now or call local emergency services.')
+  }
+
+  if (questionType === 'report') {
+    const parts = []
+    if (hb != null) parts.push(`Hemoglobin: ${hb} (${hbInfo?.label || 'unknown'})`)
+    if (wbc != null) parts.push(`WBC: ${wbc} (${wbcInfo?.label || 'unknown'})`)
+    if (platelets != null) parts.push(`Platelets: ${platelets} (${plateletInfo?.label || 'unknown'})`)
+    const summary = parts.length ? parts.join('. ') : 'I could not detect any report values clearly. Please paste the key values again.'
+    return withDisclaimer(`Report summary: ${summary}`)
+  }
+
+  if (questionType === 'seriousness') {
+    if (!abnormalCount) {
+      return withDisclaimer('From the values I can see, this does not look serious right now, but you can still review it with a doctor if you have symptoms.')
+    }
+    if (severity?.severity === 'Critical') {
+      return withDisclaimer('This needs attention. One of the values is in a very low range, so please contact a doctor promptly.')
+    }
+    if (abnormalCount === 1) {
+      return withDisclaimer('This looks mild to moderate based on the values shown, but it should still be reviewed by a doctor.')
+    }
+    return withDisclaimer('This needs attention because more than one value is abnormal. Please discuss it with a doctor soon.')
+  }
+
+  if (questionType === 'action') {
+    const steps = [
+      'What you should do next:',
+      '- Consult a doctor and share the report values',
+      '- Rest and stay hydrated',
+    ]
+    if (hbInfo?.short === 'low') steps.push('- Eat iron-rich foods like leafy greens, beans, lentils, dates, and jaggery')
+    if (wbcInfo?.short === 'high') steps.push('- Support recovery with fluids, sleep, and infection precautions')
+    if (plateletInfo?.short === 'low') steps.push('- Avoid injuries or anything that could cause bleeding until a doctor reviews it')
+    steps.push('- Follow any test or treatment advice you are given')
+    return withDisclaimer(steps.join(' '))
+  }
+
+  if (questionType === 'diet') {
+    const parts = ['Diet suggestions:']
+    if (hbInfo?.short === 'low') {
+      parts.push('Iron-rich foods like spinach, lentils, beans, dates, jaggery, eggs, or meat if you eat it.')
+      parts.push('Add vitamin C foods like oranges, lemon, or amla with meals to help iron absorb better.')
+    }
+    if (wbcInfo?.short === 'high') {
+      parts.push('Support immunity with fruits, vegetables, enough protein, and good hydration.')
+    }
+    if (plateletInfo?.short === 'low') {
+      parts.push("Choose balanced meals and follow your doctor's advice if there is bleeding risk.")
+    }
+    if (parts.length === 1) {
+      parts.push('Balanced meals with vegetables, fruits, protein, and enough water are a good choice.')
+    }
+    return withDisclaimer(parts.join(' '))
+  }
+
+  if (questionType === 'hemoglobin_meaning') {
+    if (hb == null) {
+      return withDisclaimer('Low hemoglobin means your blood may carry less oxygen than normal. It can happen with iron deficiency, blood loss, or other causes.')
+    }
+    if (hbInfo?.short === 'low') {
+      return withDisclaimer(`Your hemoglobin is ${hb}, which is low. This can mean anemia or another cause of low blood oxygen carrying capacity.`)
+    }
+    return withDisclaimer(`Your hemoglobin is ${hb}, which is within the usual range.`)
+  }
+
+  if (questionType === 'surgery') {
+    return withDisclaimer('Before surgery, follow your doctor or hospital instructions carefully. Make sure they know about your report values, medicines, allergies, and past illnesses. If hemoglobin is low or platelets are low, ask whether the surgery should be delayed or treated first. Do not stop or start medicines unless your doctor tells you to.')
+  }
+
+  if (questionType === 'anemia_symptoms') {
+    const parts = [
+      'Common symptoms of anemia include tiredness, weakness, dizziness, pale skin, shortness of breath, and fast heartbeat.',
+    ]
+    if (hbInfo?.short === 'low') {
+      parts.push(`Your hemoglobin looks low (${hb}), so these symptoms may fit that finding.`)
+    }
+    parts.push('If symptoms are severe or sudden, seek medical care.')
+    return withDisclaimer(parts.join(' '))
+  }
+
+  if (questionType === 'general') {
+    if (abnormalCount) {
+      const parts = []
+      if (hb != null) parts.push(`Hemoglobin: ${hb} (${hbInfo?.label || 'unknown'})`)
+      if (wbc != null) parts.push(`WBC: ${wbc} (${wbcInfo?.label || 'unknown'})`)
+      if (platelets != null) parts.push(`Platelets: ${platelets} (${plateletInfo?.label || 'unknown'})`)
+      return withDisclaimer(`${parts.join('. ')}.`)
+    }
+    if (/diabetes|sugar|glucose|blood sugar|bp|blood pressure|hypertension|pressure/.test(text)) {
+      return withDisclaimer('For diabetes or blood pressure questions, the answer depends on your numbers, medicines, symptoms, and doctor advice. Common basics are taking medicines on time, eating balanced meals, staying active if allowed, and checking values regularly. If readings are very high or you feel dizzy, weak, have chest pain, confusion, or shortness of breath, seek medical care.')
+    }
+    if (/infection|fever|cold|cough|sore throat|flu/.test(text)) {
+      return withDisclaimer('These symptoms can happen with an infection or a viral illness. Rest, fluids, and watching for worsening symptoms may help. If the fever is high, symptoms are getting worse, or breathing becomes difficult, please see a doctor.')
+    }
+    if (/recovery|healing|post[- ]?op|after surgery|post surgery/.test(text)) {
+      return withDisclaimer('Recovery usually depends on the cause, your overall health, and the treatment plan. Follow discharge instructions, rest enough, eat well, and report any worsening pain, fever, bleeding, or weakness.')
+    }
+    if (/fever/.test(text)) {
+      return withDisclaimer('Fever usually means the body is fighting an infection or inflammation. Rest, fluids, and watching for worsening symptoms can help. If it is high or lasts long, see a doctor.')
+    }
+    if (/cold|cough|sore throat|flu/.test(text)) {
+      return withDisclaimer('A cold or mild viral illness often gets better with rest and fluids. Warm liquids may help. If breathing becomes difficult or symptoms worsen, consult a doctor.')
+    }
+    if (/headache/.test(text)) {
+      return withDisclaimer('Headaches can happen from stress, dehydration, lack of sleep, or illness. Rest, water, and less screen strain may help. Seek care if it is sudden, severe, or unusual.')
+    }
+    if (/weakness|fatigue|tired/.test(text)) {
+      return withDisclaimer('Weakness or fatigue can happen from poor sleep, dehydration, stress, anemia, or infection. Rest, fluids, and a balanced diet may help. If it keeps happening, discuss it with a doctor.')
+    }
+  }
+
+  return withDisclaimer('I can explain general health topics in simple terms, but I cannot diagnose or prescribe treatment. For serious symptoms, worsening problems, or anything urgent, please consult a doctor.')
+}
+
 const TypingDots = () => (
   <div className="flex items-center gap-1 px-4 py-3">
     <span className="h-2 w-2 rounded-full bg-primary animate-bounce [animation-delay:-0.2s]" />
@@ -267,7 +427,7 @@ const HealthChatAssistant = () => {
     const localReply = {
       id: `assistant-local-${Date.now()}`,
       role: 'assistant',
-      content: buildLocalMedicalReply(messageText, reportSummary),
+      content: buildReportAwareReply({ message: messageText, severity: reportSummary }),
       createdAt: new Date().toISOString(),
     }
 
@@ -349,14 +509,14 @@ const HealthChatAssistant = () => {
           const index = next.length - 1 - lastAssistantIndex
           next[index] = {
             ...next[index],
-            content: buildLocalMedicalReply(messageText, reportSummary),
+            content: buildReportAwareReply({ message: messageText, severity: reportSummary }),
           }
           return next
         }
         return [...next, {
           id: `assistant-fallback-${Date.now()}`,
           role: 'assistant',
-          content: buildLocalMedicalReply(messageText, reportSummary),
+          content: buildReportAwareReply({ message: messageText, severity: reportSummary }),
           createdAt: new Date().toISOString(),
         }]
       })

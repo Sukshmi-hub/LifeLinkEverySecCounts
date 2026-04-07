@@ -7,16 +7,23 @@ import MedicalChatSession from '../models/MedicalChatSession.js'
 const router = express.Router()
 
 const MEDICAL_CHAT_PROMPT = [
-  'You are a helpful medical assistant for patients.',
-  'Explain health-related topics in simple language.',
-  'Do not provide diagnosis, do not prescribe medicines, and do not claim to replace a doctor.',
-  'Always suggest consulting a doctor for serious symptoms, worsening symptoms, or anything urgent.',
-  'If the user mentions chest pain, trouble breathing, stroke symptoms, heavy bleeding, fainting, severe allergic reaction, confusion, suicidal thoughts, or another emergency, tell them to seek emergency medical care immediately.',
-  'Keep answers concise, practical, and easy to understand.',
-  'Use bullet points when helpful.',
-  'Answer only the question the user asked.',
-  'Do not repeat the same explanation if the question is about diet, surgery, symptoms, action steps, or seriousness.',
-  'If the question is a general health question, answer it directly and briefly without forcing report interpretation.',
+  'You are a smart medical assistant for a healthcare platform.',
+  'Use the report data when it is provided, but answer general medical questions normally when the report is not relevant.',
+  'Do not give the same generic answer for every question.',
+  'Do not repeat the same explanation unless the question is specifically about it.',
+  'Analyze all values present, including Hemoglobin, WBC, Platelets, and any other report values that are provided.',
+  'If some values are missing, answer based on the available data.',
+  'Keep answers simple, clear, and patient-friendly.',
+  'If the question is about report explanation, summarize all values, mention what is normal or abnormal, and give an overall interpretation.',
+  'If the question is about seriousness, evaluate severity using all values and say whether it is mild, moderate, or needs attention, with reasons.',
+  'If the question is about what to do, give actionable steps such as doctor consultation, lifestyle changes, and precautions.',
+  'If the question is about diet, suggest food based on the abnormalities, such as iron-rich foods for low hemoglobin and immunity-supporting foods for high WBC.',
+  'If the question is about low hemoglobin, only explain hemoglobin unless other values are needed for safety.',
+  'If the question is about surgery, focus on hemoglobin, WBC, platelets, readiness, precautions, and when surgery may need to be delayed.',
+  'If the question is about symptoms of anemia, answer generally and relate it to the user values if hemoglobin is low.',
+  'If the question is about urgent doctor care, mention warning signs based on the report values.',
+  'Use age when it matters, and be a little more cautious for children or older adults.',
+  'Always include: This is general guidance. Please consult a doctor for medical advice.',
 ].join(' ')
 
 const MAX_HISTORY_MESSAGES = 12
@@ -39,6 +46,13 @@ function safeAssistantFallback() {
   return 'Something went wrong. Please try again.'
 }
 
+function withDisclaimer(text) {
+  const disclaimer = 'This is general guidance. Please consult a doctor for medical advice.'
+  const cleanText = String(text || '').trim()
+  if (!cleanText) return disclaimer
+  return cleanText.includes(disclaimer) ? cleanText : `${cleanText}\n\n${disclaimer}`
+}
+
 function classifyQuestionType(message = '') {
   const text = String(message || '').toLowerCase().trim()
   if (/diet suggestion|what food|food suggestion|diet/i.test(text)) return 'diet'
@@ -49,6 +63,12 @@ function classifyQuestionType(message = '') {
   if (/explain my report|explain report|report/i.test(text)) return 'report'
   if (/what should i do|what do i do|next step|should i do/i.test(text)) return 'action'
   return 'general'
+}
+
+function normalizeMeaningfulValue(value) {
+  if (value == null) return null
+  const str = String(value).trim()
+  return str ? str : null
 }
 
 function isDbReady() {
@@ -107,9 +127,15 @@ function extractResponseText(data) {
   return ''
 }
 
-function buildLocalMedicalReply(message) {
+function buildLocalMedicalReply({ message = '', report = null, severity = null, questionType = null }) {
   const text = String(message || '').toLowerCase()
-  const questionType = classifyQuestionType(text)
+  const type = questionType || classifyQuestionType(text)
+  const hb = severity?.values?.hemoglobin ?? toNumber(report?.fields?.hemoglobin)
+  const wbc = severity?.values?.wbc ?? toNumber(report?.fields?.wbc)
+  const platelets = severity?.values?.platelets ?? toNumber(report?.fields?.platelets)
+  const hbInfo = interpretHemoglobin(hb)
+  const wbcInfo = interpretWbc(wbc)
+  const plateletInfo = interpretPlatelets(platelets)
 
   if (/chest pain|trouble breathing|shortness of breath|faint|fainting|stroke|one side|severe bleeding|allergic reaction|suicidal|confusion/i.test(text)) {
     return [
@@ -119,68 +145,118 @@ function buildLocalMedicalReply(message) {
     ].join(' ')
   }
 
-  if (questionType === 'report') {
+  if (type === 'report') {
     return [
       'Report summary:',
-      '- Hemoglobin: low or normal depending on the value you shared',
-      '- WBC: high or normal depending on the value you shared',
-      '- Platelets: low or normal depending on the value you shared',
-      'If you want, I can explain each value one by one.',
+      buildValueSummary({ report, severity }),
+      'If you want, I can also explain what this means in simple language.',
     ].join(' ')
   }
 
-  if (questionType === 'seriousness') {
-    return [
-      'From the values you shared, this looks like it may need attention.',
-      'Please discuss it with a doctor, especially if you have weakness, dizziness, shortness of breath, or chest pain.',
-    ].join(' ')
+  if (type === 'seriousness') {
+    const abnormalCount = [hbInfo, wbcInfo, plateletInfo].filter((item) => item && item.short !== 'normal').length
+    if (!abnormalCount) {
+      return 'From the values I can see, this does not look serious right now, but you can still review it with a doctor if you have symptoms.'
+    }
+    if (severity?.level === 'critical') {
+      return 'This needs attention. One of the values is in a very low range, so please contact a doctor promptly.'
+    }
+    if (abnormalCount === 1) {
+      return 'This looks mild to moderate based on the values shown, but it should still be reviewed by a doctor.'
+    }
+    return 'This needs attention because more than one value is abnormal. Please discuss it with a doctor soon.'
   }
 
-  if (questionType === 'action') {
-    return [
+  if (type === 'action') {
+    const steps = [
       'What you should do next:',
-      '- Consult a doctor',
+      '- Consult a doctor and share the report values',
       '- Rest and stay hydrated',
-      '- Share the report values with your doctor',
-      '- Follow any test or treatment advice you are given',
-    ].join(' ')
+    ]
+    if (hbInfo?.short === 'low') steps.push('- Eat iron-rich foods like leafy greens, beans, lentils, dates, and jaggery')
+    if (wbcInfo?.short === 'high') steps.push('- Support recovery with fluids, sleep, and infection precautions')
+    if (plateletInfo?.short === 'low') steps.push('- Avoid injuries or anything that could cause bleeding until a doctor reviews it')
+    steps.push('- Follow any test or treatment advice you are given')
+    return steps.join(' ')
   }
 
-  if (questionType === 'diet') {
-    return [
-      'Diet suggestions:',
-      '- Iron-rich foods like spinach, dates, jaggery, lentils, and beans',
-      '- Vitamin C foods like oranges or lemon with meals',
-      '- Balanced meals with vegetables, fruits, and protein',
-    ].join(' ')
+  if (type === 'diet') {
+    const parts = ['Diet suggestions:']
+    if (hbInfo?.short === 'low') {
+      parts.push('Iron-rich foods like spinach, lentils, beans, dates, jaggery, eggs, or meat if you eat it.')
+      parts.push('Add vitamin C foods like oranges, lemon, or amla with meals to help iron absorb better.')
+    }
+    if (wbcInfo?.short === 'high') {
+      parts.push('Support immunity with fruits, vegetables, enough protein, and good hydration.')
+    }
+    if (plateletInfo?.short === 'low') {
+      parts.push("Choose balanced meals and follow your doctor's advice if there is bleeding risk.")
+    }
+    if (parts.length === 1) {
+      parts.push('Balanced meals with vegetables, fruits, protein, and enough water are a good choice.')
+    }
+    return parts.join(' ')
   }
 
-  if (questionType === 'hemoglobin_meaning') {
-    return [
-      'Low hemoglobin can mean your blood may carry less oxygen than normal.',
-      'Common causes include iron deficiency, vitamin deficiencies, blood loss, or some chronic illnesses.',
-      'A doctor may suggest tests and treatment based on the cause.',
-      'If you feel very weak, dizzy, short of breath, or have chest pain, please see a doctor promptly.',
-    ].join(' ')
+  if (type === 'hemoglobin_meaning') {
+    if (hb == null) {
+      return 'Low hemoglobin means your blood may carry less oxygen than normal. It can happen with iron deficiency, blood loss, or other causes.'
+    }
+    if (hbInfo?.short === 'low') {
+      return `Your hemoglobin is ${hb}, which is low. This can mean anemia or another cause of low blood oxygen carrying capacity.`
+    }
+    return `Your hemoglobin is ${hb}, which is within the usual range.`
   }
 
-  if (questionType === 'surgery') {
-    return [
+  if (type === 'surgery') {
+    const points = [
       'Before surgery, follow your doctor or hospital instructions carefully.',
-      'Common steps may include fasting, telling the doctor about medicines, allergies, and past illnesses, and arranging transportation and support after the procedure.',
+      'Make sure they know about your report values, medicines, allergies, and past illnesses.',
+      'If hemoglobin is low or platelets are low, ask whether the surgery should be delayed or treated first.',
       'Do not stop or start medicines unless your doctor tells you to.',
-    ].join(' ')
+    ]
+    return points.join(' ')
   }
 
-  if (questionType === 'anemia_symptoms') {
-    return [
+  if (type === 'anemia_symptoms') {
+    const symptoms = [
       'Common symptoms of anemia include tiredness, weakness, dizziness, pale skin, shortness of breath, and fast heartbeat.',
-      'The exact cause matters, so a doctor may recommend blood tests and treatment.',
-      'If symptoms are severe or sudden, seek medical care.',
-    ].join(' ')
+    ]
+    if (hbInfo?.short === 'low') {
+      symptoms.push(`Your hemoglobin looks low (${hb}), so these symptoms may fit that finding.`)
+    }
+    symptoms.push('If symptoms are severe or sudden, seek medical care.')
+    return symptoms.join(' ')
   }
 
-  if (questionType === 'general') {
+  if (type === 'general') {
+    const reportSummary = buildValueSummary({ report, severity })
+    if (reportSummary !== 'No clear report values were provided.') {
+      return [
+        reportSummary,
+        'If you want a specific answer, you can ask about report explanation, seriousness, diet, surgery, or anemia symptoms.',
+      ].join(' ')
+    }
+    if (/diabetes|sugar|glucose|blood sugar|bp|blood pressure|hypertension|pressure/.test(text)) {
+      return [
+        'For diabetes or blood pressure questions, the best answer depends on your numbers, medicines, symptoms, and doctor advice.',
+        'Common basics are taking medicines on time, eating balanced meals, staying active if allowed, and checking values regularly.',
+        'If readings are very high or you feel dizzy, weak, chest pain, confusion, or shortness of breath, seek medical care.',
+      ].join(' ')
+    }
+    if (/infection|fever|cold|cough|sore throat|flu/.test(text)) {
+      return [
+        'These symptoms can happen with an infection or a viral illness.',
+        'Rest, fluids, and watching for worsening symptoms may help.',
+        'If the fever is high, symptoms are getting worse, or breathing becomes difficult, please see a doctor.',
+      ].join(' ')
+    }
+    if (/recovery|healing|post[- ]?op|after surgery|post surgery/.test(text)) {
+      return [
+        'Recovery usually depends on the cause, your overall health, and the treatment plan.',
+        'Follow discharge instructions, rest enough, eat well, and report any worsening pain, fever, bleeding, or weakness.',
+      ].join(' ')
+    }
     if (/fever/.test(text)) {
       return [
         'Fever usually means the body is fighting an infection or inflammation.',
@@ -209,13 +285,6 @@ function buildLocalMedicalReply(message) {
         'If it keeps happening or feels severe, discuss it with a doctor.',
       ].join(' ')
     }
-    if (/infection/.test(text)) {
-      return [
-        'Infection means germs may be causing inflammation or illness in the body.',
-        'Rest, fluids, and watching for worsening symptoms are important.',
-        'If you have high fever, swelling, pain, or breathing issues, please see a doctor.',
-      ].join(' ')
-    }
   }
 
   return [
@@ -230,10 +299,10 @@ function parseReportData(reportData) {
 
   if (typeof reportData === 'object') {
     const fields = {
-      hemoglobin: reportData.hemoglobin ?? reportData.hb ?? reportData.Hb ?? reportData.HB ?? null,
-      wbc: reportData.wbc ?? reportData.WBC ?? null,
-      platelets: reportData.platelets ?? reportData.Platelets ?? reportData.platelet ?? null,
-      bloodGroup: reportData.bloodGroup ?? reportData.blood_group ?? null,
+      hemoglobin: normalizeMeaningfulValue(reportData.hemoglobin ?? reportData.hb ?? reportData.Hb ?? reportData.HB),
+      wbc: normalizeMeaningfulValue(reportData.wbc ?? reportData.WBC),
+      platelets: normalizeMeaningfulValue(reportData.platelets ?? reportData.Platelets ?? reportData.platelet),
+      bloodGroup: normalizeMeaningfulValue(reportData.bloodGroup ?? reportData.blood_group),
       notes: reportData.notes ?? reportData.summary ?? reportData.text ?? '',
     }
     return {
@@ -270,15 +339,62 @@ function toNumber(value) {
   return Number.isFinite(n) ? n : null
 }
 
+function interpretHemoglobin(hb) {
+  if (hb == null) return null
+  if (hb < 7) return { label: 'very low', short: 'low', note: 'This is quite low and needs attention.' }
+  if (hb < 12) return { label: 'low', short: 'low', note: 'This may suggest anemia.' }
+  if (hb > 16) return { label: 'high', short: 'high', note: 'This is above the usual range.' }
+  return { label: 'normal', short: 'normal', note: 'This is within the usual range.' }
+}
+
+function interpretWbc(wbc) {
+  if (wbc == null) return null
+  if (wbc < 4000) return { label: 'low', short: 'low', note: 'This can mean lower-than-usual immune cells.' }
+  if (wbc > 11000) return { label: 'high', short: 'high', note: 'This may happen with infection or inflammation.' }
+  return { label: 'normal', short: 'normal', note: 'This is within the usual range.' }
+}
+
+function interpretPlatelets(platelets) {
+  if (platelets == null) return null
+  if (platelets < 50000) return { label: 'very low', short: 'low', note: 'This can raise bleeding risk and needs prompt attention.' }
+  if (platelets < 150000) return { label: 'low', short: 'low', note: 'This can raise bleeding risk.' }
+  if (platelets > 450000) return { label: 'high', short: 'high', note: 'This may raise clot risk and should be reviewed.' }
+  return { label: 'normal', short: 'normal', note: 'This is within the usual range.' }
+}
+
+function buildValueSummary({ report, severity }) {
+  const hb = severity?.values?.hemoglobin ?? toNumber(report?.fields?.hemoglobin)
+  const wbc = severity?.values?.wbc ?? toNumber(report?.fields?.wbc)
+  const platelets = severity?.values?.platelets ?? toNumber(report?.fields?.platelets)
+
+  const parts = []
+  const hbInfo = interpretHemoglobin(hb)
+  const wbcInfo = interpretWbc(wbc)
+  const plateletInfo = interpretPlatelets(platelets)
+
+  if (hb != null) parts.push(`Hemoglobin: ${hb} (${hbInfo?.label || 'unknown'}). ${hbInfo?.note || ''}`.trim())
+  if (wbc != null) parts.push(`WBC: ${wbc} (${wbcInfo?.label || 'unknown'}). ${wbcInfo?.note || ''}`.trim())
+  if (platelets != null) parts.push(`Platelets: ${platelets} (${plateletInfo?.label || 'unknown'}). ${plateletInfo?.note || ''}`.trim())
+
+  if (!parts.length) return 'No clear report values were provided.'
+  return parts.join(' ')
+}
+
 function deriveSeverity(report) {
   const hb = toNumber(report?.fields?.hemoglobin)
   const wbc = toNumber(report?.fields?.wbc)
   const platelets = toNumber(report?.fields?.platelets)
   const flags = []
 
-  if (hb != null && hb < 9) flags.push({ level: 'low', label: `Hemoglobin ${hb} is low` })
+  if (hb != null && hb < 7) flags.push({ level: 'critical', label: `Hemoglobin ${hb} is very low` })
+  else if (hb != null && hb < 12) flags.push({ level: 'low', label: `Hemoglobin ${hb} is low` })
+
   if (platelets != null && platelets < 50000) flags.push({ level: 'critical', label: `Platelets ${platelets} are critically low` })
-  if (wbc != null && wbc > 11000) flags.push({ level: 'high', label: `WBC ${wbc} is high` })
+  else if (platelets != null && platelets < 150000) flags.push({ level: 'low', label: `Platelets ${platelets} are low` })
+  else if (platelets != null && platelets > 450000) flags.push({ level: 'high', label: `Platelets ${platelets} are high` })
+
+  if (wbc != null && wbc < 4000) flags.push({ level: 'low', label: `WBC ${wbc} is low` })
+  else if (wbc != null && wbc > 11000) flags.push({ level: 'high', label: `WBC ${wbc} is high` })
 
   const level = flags.reduce((current, item) => (
     SEVERITY_ORDER[item.level] > SEVERITY_ORDER[current] ? item.level : current
@@ -316,7 +432,7 @@ function buildMedicalChatContext({ patient, report, severity, message, history }
     : 'No prior conversation.'
 
   return [
-    'You are a medical assistant.',
+    'You are a smart medical assistant for a healthcare platform.',
     '',
     'Patient Info:',
     patientInfo,
@@ -338,13 +454,18 @@ function buildMedicalChatContext({ patient, report, severity, message, history }
     classifyQuestionType(message),
     '',
     'Instructions:',
-    '- Explain in simple language',
-    '- Use report data if available',
-    '- If the question is general health-related, answer it directly without repeating the report.',
-    '- Be safe and non-diagnostic',
-    '- Suggest doctor if serious',
-    '- Do not prescribe medicines',
-    '- Do not give a final diagnosis',
+    '- ONLY answer based on the report data provided by the user.',
+    '- Analyze all available values, not just hemoglobin.',
+    '- Keep answers simple, clear, patient-friendly, and non-repetitive.',
+    '- If some values are missing, answer from the available data.',
+    '- Do not give a diagnosis or prescribe medicine.',
+    '- If the question is about report explanation, summarize all values and mention what is normal or abnormal.',
+    '- If the question is about seriousness, say whether it is mild, moderate, or needs attention.',
+    '- If the question is about diet, give food suggestions that match the abnormal values.',
+    '- If the question is about surgery, focus on immunity, blood levels, and precautions.',
+    '- If the question is about anemia symptoms, answer generally and relate it to the report if hemoglobin is low.',
+    '- If urgent warning signs are present, tell the user to seek medical care quickly.',
+    '- Always include: This is general guidance. Please consult a doctor for medical advice.',
   ].join('\n')
 }
 
@@ -480,12 +601,12 @@ router.post('/chat', softAuthenticate, async (req, res) => {
       gender: incomingPatientInfo.gender ?? patientDoc?.gender ?? 'Unknown',
       bloodGroup: incomingPatientInfo.bloodGroup ?? patientDoc?.blood_type ?? patientDoc?.bloodGroup ?? null,
     }
-  const report = parseReportData(req.body?.reportData)
-  const severity = deriveSeverity(report)
-  const questionType = classifyQuestionType(message)
-  const incomingHistory = Array.isArray(req.body?.chatHistory)
-    ? normalizeHistory(req.body.chatHistory).slice(-MAX_HISTORY_MESSAGES)
-    : []
+    const report = parseReportData(req.body?.reportData)
+    const severity = deriveSeverity(report)
+    const questionType = classifyQuestionType(message)
+    const incomingHistory = Array.isArray(req.body?.chatHistory)
+      ? normalizeHistory(req.body.chatHistory).slice(-MAX_HISTORY_MESSAGES)
+      : []
 
     let session = null
     if (req.chatUser?._id && isDbReady()) {
@@ -506,11 +627,12 @@ router.post('/chat', softAuthenticate, async (req, res) => {
       console.warn('OpenAI medical chat unavailable, using fallback:', err?.message || err)
       return null
     })
-    const reply = openAIReply || buildLocalMedicalReply([
+    const reply = withDisclaimer(openAIReply || buildLocalMedicalReply({
       message,
-      report?.raw || '',
-      severity?.summary || '',
-    ].join(' '))
+      report,
+      severity,
+      questionType,
+    }))
 
     if (session) {
       session.messages.push(
@@ -549,7 +671,12 @@ router.post('/chat', softAuthenticate, async (req, res) => {
     console.error('Medical chat failed:', err)
     return res.status(200).json({
       success: true,
-      reply: buildLocalMedicalReply(String(req.body?.message || '')),
+      reply: withDisclaimer(buildLocalMedicalReply({
+        message: String(req.body?.message || ''),
+        report: parseReportData(req.body?.reportData),
+        severity: deriveSeverity(parseReportData(req.body?.reportData)),
+        questionType: classifyQuestionType(String(req.body?.message || '')),
+      })),
       severity: { level: 'unknown', label: 'Unknown', summary: 'Unable to analyze report data' },
       source: 'fallback',
       debug: { error: err?.message || 'unknown' },
