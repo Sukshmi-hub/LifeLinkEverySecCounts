@@ -8,6 +8,10 @@ const router = express.Router()
 
 const MEDICAL_CHAT_PROMPT = [
   'You are a smart medical assistant for a healthcare platform.',
+  'Extract medical values from the report data first.',
+  'Always use report data when present, even if only one value is available.',
+  'Do not ignore partial data.',
+  'If the report is completely empty, then ask the user to provide values like Hemoglobin, WBC, and Platelets.',
   'Use the report data when it is provided, but answer general medical questions normally when the report is not relevant.',
   'Do not give the same generic answer for every question.',
   'Do not repeat the same explanation unless the question is specifically about it.',
@@ -15,7 +19,7 @@ const MEDICAL_CHAT_PROMPT = [
   'If some values are missing, answer based on the available data.',
   'Keep answers simple, clear, and patient-friendly.',
   'If the question is about report explanation, summarize all values, mention what is normal or abnormal, and give an overall interpretation.',
-  'If the question is about seriousness, evaluate severity using all values and say whether it is mild, moderate, or needs attention, with reasons.',
+  'If the question is about seriousness, classify it as mild, moderate, high, or needs attention, and explain why.',
   'If the question is about what to do, give actionable steps such as doctor consultation, lifestyle changes, and precautions.',
   'If the question is about diet, suggest food based on the abnormalities, such as iron-rich foods for low hemoglobin and immunity-supporting foods for high WBC.',
   'If the question is about low hemoglobin, only explain hemoglobin unless other values are needed for safety.',
@@ -159,7 +163,7 @@ function buildLocalMedicalReply({ message = '', report = null, severity = null, 
   if (type === 'report') {
     const summary = buildValueSummary({ report, severity })
     if (summary === 'No clear report values were provided.') {
-      return "I couldn't detect clear medical values. Please enter values like Hemoglobin, WBC, Platelets for better analysis."
+      return "I couldn't detect clear medical values. Please enter values like Hemoglobin, WBC, Platelets."
     }
     return [
       'Report summary:',
@@ -171,15 +175,15 @@ function buildLocalMedicalReply({ message = '', report = null, severity = null, 
   if (type === 'seriousness') {
     const abnormalCount = [hbInfo, wbcInfo, plateletInfo].filter((item) => item && item.short !== 'normal').length
     if (!abnormalCount) {
-      return 'From the values I can see, this does not look serious right now, but you can still review it with a doctor if you have symptoms.'
+      return 'Mild: the values I can see do not show a concerning pattern right now, but you can still review it with a doctor if you have symptoms.'
     }
     if (severity?.level === 'critical') {
-      return 'This needs attention. One of the values is in a very low range, so please contact a doctor promptly.'
+      return 'Needs Attention: one of the values is in a very low range, so please contact a doctor promptly.'
     }
     if (abnormalCount === 1) {
-      return 'This looks mild to moderate based on the values shown, but it should still be reviewed by a doctor.'
+      return 'Moderate: one value is abnormal, so it should still be reviewed by a doctor.'
     }
-    return 'This needs attention because more than one value is abnormal. Please discuss it with a doctor soon.'
+    return 'High: more than one value is abnormal, so please discuss it with a doctor soon.'
   }
 
   if (type === 'action') {
@@ -251,6 +255,9 @@ function buildLocalMedicalReply({ message = '', report = null, severity = null, 
         reportSummary,
         'If you want a specific answer, you can ask about report explanation, seriousness, diet, surgery, or anemia symptoms.',
       ].join(' ')
+    }
+    if (Array.isArray(report?.findings) && report.findings.length) {
+      return withDisclaimer(`Based on the wording in the report, there may be ${report.findings.map((item) => item.label).join(', ')}.`)
     }
     if (/diabetes|sugar|glucose|blood sugar|bp|blood pressure|hypertension|pressure/.test(text)) {
       return [

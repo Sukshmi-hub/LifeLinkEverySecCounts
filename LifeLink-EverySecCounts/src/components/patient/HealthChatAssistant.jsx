@@ -125,19 +125,19 @@ const buildLocalMedicalReply = (message, severity) => {
       return withDisclaimer(`Report summary: Based on the wording in the report, there may be ${findings.map((f) => f.label).join(', ')}.`)
     }
     if (!parts.length) {
-      return withDisclaimer('I could not detect clear medical values. Please enter values like Hemoglobin, WBC, Platelets for better analysis.')
+      return withDisclaimer("I couldn't detect clear medical values. Please enter values like Hemoglobin, WBC, Platelets.")
     }
     return withDisclaimer(`Report summary: ${parts.join('. ')}`)
   }
 
   if (questionType === 'seriousness') {
     if (severity?.severity === 'Low') {
-      return 'It looks mild to moderate, but it needs attention. Low hemoglobin can be important and should be discussed with a doctor.'
+      return withDisclaimer('Mild: the values do not look highly concerning right now, but low hemoglobin can still be important and should be discussed with a doctor.')
     }
     if (severity?.severity === 'High' || severity?.severity === 'Critical') {
-      return 'It needs attention. Your report has abnormal values, so please consult a doctor soon.'
+      return withDisclaimer('High or Needs Attention: your report has abnormal values, so please consult a doctor soon.')
     }
-    return 'It does not look very serious from the values I can see, but it is still worth discussing with a doctor if you have symptoms.'
+    return withDisclaimer('Mild: the values I can see do not look very serious right now, but it is still worth discussing with a doctor if you have symptoms.')
   }
 
   if (questionType === 'action') {
@@ -354,7 +354,7 @@ const buildReportAwareReply = ({ message = '', severity = {}, questionType: forc
     }
   }
 
-  return withDisclaimer('I can explain general health topics in simple terms, but I cannot diagnose or prescribe treatment. For serious symptoms, worsening problems, or anything urgent, please consult a doctor.')
+  return withDisclaimer('I can explain general health topics in simple terms, but I cannot diagnose or prescribe treatment. If you share the report values or the main symptom, I can give a more specific answer.')
 }
 
 const TypingDots = () => (
