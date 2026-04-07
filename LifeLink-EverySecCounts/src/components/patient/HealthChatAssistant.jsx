@@ -49,6 +49,17 @@ const classifyQuestionType = (message = '') => {
   return 'general'
 }
 
+const extractKeywordFindings = (text = '') => {
+  const raw = String(text || '').toLowerCase()
+  const findings = []
+  if (/low hemoglobin|low hb|anemia|anaemia/.test(raw)) findings.push({ key: 'hemoglobin', label: 'low hemoglobin' })
+  if (/high wbc|wbc high|infection|inflammation/.test(raw)) findings.push({ key: 'wbc', label: 'high WBC' })
+  if (/low platelets|platelets low|platelet low|thrombocytopenia/.test(raw)) findings.push({ key: 'platelets', label: 'low platelets' })
+  if (/high sugar|high glucose|diabetes|blood sugar high/.test(raw)) findings.push({ key: 'glucose', label: 'high sugar' })
+  if (/high bp|high blood pressure|hypertension/.test(raw)) findings.push({ key: 'bp', label: 'high blood pressure' })
+  return findings
+}
+
 const parseReportSummary = (text = '') => {
   const raw = String(text || '')
   const readValue = (regex) => {
@@ -61,6 +72,7 @@ const parseReportSummary = (text = '') => {
   const hemoglobin = readValue(/(?:hemoglobin|hb)\s*[:=\-]?\s*([0-9]+(?:\.[0-9]+)?)/i)
   const wbc = readValue(/(?:wbc|white blood cell count)\s*[:=\-]?\s*([0-9]+(?:\.[0-9]+)?)/i)
   const platelets = readValue(/(?:platelets?|plt)\s*[:=\-]?\s*([0-9]+(?:\.[0-9]+)?)/i)
+  const findings = extractKeywordFindings(raw)
 
   const flags = []
   if (hemoglobin != null && hemoglobin < 7) flags.push({ label: `Hemoglobin ${hemoglobin} is very low`, level: 'critical' })
@@ -83,7 +95,12 @@ const parseReportSummary = (text = '') => {
     values: { hemoglobin, wbc, platelets },
     severity,
     flags,
-    summary: flags.length ? flags.map((f) => f.label).join('; ') : 'No obvious high-risk values',
+    findings,
+    summary: flags.length
+      ? flags.map((f) => f.label).join('; ')
+      : findings.length
+        ? findings.map((f) => f.label).join('; ')
+        : 'No obvious high-risk values',
   }
 }
 
@@ -99,12 +116,18 @@ const buildLocalMedicalReply = (message, severity) => {
     const hb = severity?.values?.hemoglobin
     const wbc = severity?.values?.wbc
     const platelets = severity?.values?.platelets
+    const findings = Array.isArray(severity?.findings) ? severity.findings : []
     const parts = []
     if (hb != null) parts.push(`Hemoglobin: ${hb} (${hb < 9 ? 'low' : 'within the usual range'})`)
     if (wbc != null) parts.push(`WBC: ${wbc} (${wbc > 11000 ? 'high' : 'within the usual range'})`)
     if (platelets != null) parts.push(`Platelets: ${platelets} (${platelets < 150000 ? 'low' : 'normal'})`)
-    if (!parts.length) return 'I could not detect any report values clearly. Please paste the key values again.'
-    return parts.join('. ')
+    if (findings.length && !parts.length) {
+      return withDisclaimer(`Report summary: Based on the wording in the report, there may be ${findings.map((f) => f.label).join(', ')}.`)
+    }
+    if (!parts.length) {
+      return withDisclaimer('I could not detect clear medical values. Please enter values like Hemoglobin, WBC, Platelets for better analysis.')
+    }
+    return withDisclaimer(`Report summary: ${parts.join('. ')}`)
   }
 
   if (questionType === 'seriousness') {
@@ -304,6 +327,9 @@ const buildReportAwareReply = ({ message = '', severity = {}, questionType: forc
       if (wbc != null) parts.push(`WBC: ${wbc} (${wbcInfo?.label || 'unknown'})`)
       if (platelets != null) parts.push(`Platelets: ${platelets} (${plateletInfo?.label || 'unknown'})`)
       return withDisclaimer(`${parts.join('. ')}.`)
+    }
+    if (Array.isArray(severity?.findings) && severity.findings.length) {
+      return withDisclaimer(`Based on the wording in the report, there may be ${severity.findings.map((f) => f.label).join(', ')}. If you share exact values, I can analyze them more accurately.`)
     }
     if (/diabetes|sugar|glucose|blood sugar|bp|blood pressure|hypertension|pressure/.test(text)) {
       return withDisclaimer('For diabetes or blood pressure questions, the answer depends on your numbers, medicines, symptoms, and doctor advice. Common basics are taking medicines on time, eating balanced meals, staying active if allowed, and checking values regularly. If readings are very high or you feel dizzy, weak, have chest pain, confusion, or shortness of breath, seek medical care.')

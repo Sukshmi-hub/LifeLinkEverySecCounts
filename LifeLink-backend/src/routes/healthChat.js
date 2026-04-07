@@ -71,6 +71,17 @@ function normalizeMeaningfulValue(value) {
   return str ? str : null
 }
 
+function extractKeywordFindings(text = '') {
+  const raw = String(text || '').toLowerCase()
+  const findings = []
+  if (/low hemoglobin|low hb|anemia|anaemia/.test(raw)) findings.push({ key: 'hemoglobin', label: 'low hemoglobin' })
+  if (/high wbc|wbc high|infection|inflammation/.test(raw)) findings.push({ key: 'wbc', label: 'high WBC' })
+  if (/low platelets|platelets low|platelet low|thrombocytopenia/.test(raw)) findings.push({ key: 'platelets', label: 'low platelets' })
+  if (/high sugar|high glucose|diabetes|blood sugar high/.test(raw)) findings.push({ key: 'glucose', label: 'high sugar' })
+  if (/high bp|high blood pressure|hypertension/.test(raw)) findings.push({ key: 'bp', label: 'high blood pressure' })
+  return findings
+}
+
 function isDbReady() {
   return mongoose.connection.readyState === 1
 }
@@ -146,9 +157,13 @@ function buildLocalMedicalReply({ message = '', report = null, severity = null, 
   }
 
   if (type === 'report') {
+    const summary = buildValueSummary({ report, severity })
+    if (summary === 'No clear report values were provided.') {
+      return "I couldn't detect clear medical values. Please enter values like Hemoglobin, WBC, Platelets for better analysis."
+    }
     return [
       'Report summary:',
-      buildValueSummary({ report, severity }),
+      summary,
       'If you want, I can also explain what this means in simple language.',
     ].join(' ')
   }
@@ -298,17 +313,19 @@ function parseReportData(reportData) {
   if (!reportData) return { raw: '', fields: {}, notes: '' }
 
   if (typeof reportData === 'object') {
+    const notes = reportData.notes ?? reportData.summary ?? reportData.text ?? ''
     const fields = {
       hemoglobin: normalizeMeaningfulValue(reportData.hemoglobin ?? reportData.hb ?? reportData.Hb ?? reportData.HB),
       wbc: normalizeMeaningfulValue(reportData.wbc ?? reportData.WBC),
       platelets: normalizeMeaningfulValue(reportData.platelets ?? reportData.Platelets ?? reportData.platelet),
       bloodGroup: normalizeMeaningfulValue(reportData.bloodGroup ?? reportData.blood_group),
-      notes: reportData.notes ?? reportData.summary ?? reportData.text ?? '',
+      notes,
     }
     return {
       raw: JSON.stringify(reportData),
       fields,
-      notes: String(fields.notes || ''),
+      notes: String(notes || ''),
+      findings: extractKeywordFindings([fields.notes, JSON.stringify(reportData)].join(' ')),
     }
   }
 
@@ -330,6 +347,7 @@ function parseReportData(reportData) {
     raw,
     fields,
     notes: raw,
+    findings: extractKeywordFindings(raw),
   }
 }
 
@@ -366,6 +384,7 @@ function buildValueSummary({ report, severity }) {
   const hb = severity?.values?.hemoglobin ?? toNumber(report?.fields?.hemoglobin)
   const wbc = severity?.values?.wbc ?? toNumber(report?.fields?.wbc)
   const platelets = severity?.values?.platelets ?? toNumber(report?.fields?.platelets)
+  const findings = Array.isArray(report?.findings) ? report.findings : extractKeywordFindings([report?.notes, report?.raw].filter(Boolean).join(' '))
 
   const parts = []
   const hbInfo = interpretHemoglobin(hb)
@@ -375,6 +394,18 @@ function buildValueSummary({ report, severity }) {
   if (hb != null) parts.push(`Hemoglobin: ${hb} (${hbInfo?.label || 'unknown'}). ${hbInfo?.note || ''}`.trim())
   if (wbc != null) parts.push(`WBC: ${wbc} (${wbcInfo?.label || 'unknown'}). ${wbcInfo?.note || ''}`.trim())
   if (platelets != null) parts.push(`Platelets: ${platelets} (${plateletInfo?.label || 'unknown'}). ${plateletInfo?.note || ''}`.trim())
+
+  if (!parts.length && findings.length) {
+    const keywordNotes = findings.map((item) => {
+      if (item.key === 'hemoglobin') return 'Possible low hemoglobin pattern.'
+      if (item.key === 'wbc') return 'Possible high WBC / infection pattern.'
+      if (item.key === 'platelets') return 'Possible low platelets / bleeding risk pattern.'
+      if (item.key === 'glucose') return 'Possible high sugar pattern.'
+      if (item.key === 'bp') return 'Possible high blood pressure pattern.'
+      return item.label
+    })
+    parts.push(`Based on the wording in the report: ${keywordNotes.join(' ')}`)
+  }
 
   if (!parts.length) return 'No clear report values were provided.'
   return parts.join(' ')
